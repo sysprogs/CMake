@@ -3,12 +3,13 @@
 #ifndef cmAlgorithms_h
 #define cmAlgorithms_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
+#include "cm_kwiml.h"
 #include <algorithm>
-#include <cm_kwiml.h>
 #include <functional>
 #include <iterator>
+#include <memory>
 #include <sstream>
 #include <string.h>
 #include <string>
@@ -101,6 +102,12 @@ FwdIt cmRotate(FwdIt first, FwdIt middle, FwdIt last)
   return first;
 }
 
+template <typename Container, typename Predicate>
+void cmEraseIf(Container& cont, Predicate pred)
+{
+  cont.erase(std::remove_if(cont.begin(), cont.end(), pred), cont.end());
+}
+
 namespace ContainerAlgorithms {
 
 template <typename T>
@@ -113,7 +120,7 @@ struct cmIsPair
 };
 
 template <typename K, typename V>
-struct cmIsPair<std::pair<K, V> >
+struct cmIsPair<std::pair<K, V>>
 {
   enum
   {
@@ -354,7 +361,8 @@ std::string cmWrap(std::string const& prefix, Range const& r,
 }
 
 template <typename Range>
-std::string cmWrap(char prefix, Range const& r, char suffix, std::string sep)
+std::string cmWrap(char prefix, Range const& r, char suffix,
+                   std::string const& sep)
 {
   return cmWrap(std::string(1, prefix), r, std::string(1, suffix), sep);
 }
@@ -362,8 +370,7 @@ std::string cmWrap(char prefix, Range const& r, char suffix, std::string sep)
 template <typename Range, typename T>
 typename Range::const_iterator cmFindNot(Range const& r, T const& t)
 {
-  return std::find_if(r.begin(), r.end(),
-                      std::bind1st(std::not_equal_to<T>(), t));
+  return std::find_if(r.begin(), r.end(), [&t](T const& i) { return i != t; });
 }
 
 template <typename Range>
@@ -394,5 +401,23 @@ inline void cmStripSuffixIfExists(std::string& str, const std::string& suffix)
     str.resize(str.size() - suffix.size());
   }
 }
+
+namespace cm {
+
+#if defined(CMake_HAVE_CXX_MAKE_UNIQUE)
+
+using std::make_unique;
+
+#else
+
+template <typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args)
+{
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+#endif
+
+} // namespace cm
 
 #endif

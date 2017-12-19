@@ -3,7 +3,7 @@
 #ifndef cmCTestScriptHandler_h
 #define cmCTestScriptHandler_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCTestGenericHandler.h"
 
@@ -65,7 +65,7 @@ public:
   /**
    * Run a dashboard using a specified confiuration script
    */
-  int ProcessHandler() CM_OVERRIDE;
+  int ProcessHandler() override;
 
   /*
    * Run a script
@@ -98,9 +98,9 @@ public:
   double GetRemainingTimeAllowed();
 
   cmCTestScriptHandler();
-  ~cmCTestScriptHandler() CM_OVERRIDE;
+  ~cmCTestScriptHandler() override;
 
-  void Initialize() CM_OVERRIDE;
+  void Initialize() override;
 
   void CreateCMake();
   cmake* GetCMake() { return this->CMake; }
@@ -126,7 +126,7 @@ private:
   int RunConfigurationDashboard();
 
   // Add ctest command
-  void AddCTestCommand(cmCTestCommand* command);
+  void AddCTestCommand(std::string const& name, cmCTestCommand* command);
 
   // Try to remove the binary directory once
   static bool TryToRemoveBinaryDirectoryOnce(const std::string& directoryPath);

@@ -15,7 +15,6 @@
 #include "cmake.h"
 
 #include <assert.h>
-#include <cmConfigure.h>
 #include <vector>
 
 cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
@@ -26,7 +25,7 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
 {
   this->Label = new cmCursesLabelWidget(this->LabelWidth, 1, 1, 1, key);
   this->IsNewLabel = new cmCursesLabelWidget(1, 1, 1, 1, " ");
-  this->Entry = CM_NULLPTR;
+  this->Entry = nullptr;
   this->Entry = new cmCursesStringWidget(this->EntryWidth, 1, 1, 1);
 }
 
@@ -44,7 +43,7 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
     this->IsNewLabel = new cmCursesLabelWidget(1, 1, 1, 1, " ");
   }
 
-  this->Entry = CM_NULLPTR;
+  this->Entry = nullptr;
   const char* value = cm->GetState()->GetCacheEntryValue(key);
   assert(value);
   switch (cm->GetState()->GetCacheEntryType(key)) {
@@ -73,9 +72,8 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
         this->Entry = ow;
         std::vector<std::string> options;
         cmSystemTools::ExpandListArgument(stringsProp, options);
-        for (std::vector<std::string>::iterator si = options.begin();
-             si != options.end(); ++si) {
-          ow->AddOption(*si);
+        for (auto const& opt : options) {
+          ow->AddOption(opt);
         }
         ow->SetOption(value);
       } else {
@@ -105,5 +103,5 @@ const char* cmCursesCacheEntryComposite::GetValue()
   if (this->Label) {
     return this->Label->GetValue();
   }
-  return CM_NULLPTR;
+  return nullptr;
 }

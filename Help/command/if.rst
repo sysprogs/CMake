@@ -30,7 +30,7 @@ else and endif clause is optional.  Long expressions can be used and
 there is a traditional order of precedence.  Parenthetical expressions
 are evaluated first followed by unary tests such as ``EXISTS``,
 ``COMMAND``, and ``DEFINED``.  Then any binary tests such as
-``EQUAL``, ``LESS``, ``LESS_EQUAL, ``GREATER``, ``GREATER_EQUAL``,
+``EQUAL``, ``LESS``, ``LESS_EQUAL``, ``GREATER``, ``GREATER_EQUAL``,
 ``STREQUAL``, ``STRLESS``, ``STRLESS_EQUAL``, ``STRGREATER``,
 ``STRGREATER_EQUAL``, ``VERSION_EQUAL``, ``VERSION_LESS``,
 ``VERSION_LESS_EQUAL``, ``VERSION_GREATER``, ``VERSION_GREATER_EQUAL``,
@@ -103,7 +103,8 @@ Possible expressions are:
 
 ``if(<variable|string> MATCHES regex)``
  True if the given string or variable's value matches the given regular
- expression.
+ expression.  See :ref:`Regex Specification` for regex format.
+ ``()`` groups are captured in :variable:`CMAKE_MATCH_<n>` variables.
 
 ``if(<variable|string> LESS <variable|string>)``
  True if the given string or variable's value is a valid number and less

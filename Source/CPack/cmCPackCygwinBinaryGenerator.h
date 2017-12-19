@@ -17,7 +17,7 @@ public:
    * Construct generator
    */
   cmCPackCygwinBinaryGenerator();
-  virtual ~cmCPackCygwinBinaryGenerator();
+  ~cmCPackCygwinBinaryGenerator() override;
 
 protected:
   virtual int InitializeInternal();

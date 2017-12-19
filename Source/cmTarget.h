@@ -3,12 +3,13 @@
 #ifndef cmTarget_h
 #define cmTarget_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -19,7 +20,6 @@
 #include "cmPropertyMap.h"
 #include "cmStateTypes.h"
 #include "cmTargetLinkLibraryType.h"
-#include "cm_unordered_map.hxx"
 
 class cmGlobalGenerator;
 class cmMakefile;
@@ -184,7 +184,7 @@ public:
    * name as would be specified to the ADD_EXECUTABLE or UTILITY_SOURCE
    * commands. It is not a full path nor does it have an extension.
    */
-  void AddUtility(const std::string& u, cmMakefile* makefile = CM_NULLPTR);
+  void AddUtility(const std::string& u, cmMakefile* makefile = nullptr);
   ///! Get the utilities used by this target
   std::set<std::string> const& GetUtilities() const { return this->Utilities; }
   cmListFileBacktrace const* GetUtilityBacktrace(const std::string& u) const;
@@ -267,11 +267,13 @@ public:
   };
 
   std::string ImportedGetFullPath(const std::string& config,
-                                  bool implib) const;
+                                  cmStateEnums::ArtifactType artifact) const;
 
 private:
-  const char* GetSuffixVariableInternal(bool implib) const;
-  const char* GetPrefixVariableInternal(bool implib) const;
+  const char* GetSuffixVariableInternal(
+    cmStateEnums::ArtifactType artifact) const;
+  const char* GetPrefixVariableInternal(
+    cmStateEnums::ArtifactType artifact) const;
 
   // Use a makefile variable to set a default for the given property.
   // If the variable is not defined use the given default instead.
@@ -295,7 +297,7 @@ private:
   std::vector<cmCustomCommand> PreBuildCommands;
   std::vector<cmCustomCommand> PreLinkCommands;
   std::vector<cmCustomCommand> PostBuildCommands;
-  std::vector<std::pair<TLLSignature, cmListFileContext> > TLLCommands;
+  std::vector<std::pair<TLLSignature, cmListFileContext>> TLLCommands;
   LinkLibraryVectorType OriginalLinkLibraries;
   cmMakefile* Makefile;
   cmTargetInternalPointer Internal;
@@ -321,7 +323,7 @@ private:
   cmListFileBacktrace Backtrace;
 };
 
-typedef CM_UNORDERED_MAP<std::string, cmTarget> cmTargets;
+typedef std::unordered_map<std::string, cmTarget> cmTargets;
 
 class cmTargetSet : public std::set<std::string>
 {

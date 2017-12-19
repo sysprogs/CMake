@@ -36,14 +36,20 @@
 #include <termios.h>
 #include <pwd.h>
 
+#if !defined(__MVS__)
 #include <semaphore.h>
+#endif
 #include <pthread.h>
 #include <signal.h>
 
 #include "uv-threadpool.h"
 
-#if defined(__linux__)
+#ifdef CMAKE_BOOTSTRAP
+# include "uv-posix.h"
+#elif defined(__linux__)
 # include "uv-linux.h"
+#elif defined (__MVS__)
+# include "uv-os390.h"
 #elif defined(_AIX)
 # include "uv-aix.h"
 #elif defined(__sun)
@@ -56,6 +62,8 @@
       defined(__OpenBSD__)         || \
       defined(__NetBSD__)
 # include "uv-bsd.h"
+#elif defined(__CYGWIN__) || defined(__MSYS__)
+# include "uv-posix.h"
 #endif
 
 #ifndef PTHREAD_BARRIER_SERIAL_THREAD
@@ -75,7 +83,6 @@
 #endif
 
 struct uv__io_s;
-struct uv__async;
 struct uv_loop_s;
 
 typedef void (*uv__io_cb)(struct uv_loop_s* loop,
@@ -91,16 +98,6 @@ struct uv__io_s {
   unsigned int events;  /* Current event mask. */
   int fd;
   UV_IO_PRIVATE_PLATFORM_FIELDS
-};
-
-typedef void (*uv__async_cb)(struct uv_loop_s* loop,
-                             struct uv__async* w,
-                             unsigned int nevents);
-
-struct uv__async {
-  uv__async_cb cb;
-  uv__io_t io_watcher;
-  int wfd;
 };
 
 #ifndef UV_PLATFORM_SEM_T
@@ -129,6 +126,17 @@ typedef int uv_file;
 typedef int uv_os_sock_t;
 typedef int uv_os_fd_t;
 
+#ifdef CMAKE_BOOTSTRAP
+#define UV_ONCE_INIT 0
+typedef int uv_once_t;
+typedef int uv_thread_t;
+typedef int uv_mutex_t;
+typedef int uv_rwlock_t;
+typedef int uv_sem_t;
+typedef int uv_cond_t;
+typedef int uv_key_t;
+typedef int uv_barrier_t;
+#else
 #define UV_ONCE_INIT PTHREAD_ONCE_INIT
 
 typedef pthread_once_t uv_once_t;
@@ -139,6 +147,7 @@ typedef UV_PLATFORM_SEM_T uv_sem_t;
 typedef pthread_cond_t uv_cond_t;
 typedef pthread_key_t uv_key_t;
 typedef pthread_barrier_t uv_barrier_t;
+#endif
 
 
 /* Platform-specific definitions for uv_spawn support. */
@@ -212,7 +221,9 @@ typedef struct {
   void* check_handles[2];                                                     \
   void* idle_handles[2];                                                      \
   void* async_handles[2];                                                     \
-  struct uv__async async_watcher;                                             \
+  void (*async_unused)(void);  /* TODO(bnoordhuis) Remove in libuv v2. */     \
+  uv__io_t async_io_watcher;                                                  \
+  int async_wfd;                                                              \
   struct {                                                                    \
     void* min;                                                                \
     unsigned int nelts;                                                       \

@@ -37,7 +37,7 @@ function(_FIND_OPENCL_VERSION)
   set(CMAKE_REQUIRED_QUIET ${OpenCL_FIND_QUIETLY})
 
   CMAKE_PUSH_CHECK_STATE()
-  foreach(VERSION "2_0" "1_2" "1_1" "1_0")
+  foreach(VERSION "2_2" "2_1" "2_0" "1_2" "1_1" "1_0")
     set(CMAKE_REQUIRED_INCLUDES "${OpenCL_INCLUDE_DIR}")
 
     if(APPLE)
@@ -117,7 +117,12 @@ if(WIN32)
   endif()
 else()
   find_library(OpenCL_LIBRARY
-    NAMES OpenCL)
+    NAMES OpenCL
+    PATHS
+      ENV AMDAPPSDKROOT
+    PATH_SUFFIXES
+      lib/x86_64
+      lib/x64)
 endif()
 
 set(OpenCL_LIBRARIES ${OpenCL_LIBRARY})

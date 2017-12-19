@@ -2,9 +2,6 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmDynamicLoader.h"
 
-#include <cmConfigure.h>
-
-#include <cmsys/DynamicLoader.hxx>
 #include <map>
 #include <string>
 #include <utility>
@@ -13,8 +10,7 @@ class cmDynamicLoaderCache
 {
 public:
   ~cmDynamicLoaderCache();
-  void CacheFile(const char* path,
-                 const cmsys::DynamicLoader::LibraryHandle& /*p*/);
+  void CacheFile(const char* path, cmsys::DynamicLoader::LibraryHandle /*p*/);
   bool GetCacheFile(const char* path,
                     cmsys::DynamicLoader::LibraryHandle& /*p*/);
   bool FlushCache(const char* path);
@@ -26,14 +22,14 @@ private:
   static cmDynamicLoaderCache* Instance;
 };
 
-cmDynamicLoaderCache* cmDynamicLoaderCache::Instance = CM_NULLPTR;
+cmDynamicLoaderCache* cmDynamicLoaderCache::Instance = nullptr;
 
 cmDynamicLoaderCache::~cmDynamicLoaderCache()
 {
 }
 
-void cmDynamicLoaderCache::CacheFile(
-  const char* path, const cmsys::DynamicLoader::LibraryHandle& p)
+void cmDynamicLoaderCache::CacheFile(const char* path,
+                                     cmsys::DynamicLoader::LibraryHandle p)
 {
   cmsys::DynamicLoader::LibraryHandle h;
   if (this->GetCacheFile(path, h)) {
@@ -69,13 +65,11 @@ bool cmDynamicLoaderCache::FlushCache(const char* path)
 
 void cmDynamicLoaderCache::FlushCache()
 {
-  for (std::map<std::string, cmsys::DynamicLoader::LibraryHandle>::iterator
-         it = this->CacheMap.begin();
-       it != this->CacheMap.end(); it++) {
-    cmsys::DynamicLoader::CloseLibrary(it->second);
+  for (auto const& it : this->CacheMap) {
+    cmsys::DynamicLoader::CloseLibrary(it.second);
   }
   delete cmDynamicLoaderCache::Instance;
-  cmDynamicLoaderCache::Instance = CM_NULLPTR;
+  cmDynamicLoaderCache::Instance = nullptr;
 }
 
 cmDynamicLoaderCache* cmDynamicLoaderCache::GetInstance()

@@ -117,6 +117,23 @@ Options
  This option tells ctest to NOT run the tests whose labels match the
  given regular expression.
 
+``-FA <regex>, --fixture-exclude-any <regex>``
+ Exclude fixtures matching ``<regex>`` from automatically adding any tests to
+ the test set.
+
+ If a test in the set of tests to be executed requires a particular fixture,
+ that fixture's setup and cleanup tests would normally be added to the test set
+ automatically. This option prevents adding setup or cleanup tests for fixtures
+ matching the ``<regex>``. Note that all other fixture behavior is retained,
+ including test dependencies and skipping tests that have fixture setup tests
+ that fail.
+
+``-FS <regex>, --fixture-exclude-setup <regex>``
+ Same as ``-FA`` except only matching setup tests are excluded.
+
+``-FC <regex>, --fixture-exclude-cleanup <regex>``
+ Same as ``-FA`` except only matching cleanup tests are excluded.
+
 ``-D <dashboard>, --dashboard <dashboard>``
  Execute dashboard test.
 
@@ -231,6 +248,13 @@ Options
 
  This option tells ctest not to print summary information for each
  label associated with the tests run.  If there are no labels on the
+ tests, nothing extra is printed.
+
+ ``--no-subproject-summary``
+ Disable timing summary information for subprojects.
+
+ This option tells ctest not to print summary information for each
+ subproject associated with the tests run.  If there are no subprojects on the
  tests, nothing extra is printed.
 
 ``--build-and-test <path-to-source> <path-to-build>``
@@ -741,6 +765,15 @@ Configuration settings include:
   * :module:`CTest` module variable: :variable:`CMAKE_COMMAND`
     followed by :variable:`PROJECT_SOURCE_DIR`
 
+``LabelsForSubprojects``
+  Specify a semicolon-separated list of labels that will be treated as
+  subprojects. This mapping will be passed on to CDash when configure, test or
+  build results are submitted.
+
+  * `CTest Script`_ variable: :variable:`CTEST_LABELS_FOR_SUBPROJECTS`
+  * :module:`CTest` module variable: ``CTEST_LABELS_FOR_SUBPROJECTS``
+
+
 .. _`CTest Build Step`:
 
 CTest Build Step
@@ -762,6 +795,14 @@ Configuration settings include:
   * `CTest Script`_ variable: :variable:`CTEST_CONFIGURATION_TYPE`
   * :module:`CTest` module variable: ``DEFAULT_CTEST_CONFIGURATION_TYPE``,
     initialized by the ``CMAKE_CONFIG_TYPE`` environment variable
+
+``LabelsForSubprojects``
+  Specify a semicolon-separated list of labels that will be treated as
+  subprojects. This mapping will be passed on to CDash when configure, test or
+  build results are submitted.
+
+  * `CTest Script`_ variable: :variable:`CTEST_LABELS_FOR_SUBPROJECTS`
+  * :module:`CTest` module variable: ``CTEST_LABELS_FOR_SUBPROJECTS``
 
 ``MakeCommand``
   Command-line to launch the software build process.
@@ -797,6 +838,15 @@ In a `CTest Script`_, the :command:`ctest_test` command runs this step.
 Arguments to the command may specify some of the step settings.
 
 Configuration settings include:
+
+``LabelsForSubprojects``
+  Specify a semicolon-separated list of labels that will be treated as
+  subprojects. This mapping will be passed on to CDash when configure, test or
+  build results are submitted.
+
+  * `CTest Script`_ variable: :variable:`CTEST_LABELS_FOR_SUBPROJECTS`
+  * :module:`CTest` module variable: ``CTEST_LABELS_FOR_SUBPROJECTS``
+
 
 ``TestLoad``
   While running tests in parallel (e.g. with ``-j``), try not to start
@@ -835,6 +885,8 @@ Configuration settings include:
 
   * `CTest Script`_ variable: :variable:`CTEST_COVERAGE_EXTRA_FLAGS`
   * :module:`CTest` module variable: ``COVERAGE_EXTRA_FLAGS``
+
+  These options are the first arguments passed to ``CoverageCommand``.
 
 .. _`CTest MemCheck Step`:
 

@@ -3,9 +3,9 @@
 #ifndef cmSourceGroup_h
 #define cmSourceGroup_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/RegularExpression.hxx"
 #include <set>
 #include <string>
 #include <vector>
@@ -27,7 +27,7 @@ class cmSourceGroup
 {
 public:
   cmSourceGroup(const char* name, const char* regex,
-                const char* parentName = CM_NULLPTR);
+                const char* parentName = nullptr);
   cmSourceGroup(cmSourceGroup const& r);
   ~cmSourceGroup();
   cmSourceGroup& operator=(cmSourceGroup const&);

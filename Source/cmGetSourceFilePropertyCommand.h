@@ -3,7 +3,8 @@
 #ifndef cmGetSourceFilePropertyCommand_h
 #define cmGetSourceFilePropertyCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -14,22 +15,14 @@ class cmExecutionStatus;
 class cmGetSourceFilePropertyCommand : public cmCommand
 {
 public:
-  cmCommand* Clone() CM_OVERRIDE { return new cmGetSourceFilePropertyCommand; }
+  cmCommand* Clone() override { return new cmGetSourceFilePropertyCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the input file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE
-  {
-    return "get_source_file_property";
-  }
+                   cmExecutionStatus& status) override;
 };
 
 #endif

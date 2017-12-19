@@ -45,6 +45,8 @@
 #   modifiable architecture-independent data (``com``)
 # ``LOCALSTATEDIR``
 #   modifiable single-machine data (``var``)
+# ``RUNSTATEDIR``
+#   run-time variable data (``LOCALSTATEDIR/run``)
 # ``LIBDIR``
 #   object code libraries (``lib`` or ``lib64``
 #   or ``lib/<multiarch-tuple>`` on Debian)
@@ -75,10 +77,10 @@
 #
 # ``/``
 #
-#   For ``<dir>`` other than the ``SYSCONFDIR`` and ``LOCALSTATEDIR``,
-#   the value of ``CMAKE_INSTALL_<dir>`` is prefixed with ``usr/`` if
-#   it is not user-specified as an absolute path.  For example, the
-#   ``INCLUDEDIR`` value ``include`` becomes ``usr/include``.
+#   For ``<dir>`` other than the ``SYSCONFDIR``, ``LOCALSTATEDIR`` and
+#   ``RUNSTATEDIR``, the value of ``CMAKE_INSTALL_<dir>`` is prefixed
+#   with ``usr/`` if it is not user-specified as an absolute path.
+#   For example, the ``INCLUDEDIR`` value ``include`` becomes ``usr/include``.
 #   This is required by the `GNU Coding Standards`_, which state:
 #
 #     When building the complete GNU system, the prefix will be empty
@@ -86,20 +88,21 @@
 #
 # ``/usr``
 #
-#   For ``<dir>`` equal to ``SYSCONFDIR`` or ``LOCALSTATEDIR``, the
-#   ``CMAKE_INSTALL_FULL_<dir>`` is computed by prepending just ``/``
-#   to the value of ``CMAKE_INSTALL_<dir>`` if it is not user-specified
-#   as an absolute path.  For example, the ``SYSCONFDIR`` value ``etc``
-#   becomes ``/etc``.  This is required by the `GNU Coding Standards`_.
+#   For ``<dir>`` equal to ``SYSCONFDIR``, ``LOCALSTATEDIR`` or
+#   ``RUNSTATEDIR``, the ``CMAKE_INSTALL_FULL_<dir>`` is computed by
+#   prepending just ``/`` to the value of ``CMAKE_INSTALL_<dir>``
+#   if it is not user-specified as an absolute path.
+#   For example, the ``SYSCONFDIR`` value ``etc`` becomes ``/etc``.
+#   This is required by the `GNU Coding Standards`_.
 #
 # ``/opt/...``
 #
-#   For ``<dir>`` equal to ``SYSCONFDIR`` or ``LOCALSTATEDIR``, the
-#   ``CMAKE_INSTALL_FULL_<dir>`` is computed by *appending* the prefix
-#   to the value of ``CMAKE_INSTALL_<dir>`` if it is not user-specified
-#   as an absolute path.  For example, the ``SYSCONFDIR`` value ``etc``
-#   becomes ``/etc/opt/...``.  This is defined by the
-#   `Filesystem Hierarchy Standard`_.
+#   For ``<dir>`` equal to ``SYSCONFDIR``, ``LOCALSTATEDIR`` or
+#   ``RUNSTATEDIR``, the ``CMAKE_INSTALL_FULL_<dir>`` is computed by
+#   *appending* the prefix to the value of ``CMAKE_INSTALL_<dir>``
+#   if it is not user-specified as an absolute path.
+#   For example, the ``SYSCONFDIR`` value ``etc`` becomes ``/etc/opt/...``.
+#   This is defined by the `Filesystem Hierarchy Standard`_.
 #
 # .. _`Filesystem Hierarchy Standard`: https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html
 #
@@ -119,6 +122,9 @@
 #   ``CMAKE_INSTALL_FULL_<dir>`` variables, it is exposed publicly to
 #   allow users who create additional path variables to also compute
 #   absolute paths where necessary, using the same logic.
+
+cmake_policy(PUSH)
+cmake_policy(SET CMP0054 NEW) # if() quoted variables not dereferenced
 
 # Convert a cache variable to PATH type
 
@@ -287,6 +293,9 @@ _GNUInstallDirs_cache_path_fallback(CMAKE_INSTALL_LOCALEDIR "${CMAKE_INSTALL_DAT
 _GNUInstallDirs_cache_path_fallback(CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/${PROJECT_NAME}"
   "Documentation root (DATAROOTDIR/doc/PROJECT_NAME)")
 
+_GNUInstallDirs_cache_path_fallback(CMAKE_INSTALL_RUNSTATEDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/run"
+  "Run-time variable data (LOCALSTATEDIR/run)")
+
 #-----------------------------------------------------------------------------
 
 mark_as_advanced(
@@ -296,6 +305,7 @@ mark_as_advanced(
   CMAKE_INSTALL_SYSCONFDIR
   CMAKE_INSTALL_SHAREDSTATEDIR
   CMAKE_INSTALL_LOCALSTATEDIR
+  CMAKE_INSTALL_RUNSTATEDIR
   CMAKE_INSTALL_LIBDIR
   CMAKE_INSTALL_INCLUDEDIR
   CMAKE_INSTALL_OLDINCLUDEDIR
@@ -314,7 +324,7 @@ macro(GNUInstallDirs_get_absolute_install_dir absvar var)
     # - CMAKE_INSTALL_PREFIX == /usr
     # - CMAKE_INSTALL_PREFIX == /opt/...
     if("${CMAKE_INSTALL_PREFIX}" STREQUAL "/")
-      if("${dir}" STREQUAL "SYSCONFDIR" OR "${dir}" STREQUAL "LOCALSTATEDIR")
+      if("${dir}" STREQUAL "SYSCONFDIR" OR "${dir}" STREQUAL "LOCALSTATEDIR" OR "${dir}" STREQUAL "RUNSTATEDIR")
         set(${absvar} "/${${var}}")
       else()
         if (NOT "${${var}}" MATCHES "^usr/")
@@ -323,13 +333,13 @@ macro(GNUInstallDirs_get_absolute_install_dir absvar var)
         set(${absvar} "/${${var}}")
       endif()
     elseif("${CMAKE_INSTALL_PREFIX}" MATCHES "^/usr/?$")
-      if("${dir}" STREQUAL "SYSCONFDIR" OR "${dir}" STREQUAL "LOCALSTATEDIR")
+      if("${dir}" STREQUAL "SYSCONFDIR" OR "${dir}" STREQUAL "LOCALSTATEDIR" OR "${dir}" STREQUAL "RUNSTATEDIR")
         set(${absvar} "/${${var}}")
       else()
         set(${absvar} "${CMAKE_INSTALL_PREFIX}/${${var}}")
       endif()
     elseif("${CMAKE_INSTALL_PREFIX}" MATCHES "^/opt/.*")
-      if("${dir}" STREQUAL "SYSCONFDIR" OR "${dir}" STREQUAL "LOCALSTATEDIR")
+      if("${dir}" STREQUAL "SYSCONFDIR" OR "${dir}" STREQUAL "LOCALSTATEDIR" OR "${dir}" STREQUAL "RUNSTATEDIR")
         set(${absvar} "/${${var}}${CMAKE_INSTALL_PREFIX}")
       else()
         set(${absvar} "${CMAKE_INSTALL_PREFIX}/${${var}}")
@@ -351,6 +361,7 @@ foreach(dir
     SYSCONFDIR
     SHAREDSTATEDIR
     LOCALSTATEDIR
+    RUNSTATEDIR
     LIBDIR
     INCLUDEDIR
     OLDINCLUDEDIR
@@ -363,3 +374,5 @@ foreach(dir
     )
   GNUInstallDirs_get_absolute_install_dir(CMAKE_INSTALL_FULL_${dir} CMAKE_INSTALL_${dir})
 endforeach()
+
+cmake_policy(POP)

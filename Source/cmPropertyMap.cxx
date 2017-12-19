@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <assert.h>
-#include <cmConfigure.h>
 #include <utility>
 
 cmProperty* cmPropertyMap::GetOrCreateProperty(const std::string& name)
@@ -22,9 +21,8 @@ cmProperty* cmPropertyMap::GetOrCreateProperty(const std::string& name)
 std::vector<std::string> cmPropertyMap::GetPropertyList() const
 {
   std::vector<std::string> keyList;
-  for (cmPropertyMap::const_iterator i = this->begin(), e = this->end();
-       i != e; ++i) {
-    keyList.push_back(i->first);
+  for (auto const& i : *this) {
+    keyList.push_back(i.first);
   }
   std::sort(keyList.begin(), keyList.end());
   return keyList;
@@ -59,7 +57,7 @@ const char* cmPropertyMap::GetPropertyValue(const std::string& name) const
 
   cmPropertyMap::const_iterator it = this->find(name);
   if (it == this->end()) {
-    return CM_NULLPTR;
+    return nullptr;
   }
   return it->second.GetValue();
 }

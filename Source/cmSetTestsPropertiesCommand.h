@@ -3,7 +3,8 @@
 #ifndef cmSetTestsPropertiesCommand_h
 #define cmSetTestsPropertiesCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -15,19 +16,14 @@ class cmMakefile;
 class cmSetTestsPropertiesCommand : public cmCommand
 {
 public:
-  cmCommand* Clone() CM_OVERRIDE { return new cmSetTestsPropertiesCommand; }
+  cmCommand* Clone() override { return new cmSetTestsPropertiesCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the input file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "set_tests_properties"; }
+                   cmExecutionStatus& status) override;
 
   static bool SetOneTest(const std::string& tname,
                          std::vector<std::string>& propertyPairs,

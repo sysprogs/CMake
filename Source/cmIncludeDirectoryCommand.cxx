@@ -113,10 +113,10 @@ void cmIncludeDirectoryCommand::NormalizeInclude(std::string& inc)
 {
   std::string::size_type b = inc.find_first_not_of(" \r");
   std::string::size_type e = inc.find_last_not_of(" \r");
-  if ((b != inc.npos) && (e != inc.npos)) {
+  if ((b != std::string::npos) && (e != std::string::npos)) {
     inc.assign(inc, b, 1 + e - b); // copy the remaining substring
   } else {
-    inc = "";
+    inc.clear();
     return;
   }
 

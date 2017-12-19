@@ -8,6 +8,7 @@
 #include "cmMakefile.h"
 #include "cmVS141CLFlagTable.h"
 #include "cmVS141CSharpFlagTable.h"
+#include "cmVS141LinkFlagTable.h"
 #include "cmVSSetupHelper.h"
 
 static const char vs15generatorName[] = "Visual Studio 15 2017";
@@ -68,8 +69,8 @@ public:
     names.push_back(vs15generatorName + std::string(" Win64"));
   }
 
-  bool SupportsToolset() const CM_OVERRIDE { return true; }
-  bool SupportsPlatform() const CM_OVERRIDE { return true; }
+  bool SupportsToolset() const override { return true; }
+  bool SupportsPlatform() const override { return true; }
 };
 
 cmGlobalGeneratorFactory* cmGlobalVisualStudio15Generator::NewFactory()
@@ -85,6 +86,7 @@ cmGlobalVisualStudio15Generator::cmGlobalVisualStudio15Generator(
   this->DefaultPlatformToolset = "v141";
   this->DefaultClFlagTable = cmVS141CLFlagTable;
   this->DefaultCSharpFlagTable = cmVS141CSharpFlagTable;
+  this->DefaultLinkFlagTable = cmVS141LinkFlagTable;
   this->Version = VS15;
 }
 

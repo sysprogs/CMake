@@ -54,17 +54,30 @@ int cmCPackProductBuildGenerator::PackageFiles()
   } else {
     if (!this->GenerateComponentPackage(basePackageDir,
                                         this->GetOption("CPACK_PACKAGE_NAME"),
-                                        toplevel, NULL)) {
+                                        toplevel, nullptr)) {
+      return 0;
+    }
+  }
+
+  std::string resDir = packageDirFileName + "/Contents";
+
+  if (this->IsSet("CPACK_PRODUCTBUILD_RESOURCES_DIR")) {
+    std::string userResDir =
+      this->GetOption("CPACK_PRODUCTBUILD_RESOURCES_DIR");
+
+    if (!cmSystemTools::CopyADirectory(userResDir, resDir)) {
+      cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem copying the resource files"
+                      << std::endl);
       return 0;
     }
   }
 
   // Copy or create all of the resource files we need.
-  std::string resDir = packageDirFileName + "/Contents";
   if (!this->CopyCreateResourceFile("License", resDir) ||
       !this->CopyCreateResourceFile("ReadMe", resDir) ||
       !this->CopyCreateResourceFile("Welcome", resDir)) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem copying the resource files"
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Problem copying the License, ReadMe and Welcome files"
                     << std::endl);
     return 0;
   }
@@ -132,9 +145,9 @@ bool cmCPackProductBuildGenerator::RunProductBuild(const std::string& command)
   cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Execute: " << command << std::endl);
   std::string output, error_output;
   int retVal = 1;
-  bool res =
-    cmSystemTools::RunSingleCommand(command.c_str(), &output, &error_output,
-                                    &retVal, 0, this->GeneratorVerbose, 0);
+  bool res = cmSystemTools::RunSingleCommand(command.c_str(), &output,
+                                             &error_output, &retVal, nullptr,
+                                             this->GeneratorVerbose, 0);
   cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Done running command" << std::endl);
   if (!res || retVal) {
     cmGeneratedFileStream ofs(tmpFile.c_str());
@@ -161,7 +174,7 @@ bool cmCPackProductBuildGenerator::GenerateComponentPackage(
   cmCPackLogger(cmCPackLog::LOG_OUTPUT, "-   Building component package: "
                   << packageFile << std::endl);
 
-  const char* comp_name = component ? component->Name.c_str() : NULL;
+  const char* comp_name = component ? component->Name.c_str() : nullptr;
 
   const char* preflight = this->GetComponentScript("PREFLIGHT", comp_name);
   const char* postflight = this->GetComponentScript("POSTFLIGHT", comp_name);
@@ -177,7 +190,7 @@ bool cmCPackProductBuildGenerator::GenerateComponentPackage(
     cmCPackLogger(cmCPackLog::LOG_ERROR,
                   "Problem creating installer directory: " << scriptDir
                                                            << std::endl);
-    return 0;
+    return false;
   }
 
   // if preflight, postflight, or postupgrade are set
@@ -222,6 +235,10 @@ bool cmCPackProductBuildGenerator::GenerateComponentPackage(
          << (keychainPath.empty() ? ""
                                   : " --keychain \"" + keychainPath + "\"")
          << " \"" << packageFile << "\"";
+
+  if (component && !component->Plist.empty()) {
+    pkgCmd << " --component-plist \"" << component->Plist << "\"";
+  }
 
   // Run ProductBuild
   return RunProductBuild(pkgCmd.str());

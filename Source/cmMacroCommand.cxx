@@ -19,17 +19,12 @@ public:
   cmMacroHelperCommand() {}
 
   ///! clean up any memory allocated by the macro
-  ~cmMacroHelperCommand() CM_OVERRIDE {}
-
-  /**
-   * This determines if the command is defined in a cmake script.
-   */
-  bool IsUserDefined() const CM_OVERRIDE { return true; }
+  ~cmMacroHelperCommand() override {}
 
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE
+  cmCommand* Clone() override
   {
     cmMacroHelperCommand* newC = new cmMacroHelperCommand;
     // we must copy when we clone
@@ -41,27 +36,17 @@ public:
   }
 
   /**
-   * This determines if the command is invoked when in script mode.
-   */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
-
-  /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
    */
   bool InvokeInitialPass(const std::vector<cmListFileArgument>& args,
-                         cmExecutionStatus&) CM_OVERRIDE;
+                         cmExecutionStatus&) override;
 
   bool InitialPass(std::vector<std::string> const&,
-                   cmExecutionStatus&) CM_OVERRIDE
+                   cmExecutionStatus&) override
   {
     return false;
   }
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return this->Args[0]; }
 
   std::vector<std::string> Args;
   std::vector<cmListFileFunction> Functions;
@@ -113,20 +98,18 @@ bool cmMacroHelperCommand::InvokeInitialPass(
   // Invoke all the functions that were collected in the block.
   cmListFileFunction newLFF;
   // for each function
-  for (unsigned int c = 0; c < this->Functions.size(); ++c) {
+  for (cmListFileFunction const& func : this->Functions) {
     // Replace the formal arguments and then invoke the command.
     newLFF.Arguments.clear();
-    newLFF.Arguments.reserve(this->Functions[c].Arguments.size());
-    newLFF.Name = this->Functions[c].Name;
-    newLFF.Line = this->Functions[c].Line;
+    newLFF.Arguments.reserve(func.Arguments.size());
+    newLFF.Name = func.Name;
+    newLFF.Line = func.Line;
 
     // for each argument of the current function
-    for (std::vector<cmListFileArgument>::iterator k =
-           this->Functions[c].Arguments.begin();
-         k != this->Functions[c].Arguments.end(); ++k) {
+    for (cmListFileArgument const& k : func.Arguments) {
       cmListFileArgument arg;
-      arg.Value = k->Value;
-      if (k->Delim != cmListFileArgument::Bracket) {
+      arg.Value = k.Value;
+      if (k.Delim != cmListFileArgument::Bracket) {
         // replace formal arguments
         for (unsigned int j = 0; j < variables.size(); ++j) {
           cmSystemTools::ReplaceString(arg.Value, variables[j],
@@ -146,8 +129,8 @@ bool cmMacroHelperCommand::InvokeInitialPass(
           }
         }
       }
-      arg.Delim = k->Delim;
-      arg.Line = k->Line;
+      arg.Delim = k.Delim;
+      arg.Line = k.Line;
       newLFF.Arguments.push_back(arg);
     }
     cmExecutionStatus status;
@@ -156,15 +139,15 @@ bool cmMacroHelperCommand::InvokeInitialPass(
       // The error message should have already included the call stack
       // so we do not need to report an error here.
       macroScope.Quiet();
-      inStatus.SetNestedError(true);
+      inStatus.SetNestedError();
       return false;
     }
     if (status.GetReturnInvoked()) {
-      inStatus.SetReturnInvoked(true);
+      inStatus.SetReturnInvoked();
       return true;
     }
     if (status.GetBreakInvoked()) {
-      inStatus.SetBreakInvoked(true);
+      inStatus.SetBreakInvoked();
       return true;
     }
   }
@@ -189,10 +172,7 @@ bool cmMacroFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
       f->Functions = this->Functions;
       f->FilePath = this->GetStartingContext().FilePath;
       mf.RecordPolicies(f->Policies);
-      std::string newName = "_" + this->Args[0];
-      mf.GetState()->RenameCommand(this->Args[0], newName);
-      mf.GetState()->AddCommand(f);
-
+      mf.GetState()->AddScriptedCommand(this->Args[0], f);
       // remove the function blocker now that the macro is defined
       mf.RemoveFunctionBlocker(this, lff);
       return true;

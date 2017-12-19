@@ -175,6 +175,7 @@ const char* uv_strerror(int err) {
 }
 #undef UV_STRERROR_GEN
 
+#if !defined(CMAKE_BOOTSTRAP) || defined(_WIN32)
 
 int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
   memset(addr, 0, sizeof(*addr));
@@ -343,6 +344,7 @@ int uv_udp_recv_stop(uv_udp_t* handle) {
     return uv__udp_recv_stop(handle);
 }
 
+#endif
 
 void uv_walk(uv_loop_t* loop, uv_walk_cb walk_cb, void* arg) {
   QUEUE queue;
@@ -512,8 +514,18 @@ void uv__fs_scandir_cleanup(uv_fs_t* req) {
 int uv_fs_scandir_next(uv_fs_t* req, uv_dirent_t* ent) {
   uv__dirent_t** dents;
   uv__dirent_t* dent;
+  unsigned int* nbufs;
 
-  unsigned int* nbufs = uv__get_nbufs(req);
+  /* Check to see if req passed */
+  if (req->result < 0)
+    return req->result;
+
+  /* Ptr will be null if req was canceled or no files found */
+  if (!req->ptr)
+    return UV_EOF;
+
+  nbufs = uv__get_nbufs(req);
+  assert(nbufs);
 
   dents = req->ptr;
 

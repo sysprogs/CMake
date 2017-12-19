@@ -28,16 +28,12 @@
 #include <openssl/hmac.h>
 #include <openssl/opensslv.h>
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
 #include <stdlib.h> /* malloc, free */
 #include <string.h> /* memset */
 static inline HMAC_CTX *HMAC_CTX_new(void)
 {
-	HMAC_CTX *ctx = (HMAC_CTX *)malloc(sizeof(HMAC_CTX));
-	if (ctx != NULL) {
-		memset(ctx, 0, sizeof(*ctx));
-		HMAC_CTX_init(ctx);
-	}
+	HMAC_CTX *ctx = (HMAC_CTX *)calloc(1, sizeof(HMAC_CTX));
 	return ctx;
 }
 

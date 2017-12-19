@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2016, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -35,9 +35,9 @@ CURLcode Curl_connecthost(struct connectdata *conn,
 
 /* generic function that returns how much time there's left to run, according
    to the timeouts set */
-long Curl_timeleft(struct Curl_easy *data,
-                   struct timeval *nowp,
-                   bool duringconnect);
+time_t Curl_timeleft(struct Curl_easy *data,
+                     struct curltime *nowp,
+                     bool duringconnect);
 
 #define DEFAULT_CONNECT_TIMEOUT 300000 /* milliseconds == five minutes */
 #define HAPPY_EYEBALLS_TIMEOUT     200 /* milliseconds to wait between
@@ -51,6 +51,11 @@ long Curl_timeleft(struct Curl_easy *data,
  */
 curl_socket_t Curl_getconnectinfo(struct Curl_easy *data,
                                   struct connectdata **connp);
+
+/*
+ * Check if a connection seems to be alive.
+ */
+bool Curl_connalive(struct connectdata *conn);
 
 #ifdef USE_WINSOCK
 /* When you run a program that uses the Windows Sockets API, you may
@@ -122,19 +127,21 @@ void Curl_tcpnodelay(struct connectdata *conn, curl_socket_t sockfd);
 
 void Curl_conncontrol(struct connectdata *conn,
                       int closeit
-#ifdef DEBUGBUILD
+#if defined(DEBUGBUILD) && !defined(CURL_DISABLE_VERBOSE_STRINGS)
                       , const char *reason
 #endif
   );
 
-#ifdef DEBUGBUILD
+#if defined(DEBUGBUILD) && !defined(CURL_DISABLE_VERBOSE_STRINGS)
 #define streamclose(x,y) Curl_conncontrol(x, CONNCTRL_STREAM, y)
 #define connclose(x,y) Curl_conncontrol(x, CONNCTRL_CONNECTION, y)
 #define connkeep(x,y) Curl_conncontrol(x, CONNCTRL_KEEP, y)
-#else /* if !CURLDEBUG */
+#else /* if !DEBUGBUILD || CURL_DISABLE_VERBOSE_STRINGS */
 #define streamclose(x,y) Curl_conncontrol(x, CONNCTRL_STREAM)
 #define connclose(x,y) Curl_conncontrol(x, CONNCTRL_CONNECTION)
 #define connkeep(x,y) Curl_conncontrol(x, CONNCTRL_KEEP)
 #endif
+
+bool Curl_conn_data_pending(struct connectdata *conn, int sockindex);
 
 #endif /* HEADER_CURL_CONNECT_H */

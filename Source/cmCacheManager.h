@@ -3,7 +3,7 @@
 #ifndef cmCacheManager_h
 #define cmCacheManager_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
 #include <map>
@@ -117,7 +117,7 @@ public:
   void PrintCache(std::ostream&) const;
 
   ///! Get the iterator for an entry with a given key.
-  cmCacheManager::CacheIterator GetCacheIterator(const char* key = CM_NULLPTR);
+  cmCacheManager::CacheIterator GetCacheIterator(const char* key = nullptr);
 
   ///! Remove an entry from the cache
   void RemoveCacheEntry(const std::string& key);
@@ -132,7 +132,7 @@ public:
   {
     cmCacheManager::CacheIterator it = this->GetCacheIterator(key.c_str());
     if (it.IsAtEnd()) {
-      return CM_NULLPTR;
+      return nullptr;
     }
     return it.GetValue();
   }
@@ -175,8 +175,7 @@ public:
   void RemoveCacheEntryProperty(std::string const& key,
                                 std::string const& propName)
   {
-    this->GetCacheIterator(key.c_str())
-      .SetProperty(propName, (void*)CM_NULLPTR);
+    this->GetCacheIterator(key.c_str()).SetProperty(propName, nullptr);
   }
 
   void AppendCacheEntryProperty(std::string const& key,
@@ -228,7 +227,7 @@ private:
 
   static const char* PersistentProperties[];
   bool ReadPropertyEntry(std::string const& key, CacheEntry& e);
-  void WritePropertyEntries(std::ostream& os, CacheIterator const& i);
+  void WritePropertyEntries(std::ostream& os, CacheIterator i);
 
   CacheEntryMap Cache;
   // Only cmake and cmState should be able to add cache values

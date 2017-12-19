@@ -3,7 +3,8 @@
 #ifndef cmCMakeHostSystemInformationCommand_h
 #define cmCMakeHostSystemInformationCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <stddef.h>
 #include <string>
 #include <vector>
@@ -27,7 +28,7 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE
+  cmCommand* Clone() override
   {
     return new cmCMakeHostSystemInformationCommand;
   }
@@ -37,20 +38,7 @@ public:
    * the CMakeLists.txt file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-  * This determines if the command is invoked when in script mode.
-  */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
-
-  /**
-  * The name of the command as specified in CMakeList.txt.
-  */
-  std::string GetName() const CM_OVERRIDE
-  {
-    return "cmake_host_system_information";
-  }
+                   cmExecutionStatus& status) override;
 
 private:
   bool GetValue(cmsys::SystemInformation& info, std::string const& key,

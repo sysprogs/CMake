@@ -3,7 +3,8 @@
 #ifndef cmFLTKWrapUICommand_h
 #define cmFLTKWrapUICommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -24,14 +25,14 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE { return new cmFLTKWrapUICommand; }
+  cmCommand* Clone() override { return new cmFLTKWrapUICommand; }
 
   /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
+                   cmExecutionStatus& status) override;
 
   /**
    * This is called at the end after all the information
@@ -39,13 +40,8 @@ public:
    * not implement this method.  At this point, reading and
    * writing to the cache can be done.
    */
-  void FinalPass() CM_OVERRIDE;
-  bool HasFinalPass() const CM_OVERRIDE { return true; }
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "fltk_wrap_ui"; }
+  void FinalPass() override;
+  bool HasFinalPass() const override { return true; }
 
 private:
   /**

@@ -2,10 +2,9 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmUseMangledMesaCommand.h"
 
-#include <cmsys/FStream.hxx>
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/FStream.hxx"
+#include "cmsys/RegularExpression.hxx"
 
-#include "cmPolicies.h"
 #include "cmSystemTools.h"
 
 class cmExecutionStatus;
@@ -13,11 +12,6 @@ class cmExecutionStatus;
 bool cmUseMangledMesaCommand::InitialPass(std::vector<std::string> const& args,
                                           cmExecutionStatus&)
 {
-  if (this->Disallowed(
-        cmPolicies::CMP0030,
-        "The use_mangled_mesa command should not be called; see CMP0030.")) {
-    return true;
-  }
   // expected two arguments:
   // arguement one: the full path to gl_mangle.h
   // arguement two : directory for output of edited headers
@@ -44,11 +38,10 @@ bool cmUseMangledMesaCommand::InitialPass(std::vector<std::string> const& args,
     return false;
   }
   cmSystemTools::MakeDirectory(destDir);
-  for (std::vector<std::string>::iterator i = files.begin(); i != files.end();
-       ++i) {
+  for (std::string const& f : files) {
     std::string path = inputDir;
     path += "/";
-    path += *i;
+    path += f;
     this->CopyAndFullPathMesaHeader(path.c_str(), destDir);
   }
 

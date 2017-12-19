@@ -2,14 +2,12 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCursesForm.h"
 
-#include <cmConfigure.h>
-
 cmsys::ofstream cmCursesForm::DebugFile;
 bool cmCursesForm::Debug = false;
 
 cmCursesForm::cmCursesForm()
 {
-  this->Form = CM_NULLPTR;
+  this->Form = nullptr;
 }
 
 cmCursesForm::~cmCursesForm()
@@ -17,7 +15,7 @@ cmCursesForm::~cmCursesForm()
   if (this->Form) {
     unpost_form(this->Form);
     free_form(this->Form);
-    this->Form = CM_NULLPTR;
+    this->Form = nullptr;
   }
 }
 

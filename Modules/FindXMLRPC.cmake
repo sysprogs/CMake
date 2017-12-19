@@ -36,27 +36,19 @@ find_program(XMLRPC_C_CONFIG NAMES xmlrpc-c-config)
 
 # Check whether we found anything.
 if(XMLRPC_C_CONFIG)
-  set(XMLRPC_FOUND 1)
+  set(XMLRPC_C_FOUND 1)
 else()
-  set(XMLRPC_FOUND 0)
+  set(XMLRPC_C_FOUND 0)
 endif()
 
 # Lookup the include directories needed for the components requested.
-if(XMLRPC_FOUND)
-  # Use the newer EXECUTE_PROCESS command if it is available.
-  if(COMMAND EXECUTE_PROCESS)
-    execute_process(
-      COMMAND ${XMLRPC_C_CONFIG} ${XMLRPC_FIND_COMPONENTS} --cflags
-      OUTPUT_VARIABLE XMLRPC_C_CONFIG_CFLAGS
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE XMLRPC_C_CONFIG_RESULT
-      )
-  else()
-    exec_program(${XMLRPC_C_CONFIG} ARGS "${XMLRPC_FIND_COMPONENTS} --cflags"
-      OUTPUT_VARIABLE XMLRPC_C_CONFIG_CFLAGS
-      RETURN_VALUE XMLRPC_C_CONFIG_RESULT
-      )
-  endif()
+if(XMLRPC_C_FOUND)
+  execute_process(
+    COMMAND ${XMLRPC_C_CONFIG} ${XMLRPC_FIND_COMPONENTS} --cflags
+    OUTPUT_VARIABLE XMLRPC_C_CONFIG_CFLAGS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE XMLRPC_C_CONFIG_RESULT
+    )
 
   # Parse the include flags.
   if("${XMLRPC_C_CONFIG_RESULT}" STREQUAL "0")
@@ -65,6 +57,7 @@ if(XMLRPC_FOUND)
       XMLRPC_C_CONFIG_CFLAGS "${XMLRPC_C_CONFIG_CFLAGS}")
 
     # Look for -I options.
+    # FIXME: Use these as hints to a find_path call to find the headers.
     set(XMLRPC_INCLUDE_DIRS)
     foreach(flag ${XMLRPC_C_CONFIG_CFLAGS})
       if("${flag}" MATCHES "^-I(.+)")
@@ -74,26 +67,18 @@ if(XMLRPC_FOUND)
     endforeach()
   else()
     message("Error running ${XMLRPC_C_CONFIG}: [${XMLRPC_C_CONFIG_RESULT}]")
-    set(XMLRPC_FOUND 0)
+    set(XMLRPC_C_FOUND 0)
   endif()
 endif()
 
 # Lookup the libraries needed for the components requested.
-if(XMLRPC_FOUND)
-  # Use the newer EXECUTE_PROCESS command if it is available.
-  if(COMMAND EXECUTE_PROCESS)
-    execute_process(
-      COMMAND ${XMLRPC_C_CONFIG} ${XMLRPC_FIND_COMPONENTS} --libs
-      OUTPUT_VARIABLE XMLRPC_C_CONFIG_LIBS
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE XMLRPC_C_CONFIG_RESULT
-      )
-  else()
-    exec_program(${XMLRPC_C_CONFIG} ARGS "${XMLRPC_FIND_COMPONENTS} --libs"
-      OUTPUT_VARIABLE XMLRPC_C_CONFIG_LIBS
-      RETURN_VALUE XMLRPC_C_CONFIG_RESULT
-      )
-  endif()
+if(XMLRPC_C_FOUND)
+  execute_process(
+    COMMAND ${XMLRPC_C_CONFIG} ${XMLRPC_FIND_COMPONENTS} --libs
+    OUTPUT_VARIABLE XMLRPC_C_CONFIG_LIBS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE XMLRPC_C_CONFIG_RESULT
+    )
 
   # Parse the library names and directories.
   if("${XMLRPC_C_CONFIG_RESULT}" STREQUAL "0")
@@ -123,7 +108,7 @@ if(XMLRPC_FOUND)
 
       # If any library is not found then the whole package is not found.
       if(NOT XMLRPC_${name}_LIBRARY)
-        set(XMLRPC_FOUND 0)
+        set(XMLRPC_C_FOUND 0)
       endif()
 
       # Build an ordered list of all the libraries needed.
@@ -131,19 +116,13 @@ if(XMLRPC_FOUND)
     endforeach()
   else()
     message("Error running ${XMLRPC_C_CONFIG}: [${XMLRPC_C_CONFIG_RESULT}]")
-    set(XMLRPC_FOUND 0)
+    set(XMLRPC_C_FOUND 0)
   endif()
 endif()
 
 # Report the results.
-if(NOT XMLRPC_FOUND)
-  set(XMLRPC_DIR_MESSAGE
-    "XMLRPC was not found. Make sure the entries XMLRPC_* are set.")
-  if(NOT XMLRPC_FIND_QUIETLY)
-    message(STATUS "${XMLRPC_DIR_MESSAGE}")
-  else()
-    if(XMLRPC_FIND_REQUIRED)
-      message(FATAL_ERROR "${XMLRPC_DIR_MESSAGE}")
-    endif()
-  endif()
-endif()
+include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(
+    XMLRPC
+    REQUIRED_VARS XMLRPC_C_FOUND XMLRPC_LIBRARIES
+    FAIL_MESSAGE "XMLRPC was not found. Make sure the entries XMLRPC_* are set.")

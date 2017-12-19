@@ -3,7 +3,7 @@
 #ifndef cmDepends_h
 #define cmDepends_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
 #include <map>
@@ -24,10 +24,12 @@ class cmLocalGenerator;
  */
 class cmDepends
 {
+  CM_DISABLE_COPY(cmDepends)
+
 public:
   /** Instances need to know the build directory name and the relative
       path from the build directory to the target file.  */
-  cmDepends(cmLocalGenerator* lg = CM_NULLPTR, const char* targetDir = "");
+  cmDepends(cmLocalGenerator* lg = nullptr, const char* targetDir = "");
 
   /** at what level will the compile be done from */
   void SetCompileDirectory(const char* dir) { this->CompileDirectory = dir; }
@@ -116,10 +118,6 @@ protected:
   std::vector<std::string> IncludePath;
 
   void SetIncludePathFromLanguage(const std::string& lang);
-
-private:
-  cmDepends(cmDepends const&);      // Purposely not implemented.
-  void operator=(cmDepends const&); // Purposely not implemented.
 };
 
 #endif

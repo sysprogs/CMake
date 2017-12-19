@@ -2,8 +2,9 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmFindBase.h"
 
-#include <cmConfigure.h>
+#include <deque>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <stddef.h>
 
@@ -65,6 +66,8 @@ bool cmFindBase::ParseArguments(std::vector<std::string> const& argsIn)
     return true;
   }
   this->AlreadyInCache = false;
+
+  this->SelectDefaultNoPackageRootPath();
 
   // Find the current root path mode.
   this->SelectDefaultRootPathMode();
@@ -158,6 +161,9 @@ bool cmFindBase::ParseArguments(std::vector<std::string> const& argsIn)
 void cmFindBase::ExpandPaths()
 {
   if (!this->NoDefaultPath) {
+    if (!this->NoPackageRootPath) {
+      this->FillPackageRootPath();
+    }
     if (!this->NoCMakePath) {
       this->FillCMakeVariablePath();
     }
@@ -193,6 +199,25 @@ void cmFindBase::FillCMakeEnvironmentPath()
   } else {
     paths.AddEnvPath("CMAKE_FRAMEWORK_PATH");
   }
+  paths.AddSuffixes(this->SearchPathSuffixes);
+}
+
+void cmFindBase::FillPackageRootPath()
+{
+  cmSearchPath& paths = this->LabeledPaths[PathLabel::PackageRoot];
+
+  // Add package specific search prefixes
+  // NOTE: This should be using const_reverse_iterator but HP aCC and
+  //       Oracle sunCC both currently have standard library issues
+  //       with the reverse iterator APIs.
+  for (std::deque<std::string>::reverse_iterator pkg =
+         this->Makefile->FindPackageModuleStack.rbegin();
+       pkg != this->Makefile->FindPackageModuleStack.rend(); ++pkg) {
+    std::string varName = *pkg + "_ROOT";
+    paths.AddCMakePrefixPath(varName);
+    paths.AddEnvPrefixPath(varName);
+  }
+
   paths.AddSuffixes(this->SearchPathSuffixes);
 }
 
@@ -255,10 +280,8 @@ void cmFindBase::FillUserHintsPath()
 {
   cmSearchPath& paths = this->LabeledPaths[PathLabel::Hints];
 
-  for (std::vector<std::string>::const_iterator p =
-         this->UserHintsArgs.begin();
-       p != this->UserHintsArgs.end(); ++p) {
-    paths.AddUserPath(*p);
+  for (std::string const& p : this->UserHintsArgs) {
+    paths.AddUserPath(p);
   }
   paths.AddSuffixes(this->SearchPathSuffixes);
 }
@@ -267,10 +290,8 @@ void cmFindBase::FillUserGuessPath()
 {
   cmSearchPath& paths = this->LabeledPaths[PathLabel::Guess];
 
-  for (std::vector<std::string>::const_iterator p =
-         this->UserGuessArgs.begin();
-       p != this->UserGuessArgs.end(); ++p) {
-    paths.AddUserPath(*p);
+  for (std::string const& p : this->UserGuessArgs) {
+    paths.AddUserPath(p);
   }
   paths.AddSuffixes(this->SearchPathSuffixes);
 }
@@ -309,7 +330,7 @@ bool cmFindBase::CheckForVariableInCache()
     cmState* state = this->Makefile->GetState();
     const char* cacheEntry = state->GetCacheEntryValue(this->VariableName);
     bool found = !cmSystemTools::IsNOTFOUND(cacheValue);
-    bool cached = cacheEntry != CM_NULLPTR;
+    bool cached = cacheEntry != nullptr;
     if (found) {
       // If the user specifies the entry on the command line without a
       // type we should add the type and docstring but keep the

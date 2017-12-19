@@ -3,7 +3,8 @@
 #ifndef cmLibrarysCommand_h
 #define cmLibrarysCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -23,19 +24,14 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE { return new cmAddLibraryCommand; }
+  cmCommand* Clone() override { return new cmAddLibraryCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "add_library"; }
+                   cmExecutionStatus& status) override;
 };
 
 #endif

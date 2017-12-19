@@ -106,6 +106,16 @@
 #  group rpm package is generated without component suffix in filename and
 #  package name.
 #
+# .. variable:: CPACK_RPM_PACKAGE_EPOCH
+#
+#  The RPM package epoch
+#
+#  * Mandatory : No
+#  * Default   : -
+#
+#  Optional number that should be incremented when changing versioning schemas
+#  or fixing mistakes in the version numbers of older packages.
+#
 # .. variable:: CPACK_RPM_PACKAGE_VERSION
 #
 #  The RPM package version.
@@ -530,7 +540,9 @@
 #  list of path to be excluded.
 #
 #  * Mandatory : NO
-#  * Default   : /etc /etc/init.d /usr /usr/share /usr/share/doc /usr/bin /usr/lib /usr/lib64 /usr/include
+#  * Default   : /etc /etc/init.d /usr /usr/bin /usr/include /usr/lib
+#                /usr/libx32 /usr/lib64 /usr/share /usr/share/aclocal
+#                /usr/share/doc
 #
 #  May be used to exclude path (directories or files) from the auto-generated
 #  list of paths discovered by CPack RPM. The defaut value contains a
@@ -817,6 +829,30 @@
 #  is set then :variable:`CPACK_RPM_DEBUGINFO_PACKAGE` is automatically set to
 #  ``ON`` when :variable:`CPACK_RPM_DEBUGINFO_SINGLE_PACKAGE` is set.
 #
+# .. variable:: CPACK_RPM_DEBUGINFO_FILE_NAME
+#               CPACK_RPM_<component>_DEBUGINFO_FILE_NAME
+#
+#  Debuginfo package file name.
+#
+#  * Mandatory : NO
+#  * Default   : rpmbuild tool generated package file name
+#
+#  Alternatively provided debuginfo package file name must end with ``.rpm``
+#  suffix and should differ from file names of other generated packages.
+#
+#  Variable may contain ``@cpack_component@`` placeholder which will be
+#  replaced by component name if component packaging is enabled otherwise it
+#  deletes the placeholder.
+#
+#  Setting the variable to ``RPM-DEFAULT`` may be used to explicitly set
+#  filename generation to default.
+#
+# .. note::
+#
+#  :variable:`CPACK_RPM_FILE_NAME` also supports rpmbuild tool generated package
+#  file name - disabled by default but can be enabled by setting the variable to
+#  ``RPM-DEFAULT``.
+#
 # Packaging of sources (SRPM)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
@@ -963,9 +999,19 @@ function(cpack_rpm_prepare_relocation_paths)
   foreach(RELOCATION_PATH ${RPM_RELOCATION_PATHS})
     if(IS_ABSOLUTE "${RELOCATION_PATH}")
       set(PREPARED_RELOCATION_PATH "${RELOCATION_PATH}")
+    elseif(PATH_PREFIX STREQUAL "/")
+      # don't prefix path with a second slash as "//" is treated as network path
+      # by get_filename_component() so it remains in path even inside rpm
+      # package where it may cause problems with relocation
+      set(PREPARED_RELOCATION_PATH "/${RELOCATION_PATH}")
     else()
       set(PREPARED_RELOCATION_PATH "${PATH_PREFIX}/${RELOCATION_PATH}")
     endif()
+
+    # handle cases where path contains extra slashes (e.g. /a//b/ instead of
+    # /a/b)
+    get_filename_component(PREPARED_RELOCATION_PATH
+      "${PREPARED_RELOCATION_PATH}" ABSOLUTE)
 
     if(EXISTS "${WDIR}/${PREPARED_RELOCATION_PATH}")
       string(APPEND TMP_RPM_PREFIXES "Prefix: ${PREPARED_RELOCATION_PATH}\n")
@@ -1049,7 +1095,9 @@ function(cpack_rpm_prepare_content_list)
   endif()
 
   if(NOT DEFINED CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST)
-    set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST /etc /etc/init.d /usr /usr/share /usr/share/doc /usr/bin /usr/lib /usr/lib64 /usr/include)
+    set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST /etc /etc/init.d /usr /usr/bin
+        /usr/include /usr/lib /usr/libx32 /usr/lib64
+        /usr/share /usr/share/aclocal /usr/share/doc )
     if(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION)
       if(CPACK_RPM_PACKAGE_DEBUG)
         message("CPackRPM:Debug: Adding ${CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION} to builtin omit list.")
@@ -1857,11 +1905,16 @@ function(cpack_rpm_generate_package)
     OUTPUT_STRIP_TRAILING_WHITESPACE)
   string(REPLACE "\n" ";" RPMBUILD_TAG_LIST "${RPMBUILD_TAG_LIST}")
 
+  if(CPACK_RPM_PACKAGE_EPOCH)
+    set(TMP_RPM_EPOCH "Epoch: ${CPACK_RPM_PACKAGE_EPOCH}")
+  endif()
+
   # Check if additional fields for RPM spec header are given
   # There may be some COMPONENT specific variables as well
   # If component specific var is not provided we use the global one
   # for each component
   foreach(_RPM_SPEC_HEADER URL REQUIRES SUGGESTS PROVIDES OBSOLETES PREFIX CONFLICTS AUTOPROV AUTOREQ AUTOREQPROV REQUIRES_PRE REQUIRES_POST REQUIRES_PREUN REQUIRES_POSTUN)
+
     if(CPACK_RPM_PACKAGE_DEBUG)
       message("CPackRPM:Debug: processing ${_RPM_SPEC_HEADER}")
     endif()
@@ -2135,6 +2188,11 @@ function(cpack_rpm_generate_package)
       set(CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/usr/src/debug/${CPACK_PACKAGE_FILE_NAME}${CPACK_RPM_PACKAGE_COMPONENT_PART_PATH}")
     endif()
 
+    # handle cases where path contains extra slashes (e.g. /a//b/ instead of
+    # /a/b)
+    get_filename_component(CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX
+      "${CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX}" ABSOLUTE)
+
     if(CPACK_RPM_DEBUGINFO_SINGLE_PACKAGE AND GENERATE_SPEC_PARTS)
       file(WRITE "${CPACK_RPM_ROOTDIR}/SPECS/${CPACK_RPM_PACKAGE_COMPONENT}.files"
         "${CPACK_RPM_INSTALL_FILES}")
@@ -2383,7 +2441,11 @@ mv *.rpm %_rpmdir"
     set(RPMBUILD_FLAGS "-bs")
 
      file(WRITE ${CPACK_RPM_BINARY_SPECFILE}.in
-      "# -*- rpm-spec -*-
+      "# Restore old style debuginfo creation for rpm >= 4.14.
+%undefine _debugsource_packages
+%undefine _debuginfo_subpackages
+
+# -*- rpm-spec -*-
 BuildRoot:      %_topdir/\@CPACK_PACKAGE_FILE_NAME\@
 Summary:        \@CPACK_RPM_PACKAGE_SUMMARY\@
 Name:           \@CPACK_RPM_PACKAGE_NAME\@
@@ -2458,6 +2520,7 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
 \@TMP_RPM_AUTOREQPROV\@
 \@TMP_RPM_BUILDARCH\@
 \@TMP_RPM_PREFIXES\@
+\@TMP_RPM_EPOCH\@
 
 %description -n \@CPACK_RPM_PACKAGE_NAME\@
 \@CPACK_RPM_PACKAGE_DESCRIPTION\@
@@ -2488,7 +2551,11 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
     if(CPACK_RPM_GENERATE_USER_BINARY_SPECFILE_TEMPLATE OR NOT CPACK_RPM_USER_BINARY_SPECFILE)
 
       file(WRITE ${CPACK_RPM_BINARY_SPECFILE}.in
-        "# -*- rpm-spec -*-
+        "# Restore old style debuginfo creation for rpm >= 4.14.
+%undefine _debugsource_packages
+%undefine _debuginfo_subpackages
+
+# -*- rpm-spec -*-
 BuildRoot:      %_topdir/\@CPACK_PACKAGE_FILE_NAME\@\@CPACK_RPM_PACKAGE_COMPONENT_PART_PATH\@
 Summary:        \@CPACK_RPM_PACKAGE_SUMMARY\@
 Name:           \@CPACK_RPM_PACKAGE_NAME\@
@@ -2513,6 +2580,7 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
 \@TMP_RPM_AUTOREQPROV\@
 \@TMP_RPM_BUILDARCH\@
 \@TMP_RPM_PREFIXES\@
+\@TMP_RPM_EPOCH\@
 
 \@TMP_RPM_DEBUGINFO\@
 
@@ -2638,9 +2706,25 @@ mv %_topdir/tmpBBroot $RPM_BUILD_ROOT
     unset(expected_filenames_)
     unset(filenames_)
     if(CPACK_RPM_DEBUGINFO_PACKAGE AND NOT CPACK_RPM_FILE_NAME STREQUAL "RPM-DEFAULT")
-      string(TOLOWER "${CPACK_RPM_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}.*\\.rpm" efn_)
-      list(APPEND expected_filenames_ "${efn_}")
+      list(APPEND expected_filenames_
+        "${CPACK_RPM_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}.*\\.rpm")
       list(APPEND filenames_ "${CPACK_RPM_FILE_NAME}")
+    endif()
+
+    if(CPACK_RPM_DEBUGINFO_PACKAGE)
+      cpack_rpm_variable_fallback("CPACK_RPM_DEBUGINFO_FILE_NAME"
+        "CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT}_DEBUGINFO_FILE_NAME"
+        "CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT_UPPER}_DEBUGINFO_FILE_NAME"
+        "CPACK_RPM_DEBUGINFO_FILE_NAME")
+
+      if(CPACK_RPM_DEBUGINFO_FILE_NAME AND
+        NOT CPACK_RPM_DEBUGINFO_FILE_NAME STREQUAL "RPM-DEFAULT")
+        list(APPEND expected_filenames_
+          "${CPACK_RPM_PACKAGE_NAME}-debuginfo-${CPACK_PACKAGE_VERSION}.*\\.rpm")
+        string(REPLACE "@cpack_component@" "${CPACK_RPM_PACKAGE_COMPONENT}"
+          CPACK_RPM_DEBUGINFO_FILE_NAME "${CPACK_RPM_DEBUGINFO_FILE_NAME}")
+        list(APPEND filenames_ "${CPACK_RPM_DEBUGINFO_FILE_NAME}")
+      endif()
     endif()
 
     # check if other files have to be renamed

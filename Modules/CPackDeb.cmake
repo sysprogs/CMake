@@ -73,7 +73,8 @@
 #
 #    <PackageName>_<VersionNumber>-<DebianRevisionNumber>_<DebianArchitecture>.deb
 #
-#  Alternatively provided package file name must end with ``.deb`` suffix.
+#  Alternatively provided package file name must end
+#  with either ``.deb`` or ``.ipk`` suffix.
 #
 #  .. note::
 #
@@ -87,6 +88,16 @@
 #    get overwritten and it is up to the packager to set the variables in a
 #    manner that will prevent such errors.
 #
+# .. variable:: CPACK_DEBIAN_PACKAGE_EPOCH
+#
+#  The Debian package epoch
+#
+#  * Mandatory : No
+#  * Default   : -
+#
+#  Optional number that should be incremented when changing versioning schemas
+#  or fixing mistakes in the version numbers of older packages.
+#
 # .. variable:: CPACK_DEBIAN_PACKAGE_VERSION
 #
 #  The Debian package version
@@ -94,12 +105,25 @@
 #  * Mandatory : YES
 #  * Default   : :variable:`CPACK_PACKAGE_VERSION`
 #
+#  This variable may contain only alphanumerics (A-Za-z0-9) and the characters
+#  . + - ~ (full stop, plus, hyphen, tilde) and should start with a digit. If
+#  :variable:`CPACK_DEBIAN_PACKAGE_RELEASE` is not set then hyphens are not
+#  allowed.
+#
+#  .. note::
+#
+#    For backward compatibility with CMake 3.9 and lower a failed test of this
+#    variable's content is not a hard error when both
+#    :variable:`CPACK_DEBIAN_PACKAGE_RELEASE` and
+#    :variable:`CPACK_DEBIAN_PACKAGE_EPOCH` variables are not set. An author
+#    warning is reported instead.
+#
 # .. variable:: CPACK_DEBIAN_PACKAGE_RELEASE
 #
 #  The Debian package release - Debian revision number.
 #
-#  * Mandatory : YES
-#  * Default   : 1
+#  * Mandatory : No
+#  * Default   : -
 #
 #  This is the numbering of the DEB package itself, i.e. the version of the
 #  packaging and not the version of the content (see
@@ -497,6 +521,16 @@
 #
 #    This value is not interpreted. It is possible to pass an optional
 #    revision number of the referenced source package as well.
+#
+# Building Debian packages on Windows
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# To communicate UNIX file permissions from the install stage
+# to the CPack DEB generator the "cmake_mode_t" NTFS
+# alternate data stream (ADT) is used.
+#
+# When a filesystem without ADT support is used only owner read/write
+# permissions can be preserved.
 
 # CPack script for creating Debian package
 # Author: Mathieu Malaterre
@@ -505,10 +539,6 @@
 
 if(CMAKE_BINARY_DIR)
   message(FATAL_ERROR "CPackDeb.cmake may only be used by CPack internally.")
-endif()
-
-if(NOT UNIX)
-  message(FATAL_ERROR "CPackDeb.cmake may only be used under UNIX.")
 endif()
 
 function(cpack_deb_variable_fallback OUTPUT_VAR_NAME)
@@ -729,6 +759,51 @@ function(cpack_deb_prepare_package_vars)
       message(FATAL_ERROR "CPackDeb: Debian package requires a package version")
     endif()
     set(CPACK_DEBIAN_PACKAGE_VERSION ${CPACK_PACKAGE_VERSION})
+  endif()
+
+  if(DEFINED CPACK_DEBIAN_PACKAGE_RELEASE OR DEFINED CPACK_DEBIAN_PACKAGE_EPOCH)
+    # only test the version format if CPACK_DEBIAN_PACKAGE_RELEASE or
+    # CPACK_DEBIAN_PACKAGE_EPOCH is set
+    if(NOT CPACK_DEBIAN_PACKAGE_VERSION MATCHES "^[0-9][A-Za-z0-9.+~-]*$")
+      message(FATAL_ERROR
+        "CPackDeb: Debian package version must confirm to \"^[0-9][A-Za-z0-9.+~-]*$\" regex!")
+    endif()
+  else()
+    # before CMake 3.10 version format was not tested so only warn to preserve
+    # backward compatibility
+    if(NOT CPACK_DEBIAN_PACKAGE_VERSION MATCHES "^([0-9]+:)?[0-9][A-Za-z0-9.+~-]*$")
+      message(AUTHOR_WARNING
+        "CPackDeb: Debian package versioning ([<epoch>:]<version>[-<release>])"
+        " should confirm to \"^([0-9]+:)?[0-9][A-Za-z0-9.+~-]*$\" regex in"
+        " order to satisfy Debian packaging rules.")
+    endif()
+  endif()
+
+  if(CPACK_DEBIAN_PACKAGE_RELEASE)
+    if(NOT CPACK_DEBIAN_PACKAGE_RELEASE MATCHES "^[A-Za-z0-9.+~]+$")
+      message(FATAL_ERROR
+        "CPackDeb: Debian package release must confirm to \"^[A-Za-z0-9.+~]+$\" regex!")
+    endif()
+    string(APPEND CPACK_DEBIAN_PACKAGE_VERSION
+      "-${CPACK_DEBIAN_PACKAGE_RELEASE}")
+  elseif(DEFINED CPACK_DEBIAN_PACKAGE_EPOCH)
+    # only test the version format if CPACK_DEBIAN_PACKAGE_RELEASE or
+    # CPACK_DEBIAN_PACKAGE_EPOCH is set - versions CPack/Deb generator before
+    # CMake 3.10 did not check for version format so we have to preserve
+    # backward compatibility
+    if(CPACK_DEBIAN_PACKAGE_VERSION MATCHES ".*-.*")
+      message(FATAL_ERROR
+        "CPackDeb: Debian package version must not contain hyphens when CPACK_DEBIAN_PACKAGE_RELEASE is not provided!")
+    endif()
+  endif()
+
+  if(CPACK_DEBIAN_PACKAGE_EPOCH)
+    if(NOT CPACK_DEBIAN_PACKAGE_EPOCH MATCHES "^[0-9]+$")
+      message(FATAL_ERROR
+        "CPackDeb: Debian package epoch must confirm to \"^[0-9]+$\" regex!")
+    endif()
+    set(CPACK_DEBIAN_PACKAGE_VERSION
+      "${CPACK_DEBIAN_PACKAGE_EPOCH}:${CPACK_DEBIAN_PACKAGE_VERSION}")
   endif()
 
   # Architecture: (mandatory)
@@ -954,11 +1029,6 @@ function(cpack_deb_prepare_package_vars)
     set(CPACK_DEBIAN_GENERATE_POSTRM 0)
   endif()
 
-  if(NOT CPACK_DEBIAN_PACKAGE_RELEASE)
-    set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
-  endif()
-
-
   cpack_deb_variable_fallback("CPACK_DEBIAN_FILE_NAME"
     "CPACK_DEBIAN_${_local_component_name}_FILE_NAME"
     "CPACK_DEBIAN_FILE_NAME")
@@ -967,13 +1037,13 @@ function(cpack_deb_prepare_package_vars)
       # Patch package file name to be in corrent debian format:
       # <foo>_<VersionNumber>-<DebianRevisionNumber>_<DebianArchitecture>.deb
       set(CPACK_OUTPUT_FILE_NAME
-        "${CPACK_DEBIAN_PACKAGE_NAME}_${CPACK_DEBIAN_PACKAGE_VERSION}-${CPACK_DEBIAN_PACKAGE_RELEASE}_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}.deb")
+        "${CPACK_DEBIAN_PACKAGE_NAME}_${CPACK_DEBIAN_PACKAGE_VERSION}_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}.deb")
     else()
       cmake_policy(PUSH)
         cmake_policy(SET CMP0010 NEW)
-        if(NOT CPACK_DEBIAN_FILE_NAME MATCHES ".*\\.deb")
+        if(NOT CPACK_DEBIAN_FILE_NAME MATCHES ".*\\.(deb|ipk)")
       cmake_policy(POP)
-          message(FATAL_ERROR "'${CPACK_DEBIAN_FILE_NAME}' is not a valid DEB package file name as it must end with '.deb'!")
+          message(FATAL_ERROR "'${CPACK_DEBIAN_FILE_NAME}' is not a valid DEB package file name as it must end with '.deb' or '.ipk'!")
         endif()
       cmake_policy(POP)
 

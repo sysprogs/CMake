@@ -3,7 +3,8 @@
 #ifndef cmGlobalXCodeGenerator_h
 #define cmGlobalXCodeGenerator_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <iosfwd>
 #include <map>
 #include <set>
@@ -31,11 +32,12 @@ struct cmDocumentationEntry;
 class cmGlobalXCodeGenerator : public cmGlobalGenerator
 {
 public:
-  cmGlobalXCodeGenerator(cmake* cm, std::string const& version);
+  cmGlobalXCodeGenerator(cmake* cm, std::string const& version_string,
+                         unsigned int version_number);
   static cmGlobalGeneratorFactory* NewFactory();
 
   ///! Get the name for the generator.
-  std::string GetName() const CM_OVERRIDE
+  std::string GetName() const override
   {
     return cmGlobalXCodeGenerator::GetActualName();
   }
@@ -45,14 +47,14 @@ public:
   static void GetDocumentation(cmDocumentationEntry& entry);
 
   ///! Create a local generator appropriate to this Global Generator
-  cmLocalGenerator* CreateLocalGenerator(cmMakefile* mf) CM_OVERRIDE;
+  cmLocalGenerator* CreateLocalGenerator(cmMakefile* mf) override;
 
   /**
    * Try to determine system information such as shared library
    * extension, pthreads, byte order etc.
    */
   void EnableLanguage(std::vector<std::string> const& languages, cmMakefile*,
-                      bool optional) CM_OVERRIDE;
+                      bool optional) override;
   /**
    * Try running cmake and building a file. This is used for dynalically
    * loaded commands, not as part of the usual build process.
@@ -64,41 +66,48 @@ public:
                             const std::string& targetName,
                             const std::string& config, bool fast, bool verbose,
                             std::vector<std::string> const& makeOptions =
-                              std::vector<std::string>()) CM_OVERRIDE;
+                              std::vector<std::string>()) override;
 
   /** Append the subdirectory for the given configuration.  */
   void AppendDirectoryForConfig(const std::string& prefix,
                                 const std::string& config,
                                 const std::string& suffix,
-                                std::string& dir) CM_OVERRIDE;
+                                std::string& dir) override;
 
-  bool FindMakeProgram(cmMakefile*) CM_OVERRIDE;
+  bool FindMakeProgram(cmMakefile*) override;
 
   ///! What is the configurations directory variable called?
-  const char* GetCMakeCFGIntDir() const CM_OVERRIDE;
+  const char* GetCMakeCFGIntDir() const override;
   ///! expand CFGIntDir
   std::string ExpandCFGIntDir(const std::string& str,
-                              const std::string& config) const CM_OVERRIDE;
+                              const std::string& config) const override;
 
   void SetCurrentLocalGenerator(cmLocalGenerator*);
 
   /** Return true if the generated build tree may contain multiple builds.
       i.e. "Can I build Debug and Release in the same tree?" */
-  bool IsMultiConfig() const CM_OVERRIDE;
+  bool IsMultiConfig() const override;
 
-  bool UseEffectivePlatformName(cmMakefile* mf) const CM_OVERRIDE;
+  bool HasKnownObjectFileLocation(std::string* reason) const override;
 
-  bool SetGeneratorToolset(std::string const& ts, cmMakefile* mf) CM_OVERRIDE;
+  bool IsIPOSupported() const override { return true; }
+
+  bool UseEffectivePlatformName(cmMakefile* mf) const override;
+
+  bool ShouldStripResourcePath(cmMakefile*) const override;
+
+  bool SetGeneratorToolset(std::string const& ts, cmMakefile* mf) override;
   void AppendFlag(std::string& flags, std::string const& flag);
 
 protected:
-  void AddExtraIDETargets() CM_OVERRIDE;
-  void Generate() CM_OVERRIDE;
+  void AddExtraIDETargets() override;
+  void Generate() override;
 
 private:
   cmXCodeObject* CreateOrGetPBXGroup(cmGeneratorTarget* gtgt,
                                      cmSourceGroup* sg);
-  cmXCodeObject* CreatePBXGroup(cmXCodeObject* parent, std::string name);
+  cmXCodeObject* CreatePBXGroup(cmXCodeObject* parent,
+                                const std::string& name);
   bool CreateGroups(std::vector<cmLocalGenerator*>& generators);
   std::string XCodeEscapePath(const std::string& p);
   std::string RelativeToSource(const char* p);
@@ -136,7 +145,7 @@ private:
   cmXCodeObject* CreateFlatClone(cmXCodeObject*);
   cmXCodeObject* CreateXCodeTarget(cmGeneratorTarget* gtgt,
                                    cmXCodeObject* buildPhases);
-  void ForceLinkerLanguages() CM_OVERRIDE;
+  void ForceLinkerLanguages() override;
   void ForceLinkerLanguage(cmGeneratorTarget* gtgt);
   const char* GetTargetLinkFlagsVar(const cmGeneratorTarget* target) const;
   const char* GetTargetFileType(cmGeneratorTarget* target);
@@ -165,6 +174,9 @@ private:
                           std::vector<cmLocalGenerator*>& generators);
   void OutputXCodeProject(cmLocalGenerator* root,
                           std::vector<cmLocalGenerator*>& generators);
+  // Write shared scheme files for all the native targets
+  void OutputXCodeSharedSchemes(const std::string& xcProjDir);
+  void OutputXCodeWorkspaceSettings(const std::string& xcProjDir);
   void WriteXCodePBXProj(std::ostream& fout, cmLocalGenerator* root,
                          std::vector<cmLocalGenerator*>& generators);
   cmXCodeObject* CreateXCodeFileReferenceFromPath(const std::string& fullpath,
@@ -208,11 +220,11 @@ private:
                      std::vector<std::string> const& defines,
                      bool dflag = false);
 
-  void ComputeTargetObjectDirectory(cmGeneratorTarget* gt) const CM_OVERRIDE;
+  void ComputeTargetObjectDirectory(cmGeneratorTarget* gt) const override;
 
 protected:
-  const char* GetInstallTargetName() const CM_OVERRIDE { return "install"; }
-  const char* GetPackageTargetName() const CM_OVERRIDE { return "package"; }
+  const char* GetInstallTargetName() const override { return "install"; }
+  const char* GetPackageTargetName() const override { return "package"; }
 
   unsigned int XcodeVersion;
   std::string VersionString;
@@ -227,7 +239,7 @@ private:
   bool XcodeBuildCommandInitialized;
 
   void PrintCompilerAdvice(std::ostream&, std::string const&,
-                           const char*) const CM_OVERRIDE
+                           const char*) const override
   {
   }
 
@@ -235,12 +247,13 @@ private:
                                         const std::string& configName,
                                         const cmGeneratorTarget* t) const;
 
+  void ComputeArchitectures(cmMakefile* mf);
+  void ComputeObjectDirArch(cmMakefile* mf);
+
   void addObject(cmXCodeObject* obj);
   std::string PostBuildMakeTarget(std::string const& tName,
                                   std::string const& configName);
   cmXCodeObject* MainGroupChildren;
-  cmXCodeObject* SourcesGroupChildren;
-  cmXCodeObject* ResourcesGroupChildren;
   cmMakefile* CurrentMakefile;
   cmLocalGenerator* CurrentLocalGenerator;
   std::vector<std::string> CurrentConfigurationTypes;
@@ -256,6 +269,8 @@ private:
   std::map<std::string, cmXCodeObject*> FileRefs;
   std::map<cmGeneratorTarget const*, cmXCodeObject*> XCodeObjectMap;
   std::vector<std::string> Architectures;
+  std::string ObjectDirArchDefault;
+  std::string ObjectDirArch;
   std::string GeneratorToolset;
 };
 

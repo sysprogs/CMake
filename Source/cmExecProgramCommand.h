@@ -3,7 +3,8 @@
 #ifndef cmExecProgramCommand_h
 #define cmExecProgramCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -26,29 +27,18 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE { return new cmExecProgramCommand; }
+  cmCommand* Clone() override { return new cmExecProgramCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "exec_program"; }
-
-  /**
-   * This determines if the command is invoked when in script mode.
-   */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
+                   cmExecutionStatus& status) override;
 
 private:
   static bool RunCommand(const char* command, std::string& output, int& retVal,
-                         const char* directory = CM_NULLPTR,
-                         bool verbose = true,
+                         const char* directory = nullptr, bool verbose = true,
                          Encoding encoding = cmProcessOutput::Auto);
 };
 

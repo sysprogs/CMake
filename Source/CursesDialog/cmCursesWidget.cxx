@@ -2,8 +2,6 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCursesWidget.h"
 
-#include <cmConfigure.h>
-
 cmCursesWidget::cmCursesWidget(int width, int height, int left, int top)
 {
   this->Field = new_field(height, width, top, left, 0, 0);
@@ -16,7 +14,7 @@ cmCursesWidget::~cmCursesWidget()
 {
   if (this->Field) {
     free_field(this->Field);
-    this->Field = CM_NULLPTR;
+    this->Field = nullptr;
   }
 }
 

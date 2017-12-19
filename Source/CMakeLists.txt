@@ -78,6 +78,7 @@ configure_file(
 include_directories(
   "${CMake_BINARY_DIR}/Source"
   "${CMake_SOURCE_DIR}/Source"
+  "${CMake_SOURCE_DIR}/Source/LexerParser"
   ${CMAKE_ZLIB_INCLUDES}
   ${CMAKE_EXPAT_INCLUDES}
   ${CMAKE_TAR_INCLUDES}
@@ -87,61 +88,6 @@ include_directories(
 
 # let cmake know it is supposed to use it
 add_definitions(-DCMAKE_BUILD_WITH_CMAKE)
-
-option(CMAKE_REGENERATE_YACCLEX
-  "Regenerate YACC and LEXX files" OFF)
-mark_as_advanced(CMAKE_REGENERATE_YACCLEX)
-if(CMAKE_REGENERATE_YACCLEX)
-  set(parsersLexers cmFortran cmCommandArgument cmExpr)
-  find_program(YACC_EXECUTABLE
-    NAMES yacc bison
-    PATHS /usr/bin
-    DOC "Yacc or Bison executable")
-  find_program(FLEX_EXECUTABLE
-    NAMES flex
-    PATHS /usr/bin
-    DOC "Flex executable")
-  mark_as_advanced(YACC_EXECUTABLE FLEX_EXECUTABLE)
-  if(YACC_EXECUTABLE)
-    set(BISON_FLAGS)
-    if(YACC_EXECUTABLE MATCHES "bison")
-      set(BISON_FLAGS "--yacc")
-    endif()
-    set(yacc_files)
-    foreach(name ${parsersLexers})
-      set(src "${CMAKE_CURRENT_SOURCE_DIR}/${name}Parser.y")
-      set(dst "${CMAKE_CURRENT_BINARY_DIR}/${name}Parser.cxx")
-      set(hdr "${CMAKE_CURRENT_BINARY_DIR}/${name}ParserTokens.h")
-      add_custom_command(
-        OUTPUT "${dst}"
-        DEPENDS "${src}"
-        COMMAND
-        ${YACC_EXECUTABLE}
-        --name-prefix=${name}_yy --defines=${hdr} -o${dst} ${src}
-        )
-      set(yacc_files ${yacc_files} "${dst}")
-    endforeach()
-    add_custom_target(RerunYacc DEPENDS ${yacc_files})
-  endif()
-  if(FLEX_EXECUTABLE)
-    set(lex_files)
-    foreach(name ${parsersLexers})
-      set(src "${CMAKE_CURRENT_SOURCE_DIR}/${name}Lexer.in.l")
-      set(dst "${CMAKE_CURRENT_BINARY_DIR}/${name}Lexer.cxx")
-      set(hdr "${CMAKE_CURRENT_BINARY_DIR}/${name}Lexer.h")
-      add_custom_command(
-        OUTPUT "${dst}"
-        DEPENDS "${src}"
-        COMMAND
-        ${FLEX_EXECUTABLE}
-        --prefix=${name}_yy --header-file=${hdr} -o${dst} ${src}
-        )
-      set(lex_files ${lex_files} "${dst}")
-    endforeach()
-    add_custom_target(RerunLex DEPENDS ${lex_files})
-  endif()
-
-endif()
 
 # Check if we can build the ELF parser.
 if(CMAKE_USE_ELF_PARSER)
@@ -157,14 +103,40 @@ endif()
 # Sources for CMakeLib
 #
 set(SRCS
+  # Lexers/Parsers
+  LexerParser/cmCommandArgumentLexer.cxx
+  LexerParser/cmCommandArgumentLexer.h
+  LexerParser/cmCommandArgumentLexer.in.l
+  LexerParser/cmCommandArgumentParser.cxx
+  LexerParser/cmCommandArgumentParserTokens.h
+  LexerParser/cmCommandArgumentParser.y
+  LexerParser/cmDependsJavaLexer.cxx
+  LexerParser/cmDependsJavaLexer.h
+  LexerParser/cmDependsJavaLexer.in.l
+  LexerParser/cmDependsJavaParser.cxx
+  LexerParser/cmDependsJavaParserTokens.h
+  LexerParser/cmDependsJavaParser.y
+  LexerParser/cmExprLexer.cxx
+  LexerParser/cmExprLexer.h
+  LexerParser/cmExprLexer.in.l
+  LexerParser/cmExprParser.cxx
+  LexerParser/cmExprParserTokens.h
+  LexerParser/cmExprParser.y
+  LexerParser/cmFortranLexer.cxx
+  LexerParser/cmFortranLexer.h
+  LexerParser/cmFortranLexer.in.l
+  LexerParser/cmFortranParser.cxx
+  LexerParser/cmFortranParserTokens.h
+  LexerParser/cmFortranParser.y
+  LexerParser/cmListFileLexer.c
+  LexerParser/cmListFileLexer.in.l
+
   cmArchiveWrite.cxx
   cmBase32.cxx
   cmCacheManager.cxx
   cmCacheManager.h
   cmCLocaleEnvironmentScope.h
   cmCLocaleEnvironmentScope.cxx
-  cmCommandArgumentLexer.cxx
-  cmCommandArgumentParser.cxx
   cmCommandArgumentParserHelper.cxx
   cmCommonTargetGenerator.cxx
   cmCommonTargetGenerator.h
@@ -196,8 +168,6 @@ set(SRCS
   cmDependsFortran.h
   cmDependsJava.cxx
   cmDependsJava.h
-  cmDependsJavaLexer.cxx
-  cmDependsJavaParser.cxx
   cmDependsJavaParserHelper.cxx
   cmDependsJavaParserHelper.h
   cmDocumentation.cxx
@@ -206,8 +176,6 @@ set(SRCS
   cmDynamicLoader.cxx
   cmDynamicLoader.h
   ${ELF_SRCS}
-  cmExprLexer.cxx
-  cmExprParser.cxx
   cmExprParserHelper.cxx
   cmExportBuildAndroidMKGenerator.h
   cmExportBuildAndroidMKGenerator.cxx
@@ -247,10 +215,6 @@ set(SRCS
   cmFilePathChecksum.h
   cmFileTimeComparison.cxx
   cmFileTimeComparison.h
-  cmFortranLexer.cxx
-  cmFortranLexer.h
-  cmFortranParser.cxx
-  cmFortranParser.h
   cmFortranParserImpl.cxx
   cmGeneratedFileStream.cxx
   cmGeneratorExpressionContext.cxx
@@ -302,7 +266,6 @@ set(SRCS
   cmLinkLineDeviceComputer.h
   cmListFileCache.cxx
   cmListFileCache.h
-  cmListFileLexer.c
   cmLocalCommonGenerator.cxx
   cmLocalCommonGenerator.h
   cmLocalGenerator.cxx
@@ -344,6 +307,9 @@ set(SRCS
   cmPropertyDefinitionMap.h
   cmPropertyMap.cxx
   cmPropertyMap.h
+  cmQtAutoGen.cxx
+  cmQtAutoGen.h
+  cmQtAutoGenDigest.h
   cmQtAutoGeneratorInitializer.cxx
   cmQtAutoGeneratorInitializer.h
   cmQtAutoGenerators.cxx
@@ -381,6 +347,8 @@ set(SRCS
   cmVariableWatch.h
   cmVersion.cxx
   cmVersion.h
+  cmWorkingDirectory.cxx
+  cmWorkingDirectory.h
   cmXMLParser.cxx
   cmXMLParser.h
   cmXMLSafe.cxx
@@ -440,6 +408,8 @@ set(SRCS
   cmCreateTestSourceList.h
   cmDefinePropertyCommand.cxx
   cmDefinePropertyCommand.h
+  cmDisallowedCommand.cxx
+  cmDisallowedCommand.h
   cmEnableLanguageCommand.cxx
   cmEnableLanguageCommand.h
   cmEnableTestingCommand.cxx
@@ -500,6 +470,8 @@ set(SRCS
   cmIncludeDirectoryCommand.h
   cmIncludeExternalMSProjectCommand.cxx
   cmIncludeExternalMSProjectCommand.h
+  cmIncludeGuardCommand.cxx
+  cmIncludeGuardCommand.h
   cmIncludeRegularExpressionCommand.cxx
   cmIncludeRegularExpressionCommand.h
   cmInstallCommand.cxx
@@ -615,7 +587,6 @@ set(SRCS
   cmWriteFileCommand.cxx
   cmWriteFileCommand.h
 
-  cm_auto_ptr.hxx
   cm_get_date.h
   cm_get_date.c
   cm_utf8.h
@@ -637,6 +608,7 @@ if(APPLE)
   set(SRCS ${SRCS}
     cmXCodeObject.cxx
     cmXCode21Object.cxx
+    cmXCodeScheme.cxx
     cmGlobalXCodeGenerator.cxx
     cmGlobalXCodeGenerator.h
     cmLocalXCodeGenerator.cxx
@@ -807,6 +779,8 @@ if(WIN32 AND NOT UNIX)
   target_link_libraries(CMakeLib rpcrt4 crypt32)
 endif()
 
+target_compile_definitions(CMakeLib PUBLIC ${CLANG_TIDY_DEFINITIONS})
+
 #
 # CTestLib
 #
@@ -882,6 +856,12 @@ add_library(CTestLib ${CTEST_SRCS})
 target_link_libraries(CTestLib CMakeLib ${CMAKE_CURL_LIBRARIES} ${CMAKE_XMLRPC_LIBRARIES})
 
 #
+# CPack
+#
+include_directories(
+  "${CMake_SOURCE_DIR}/Source/CPack"
+  )
+#
 # Sources for CPack
 #
 set(CPACK_SRCS
@@ -891,10 +871,6 @@ set(CPACK_SRCS
   CPack/cmCPackGenerator.cxx
   CPack/cmCPackLog.cxx
   CPack/cmCPackNSISGenerator.cxx
-  CPack/IFW/cmCPackIFWPackage.cxx
-  CPack/IFW/cmCPackIFWInstaller.cxx
-  CPack/IFW/cmCPackIFWRepository.cxx
-  CPack/IFW/cmCPackIFWGenerator.cxx
   CPack/cmCPackSTGZGenerator.cxx
   CPack/cmCPackTGZGenerator.cxx
   CPack/cmCPackTXZGenerator.cxx
@@ -902,6 +878,20 @@ set(CPACK_SRCS
   CPack/cmCPackTarCompressGenerator.cxx
   CPack/cmCPackZIPGenerator.cxx
   CPack/cmCPack7zGenerator.cxx
+  CPack/cmCPackDebGenerator.cxx
+  )
+# CPack IFW generator
+set(CPACK_SRCS ${CPACK_SRCS}
+  CPack/IFW/cmCPackIFWCommon.cxx
+  CPack/IFW/cmCPackIFWCommon.h
+  CPack/IFW/cmCPackIFWGenerator.cxx
+  CPack/IFW/cmCPackIFWGenerator.h
+  CPack/IFW/cmCPackIFWInstaller.cxx
+  CPack/IFW/cmCPackIFWInstaller.h
+  CPack/IFW/cmCPackIFWPackage.cxx
+  CPack/IFW/cmCPackIFWPackage.h
+  CPack/IFW/cmCPackIFWRepository.cxx
+  CPack/IFW/cmCPackIFWRepository.h
   )
 
 if(CYGWIN)
@@ -911,11 +901,39 @@ if(CYGWIN)
     )
 endif()
 
+option(CPACK_ENABLE_FREEBSD_PKG "Add FreeBSD pkg(8) generator to CPack." OFF)
+
 if(UNIX)
   set(CPACK_SRCS ${CPACK_SRCS}
-    CPack/cmCPackDebGenerator.cxx
     CPack/cmCPackRPMGenerator.cxx
     )
+
+  # Optionally, try to use pkg(8)
+  if(CPACK_ENABLE_FREEBSD_PKG)
+    # On UNIX, you may find FreeBSD's pkg(8) and attendant
+    # library -- it can be used on FreeBSD, Dragonfly, NetBSD,
+    # OpenBSD and also Linux and OSX. Look for the header and
+    # the library; it's a warning on FreeBSD if they're not
+    # found, and informational on other platforms.
+    find_path(FREEBSD_PKG_INCLUDE_DIRS "pkg.h" PATHS /usr/local)
+    if(FREEBSD_PKG_INCLUDE_DIRS)
+      find_library(FREEBSD_PKG_LIBRARIES
+        pkg
+        DOC "FreeBSD pkg(8) library")
+      if(FREEBSD_PKG_LIBRARIES)
+        set(CPACK_SRCS ${CPACK_SRCS}
+          CPack/cmCPackFreeBSDGenerator.cxx
+          )
+      endif()
+    endif()
+
+    if (NOT FREEBSD_PKG_INCLUDE_DIRS OR NOT FREEBSD_PKG_LIBRARIES)
+      message(FATAL_ERROR "CPack needs libpkg(3) to produce FreeBSD packages natively.")
+    endif()
+  else()
+    set(FREEBSD_PKG_INCLUDE_DIRS NOTFOUND)
+    set(FREEBSD_PKG_LIBRARIES NOTFOUND)
+  endif()
 endif()
 
 if(WIN32)
@@ -973,6 +991,11 @@ if(APPLE)
       "See CMakeFiles/CMakeError.log for details of the failure.")
   endif()
 endif()
+if(CPACK_ENABLE_FREEBSD_PKG AND FREEBSD_PKG_INCLUDE_DIRS AND FREEBSD_PKG_LIBRARIES)
+  target_link_libraries(CPackLib ${FREEBSD_PKG_LIBRARIES})
+  include_directories(${FREEBSD_PKG_INCLUDE_DIRS})
+  add_definitions(-DHAVE_FREEBSD_PKG)
+endif()
 
 if(APPLE)
   add_executable(cmakexbuild cmakexbuild.cxx)
@@ -989,18 +1012,16 @@ add_executable(cmake cmakemain.cxx cmcmd.cxx cmcmd.h ${MANIFEST_FILE})
 list(APPEND _tools cmake)
 target_link_libraries(cmake CMakeLib)
 
-if(CMake_ENABLE_SERVER_MODE)
-  add_library(CMakeServerLib
-    cmFileMonitor.cxx cmFileMonitor.h
-    cmServer.cxx cmServer.h
-    cmServerConnection.cxx cmServerConnection.h
-    cmServerProtocol.cxx cmServerProtocol.h
-    )
-  target_link_libraries(CMakeServerLib CMakeLib)
-  set_property(SOURCE cmcmd.cxx APPEND PROPERTY COMPILE_DEFINITIONS HAVE_SERVER_MODE=1)
-
-  target_link_libraries(cmake CMakeServerLib)
-endif()
+add_library(CMakeServerLib
+  cmConnection.h cmConnection.cxx
+  cmFileMonitor.cxx cmFileMonitor.h
+  cmPipeConnection.cxx cmPipeConnection.h
+  cmServer.cxx cmServer.h
+  cmServerConnection.cxx cmServerConnection.h
+  cmServerProtocol.cxx cmServerProtocol.h
+  )
+target_link_libraries(CMakeServerLib CMakeLib)
+target_link_libraries(cmake CMakeServerLib)
 
 # Build CTest executable
 add_executable(ctest ctest.cxx ${MANIFEST_FILE})

@@ -3,8 +3,9 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmGlobalVisualStudioGenerator.h"
 
-#include <cmsys/Encoding.hxx>
+#include "cmsys/Encoding.hxx"
 #include <iostream>
+#include <windows.h>
 
 #include "cmAlgorithms.h"
 #include "cmCallVisualStudioMacro.h"
@@ -19,6 +20,7 @@
 cmGlobalVisualStudioGenerator::cmGlobalVisualStudioGenerator(cmake* cm)
   : cmGlobalGenerator(cm)
 {
+  cm->GetState()->SetIsGeneratorMultiConfig(true);
   cm->GetState()->SetWindowsShell(true);
   cm->GetState()->SetWindowsVSIDE(true);
 }
@@ -56,7 +58,7 @@ void cmGlobalVisualStudioGenerator::AddExtraIDETargets()
   const char* no_working_dir = 0;
   std::vector<std::string> no_depends;
   cmCustomCommandLines no_commands;
-  std::map<std::string, std::vector<cmLocalGenerator*> >::iterator it;
+  std::map<std::string, std::vector<cmLocalGenerator*>>::iterator it;
   for (it = this->ProjectMap.begin(); it != this->ProjectMap.end(); ++it) {
     std::vector<cmLocalGenerator*>& gen = it->second;
     // add the ALL_BUILD to the first local generator of each project
@@ -80,8 +82,10 @@ void cmGlobalVisualStudioGenerator::AddExtraIDETargets()
       // Now make all targets depend on the ALL_BUILD target
       for (std::vector<cmLocalGenerator*>::iterator i = gen.begin();
            i != gen.end(); ++i) {
-        std::vector<cmGeneratorTarget*> targets = (*i)->GetGeneratorTargets();
-        for (std::vector<cmGeneratorTarget*>::iterator t = targets.begin();
+        const std::vector<cmGeneratorTarget*>& targets =
+          (*i)->GetGeneratorTargets();
+        for (std::vector<cmGeneratorTarget*>::const_iterator t =
+               targets.begin();
              t != targets.end(); ++t) {
           cmGeneratorTarget* tgt = *t;
           if (tgt->GetType() == cmStateEnums::GLOBAL_TARGET ||
@@ -146,7 +150,7 @@ void cmGlobalVisualStudioGenerator::ConfigureCMakeVisualStudioMacros()
 {
   std::string dir = this->GetUserMacrosDirectory();
 
-  if (dir != "") {
+  if (!dir.empty()) {
     std::string src = cmSystemTools::GetCMakeRoot();
     src += "/Templates/" CMAKE_VSMACROS_FILENAME;
 
@@ -186,7 +190,7 @@ void cmGlobalVisualStudioGenerator::CallVisualStudioMacro(
   //  - the CMake vsmacros file is registered
   //  - there were .sln/.vcproj files changed during generation
   //
-  if (dir != "") {
+  if (!dir.empty()) {
     std::string macrosFile = dir + "/CMakeMacros/" CMAKE_VSMACROS_FILENAME;
     std::string nextSubkeyName;
     if (cmSystemTools::FileExists(macrosFile.c_str()) &&
@@ -291,13 +295,15 @@ bool cmGlobalVisualStudioGenerator::ComputeTargetDepends()
   if (!this->cmGlobalGenerator::ComputeTargetDepends()) {
     return false;
   }
-  std::map<std::string, std::vector<cmLocalGenerator*> >::iterator it;
+  std::map<std::string, std::vector<cmLocalGenerator*>>::iterator it;
   for (it = this->ProjectMap.begin(); it != this->ProjectMap.end(); ++it) {
     std::vector<cmLocalGenerator*>& gen = it->second;
     for (std::vector<cmLocalGenerator*>::iterator i = gen.begin();
          i != gen.end(); ++i) {
-      std::vector<cmGeneratorTarget*> targets = (*i)->GetGeneratorTargets();
-      for (std::vector<cmGeneratorTarget*>::iterator ti = targets.begin();
+      const std::vector<cmGeneratorTarget*>& targets =
+        (*i)->GetGeneratorTargets();
+      for (std::vector<cmGeneratorTarget*>::const_iterator ti =
+             targets.begin();
            ti != targets.end(); ++ti) {
         this->ComputeVSTargetDepends(*ti);
       }
@@ -440,8 +446,6 @@ std::string cmGlobalVisualStudioGenerator::GetStartupProjectName(
   // default, if not specified
   return this->GetAllTargetName();
 }
-
-#include <windows.h>
 
 bool IsVisualStudioMacrosFileRegistered(const std::string& macrosFile,
                                         const std::string& regKeyBase,
@@ -730,12 +734,26 @@ bool cmGlobalVisualStudioGenerator::TargetIsFortranOnly(
       return false;
     }
   }
+  // If there's only one source language, Fortran has to be used
+  // in order for the sources to compile.
+  // Note: Via linker propagation, LINKER_LANGUAGE could become CXX in
+  // this situation and mismatch from the actual language of the linker.
   gt->GetLanguages(languages, "");
   if (languages.size() == 1) {
     if (*languages.begin() == "Fortran") {
       return true;
     }
   }
+
+  // In the case of mixed object files or sources mixed with objects,
+  // decide the language based on the value of LINKER_LANGUAGE.
+  // This will not make it possible to mix source files of different
+  // languages, but object libraries will be linked together in the
+  // same fashion as other generators do.
+  if (gt->GetLinkerLanguage("") == "Fortran") {
+    return true;
+  }
+
   return false;
 }
 
@@ -762,6 +780,19 @@ bool cmGlobalVisualStudioGenerator::TargetIsCSharpOnly(
     }
   }
   return false;
+}
+
+bool cmGlobalVisualStudioGenerator::TargetCanBeReferenced(
+  cmGeneratorTarget const* gt)
+{
+  if (this->TargetIsCSharpOnly(gt)) {
+    return true;
+  }
+  if (gt->GetType() != cmStateEnums::SHARED_LIBRARY &&
+      gt->GetType() != cmStateEnums::EXECUTABLE) {
+    return false;
+  }
+  return true;
 }
 
 bool cmGlobalVisualStudioGenerator::TargetCompare::operator()(
@@ -814,10 +845,14 @@ void cmGlobalVisualStudioGenerator::AddSymbolExportCommand(
   cmGeneratorTarget* gt, std::vector<cmCustomCommand>& commands,
   std::string const& configName)
 {
+  cmGeneratorTarget::ModuleDefinitionInfo const* mdi =
+    gt->GetModuleDefinitionInfo(configName);
+  if (!mdi || !mdi->DefFileGenerated) {
+    return;
+  }
+
   std::vector<std::string> outputs;
-  std::string deffile = gt->ObjectDirectory;
-  deffile += "/exportall.def";
-  outputs.push_back(deffile);
+  outputs.push_back(mdi->DefFile);
   std::vector<std::string> empty;
   std::vector<cmSourceFile const*> objectSources;
   gt->GetObjectSources(objectSources, configName);
@@ -835,50 +870,58 @@ void cmGlobalVisualStudioGenerator::AddSymbolExportCommand(
   cmdl.push_back(cmakeCommand);
   cmdl.push_back("-E");
   cmdl.push_back("__create_def");
-  cmdl.push_back(deffile);
+  cmdl.push_back(mdi->DefFile);
   std::string obj_dir_expanded = obj_dir;
   cmSystemTools::ReplaceString(obj_dir_expanded, this->GetCMakeCFGIntDir(),
                                configName.c_str());
-  std::string objs_file = obj_dir_expanded;
-  cmSystemTools::MakeDirectory(objs_file.c_str());
-  objs_file += "/objects.txt";
+  cmSystemTools::MakeDirectory(obj_dir_expanded);
+  std::string const objs_file = obj_dir_expanded + "/objects.txt";
   cmdl.push_back(objs_file);
   cmGeneratedFileStream fout(objs_file.c_str());
   if (!fout) {
     cmSystemTools::Error("could not open ", objs_file.c_str());
     return;
   }
-  std::vector<std::string> objs;
-  for (std::vector<cmSourceFile const*>::const_iterator it =
-         objectSources.begin();
-       it != objectSources.end(); ++it) {
-    // Find the object file name corresponding to this source file.
-    std::map<cmSourceFile const*, std::string>::const_iterator map_it =
-      mapping.find(*it);
-    // It must exist because we populated the mapping just above.
-    assert(!map_it->second.empty());
-    std::string objFile = obj_dir + map_it->second;
-    objs.push_back(objFile);
-  }
-  std::vector<cmSourceFile const*> externalObjectSources;
-  gt->GetExternalObjects(externalObjectSources, configName);
-  for (std::vector<cmSourceFile const*>::const_iterator it =
-         externalObjectSources.begin();
-       it != externalObjectSources.end(); ++it) {
-    objs.push_back((*it)->GetFullPath());
-  }
 
-  gt->UseObjectLibraries(objs, configName);
-  for (std::vector<std::string>::iterator it = objs.begin(); it != objs.end();
-       ++it) {
-    std::string objFile = *it;
-    // replace $(ConfigurationName) in the object names
-    cmSystemTools::ReplaceString(objFile, this->GetCMakeCFGIntDir(),
-                                 configName.c_str());
-    if (cmHasLiteralSuffix(objFile, ".obj")) {
-      fout << objFile << "\n";
+  if (mdi->WindowsExportAllSymbols) {
+    std::vector<std::string> objs;
+    for (std::vector<cmSourceFile const*>::const_iterator it =
+           objectSources.begin();
+         it != objectSources.end(); ++it) {
+      // Find the object file name corresponding to this source file.
+      std::map<cmSourceFile const*, std::string>::const_iterator map_it =
+        mapping.find(*it);
+      // It must exist because we populated the mapping just above.
+      assert(!map_it->second.empty());
+      std::string objFile = obj_dir + map_it->second;
+      objs.push_back(objFile);
+    }
+    std::vector<cmSourceFile const*> externalObjectSources;
+    gt->GetExternalObjects(externalObjectSources, configName);
+    for (std::vector<cmSourceFile const*>::const_iterator it =
+           externalObjectSources.begin();
+         it != externalObjectSources.end(); ++it) {
+      objs.push_back((*it)->GetFullPath());
+    }
+
+    for (std::vector<std::string>::iterator it = objs.begin();
+         it != objs.end(); ++it) {
+      std::string objFile = *it;
+      // replace $(ConfigurationName) in the object names
+      cmSystemTools::ReplaceString(objFile, this->GetCMakeCFGIntDir(),
+                                   configName.c_str());
+      if (cmHasLiteralSuffix(objFile, ".obj")) {
+        fout << objFile << "\n";
+      }
     }
   }
+
+  for (std::vector<cmSourceFile const*>::const_iterator i =
+         mdi->Sources.begin();
+       i != mdi->Sources.end(); ++i) {
+    fout << (*i)->GetFullPath() << "\n";
+  }
+
   cmCustomCommandLines commandLines;
   commandLines.push_back(cmdl);
   cmCustomCommand command(gt->Target->GetMakefile(), outputs, empty, empty,

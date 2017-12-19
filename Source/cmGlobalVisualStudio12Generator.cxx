@@ -35,7 +35,7 @@ class cmGlobalVisualStudio12Generator::Factory
 {
 public:
   cmGlobalGenerator* CreateGlobalGenerator(const std::string& name,
-                                           cmake* cm) const CM_OVERRIDE
+                                           cmake* cm) const override
   {
     std::string genName;
     const char* p = cmVS12GenName(name, genName);
@@ -57,22 +57,22 @@ public:
     return 0;
   }
 
-  void GetDocumentation(cmDocumentationEntry& entry) const CM_OVERRIDE
+  void GetDocumentation(cmDocumentationEntry& entry) const override
   {
     entry.Name = std::string(vs12generatorName) + " [arch]";
     entry.Brief = "Generates Visual Studio 2013 project files.  "
                   "Optional [arch] can be \"Win64\" or \"ARM\".";
   }
 
-  void GetGenerators(std::vector<std::string>& names) const CM_OVERRIDE
+  void GetGenerators(std::vector<std::string>& names) const override
   {
     names.push_back(vs12generatorName);
     names.push_back(vs12generatorName + std::string(" ARM"));
     names.push_back(vs12generatorName + std::string(" Win64"));
   }
 
-  bool SupportsToolset() const CM_OVERRIDE { return true; }
-  bool SupportsPlatform() const CM_OVERRIDE { return true; }
+  bool SupportsToolset() const override { return true; }
+  bool SupportsPlatform() const override { return true; }
 };
 
 cmGlobalGeneratorFactory* cmGlobalVisualStudio12Generator::NewFactory()
@@ -109,19 +109,15 @@ bool cmGlobalVisualStudio12Generator::MatchesGeneratorName(
   return false;
 }
 
-bool cmGlobalVisualStudio12Generator::ParseGeneratorToolset(
-  std::string const& ts, cmMakefile* mf)
+bool cmGlobalVisualStudio12Generator::ProcessGeneratorToolsetField(
+  std::string const& key, std::string const& value)
 {
-  std::string::size_type ts_end = ts.size();
-  if (cmHasLiteralSuffix(ts, ",host=x64")) {
+  if (key == "host" && value == "x64") {
     this->GeneratorToolsetHostArchitecture = "x64";
-    ts_end -= 9;
-  } else if (ts == "host=x64") {
-    this->GeneratorToolsetHostArchitecture = "x64";
-    ts_end = 0;
+    return true;
   }
-  return this->cmGlobalVisualStudio11Generator::ParseGeneratorToolset(
-    ts.substr(0, ts_end), mf);
+  return this->cmGlobalVisualStudio11Generator::ProcessGeneratorToolsetField(
+    key, value);
 }
 
 bool cmGlobalVisualStudio12Generator::InitializeWindowsPhone(cmMakefile* mf)

@@ -232,10 +232,12 @@ void cmGhsMultiTargetGenerator::SetCompilerFlags(std::string const& config,
     const char* lang = language.c_str();
 
     if (notKernel) {
-      this->LocalGenerator->AddLanguageFlags(flags, lang, config);
+      this->LocalGenerator->AddLanguageFlags(flags, this->GeneratorTarget,
+                                             lang, config);
     } else {
-      this->LocalGenerator->AddLanguageFlags(
-        flags, lang + std::string("_GHS_KERNEL"), config);
+      this->LocalGenerator->AddLanguageFlags(flags, this->GeneratorTarget,
+                                             lang + std::string("_GHS_KERNEL"),
+                                             config);
     }
     this->LocalGenerator->AddCMP0018Flags(flags, this->GeneratorTarget, lang,
                                           config);
@@ -361,7 +363,7 @@ void cmGhsMultiTargetGenerator::WriteTargetLinkLibraries(
       this->GeneratorTarget->GetCreateRuleVariable(language, config);
     bool useWatcomQuote =
       this->Makefile->IsOn(createRule + "_USE_WATCOM_QUOTE");
-    CM_AUTO_PTR<cmLinkLineComputer> linkLineComputer(
+    std::unique_ptr<cmLinkLineComputer> linkLineComputer(
       this->GetGlobalGenerator()->CreateLinkLineComputer(
         this->LocalGenerator,
         this->LocalGenerator->GetStateSnapshot().GetDirectory()));
@@ -437,7 +439,7 @@ cmGhsMultiTargetGenerator::GetObjectNames(
   cmLocalGhsMultiGenerator* const localGhsMultiGenerator,
   cmGeneratorTarget* const generatorTarget)
 {
-  std::map<std::string, std::vector<cmSourceFile*> > filenameToSource;
+  std::map<std::string, std::vector<cmSourceFile*>> filenameToSource;
   std::map<cmSourceFile*, std::string> sourceToFilename;
   for (std::vector<cmSourceFile*>::const_iterator sf = objectSources->begin();
        sf != objectSources->end(); ++sf) {
@@ -449,7 +451,7 @@ cmGhsMultiTargetGenerator::GetObjectNames(
   }
 
   std::vector<cmSourceFile*> duplicateSources;
-  for (std::map<std::string, std::vector<cmSourceFile*> >::const_iterator
+  for (std::map<std::string, std::vector<cmSourceFile*>>::const_iterator
          msvSourceI = filenameToSource.begin();
        msvSourceI != filenameToSource.end(); ++msvSourceI) {
     if (msvSourceI->second.size() > 1) {

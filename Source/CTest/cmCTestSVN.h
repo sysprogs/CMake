@@ -3,12 +3,11 @@
 #ifndef cmCTestSVN_h
 #define cmCTestSVN_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCTestGlobalVC.h"
 
 #include <iosfwd>
-#include <list>
 #include <string>
 #include <vector>
 
@@ -25,14 +24,14 @@ public:
   /** Construct with a CTest instance and update log stream.  */
   cmCTestSVN(cmCTest* ctest, std::ostream& log);
 
-  ~cmCTestSVN() CM_OVERRIDE;
+  ~cmCTestSVN() override;
 
 private:
   // Implement cmCTestVC internal API.
-  void CleanupImpl() CM_OVERRIDE;
-  void NoteOldRevision() CM_OVERRIDE;
-  void NoteNewRevision() CM_OVERRIDE;
-  bool UpdateImpl() CM_OVERRIDE;
+  void CleanupImpl() override;
+  bool NoteOldRevision() override;
+  bool NoteNewRevision() override;
+  bool UpdateImpl() override;
 
   bool RunSVNCommand(std::vector<char const*> const& parameters,
                      OutputParser* out, OutputParser* err);
@@ -71,23 +70,23 @@ private:
   friend struct Revision;
 
   // Info of all the repositories (root, externals and nested ones).
-  std::list<SVNInfo> Repositories;
+  std::vector<SVNInfo> Repositories;
 
   // Pointer to the infos of the root repository.
   SVNInfo* RootInfo;
 
   std::string LoadInfo(SVNInfo& svninfo);
-  void LoadRepositories();
-  void LoadModifications() CM_OVERRIDE;
-  void LoadRevisions() CM_OVERRIDE;
-  void LoadRevisions(SVNInfo& svninfo);
+  bool LoadRepositories();
+  bool LoadModifications() override;
+  bool LoadRevisions() override;
+  bool LoadRevisions(SVNInfo& svninfo);
 
   void GuessBase(SVNInfo& svninfo, std::vector<Change> const& changes);
 
   void DoRevisionSVN(Revision const& revision,
                      std::vector<Change> const& changes);
 
-  void WriteXMLGlobal(cmXMLWriter& xml) CM_OVERRIDE;
+  void WriteXMLGlobal(cmXMLWriter& xml) override;
 
   class ExternalParser;
   // Parsing helper classes.

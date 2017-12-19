@@ -2,11 +2,12 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmExecuteProcessCommand.h"
 
-#include <cmsys/Process.h>
+#include "cmsys/Process.h"
 #include <ctype.h> /* isspace */
 #include <sstream>
 #include <stdio.h>
 
+#include "cmAlgorithms.h"
 #include "cmMakefile.h"
 #include "cmProcessOutput.h"
 #include "cmSystemTools.h"
@@ -15,7 +16,7 @@ class cmExecutionStatus;
 
 static bool cmExecuteProcessCommandIsWhitespace(char c)
 {
-  return (isspace((int)c) || c == '\n' || c == '\r');
+  return (isspace(static_cast<int>(c)) || c == '\n' || c == '\r');
 }
 
 void cmExecuteProcessCommandFixText(std::vector<char>& output,
@@ -31,7 +32,7 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
     this->SetError("called with incorrect number of arguments");
     return false;
   }
-  std::vector<std::vector<const char*> > cmds;
+  std::vector<std::vector<const char*>> cmds;
   std::string arguments;
   bool doing_command = false;
   size_t command_index = 0;
@@ -46,6 +47,7 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
   std::string output_variable;
   std::string error_variable;
   std::string result_variable;
+  std::string results_variable;
   std::string working_directory;
   cmProcessOutput::Encoding encoding = cmProcessOutput::None;
   for (size_t i = 0; i < args.size(); ++i) {
@@ -75,6 +77,14 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
         result_variable = args[i];
       } else {
         this->SetError(" called with no value for RESULT_VARIABLE.");
+        return false;
+      }
+    } else if (args[i] == "RESULTS_VARIABLE") {
+      doing_command = false;
+      if (++i < args.size()) {
+        results_variable = args[i];
+      } else {
+        this->SetError(" called with no value for RESULTS_VARIABLE.");
         return false;
       }
     } else if (args[i] == "WORKING_DIRECTORY") {
@@ -160,13 +170,13 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
     this->SetError(" called with no COMMAND argument.");
     return false;
   }
-  for (unsigned int i = 0; i < cmds.size(); ++i) {
-    if (cmds[i].empty()) {
+  for (auto& cmd : cmds) {
+    if (cmd.empty()) {
       this->SetError(" given COMMAND argument with no value.");
       return false;
     }
     // Add the null terminating pointer to the command argument list.
-    cmds[i].push_back(CM_NULLPTR);
+    cmd.push_back(nullptr);
   }
 
   // Parse the timeout string.
@@ -182,8 +192,8 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
   cmsysProcess* cp = cmsysProcess_New();
 
   // Set the command sequence.
-  for (unsigned int i = 0; i < cmds.size(); ++i) {
-    cmsysProcess_AddCommand(cp, &*cmds[i].begin());
+  for (auto const& cmd : cmds) {
+    cmsysProcess_AddCommand(cp, &*cmd.begin());
   }
 
   // Set the process working directory.
@@ -234,7 +244,7 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
   int p;
   cmProcessOutput processOutput(encoding);
   std::string strdata;
-  while ((p = cmsysProcess_WaitForData(cp, &data, &length, CM_NULLPTR), p)) {
+  while ((p = cmsysProcess_WaitForData(cp, &data, &length, nullptr), p)) {
     // Put the output in the right place.
     if (p == cmsysProcess_Pipe_STDOUT && !output_quiet) {
       if (output_variable.empty()) {
@@ -266,7 +276,7 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   // All output has been read.  Wait for the process to exit.
-  cmsysProcess_WaitForExit(cp, CM_NULLPTR);
+  cmsysProcess_WaitForExit(cp, nullptr);
   processOutput.DecodeText(tempOutput, tempOutput);
   processOutput.DecodeText(tempError, tempError);
 
@@ -287,7 +297,7 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
     switch (cmsysProcess_GetState(cp)) {
       case cmsysProcess_State_Exited: {
         int v = cmsysProcess_GetExitValue(cp);
-        char buf[100];
+        char buf[16];
         sprintf(buf, "%d", v);
         this->Makefile->AddDefinition(result_variable, buf);
       } break;
@@ -301,6 +311,47 @@ bool cmExecuteProcessCommand::InitialPass(std::vector<std::string> const& args,
         break;
       case cmsysProcess_State_Expired:
         this->Makefile->AddDefinition(result_variable,
+                                      "Process terminated due to timeout");
+        break;
+    }
+  }
+  // Store the result of running the processes.
+  if (!results_variable.empty()) {
+    switch (cmsysProcess_GetState(cp)) {
+      case cmsysProcess_State_Exited: {
+        std::vector<std::string> res;
+        for (size_t i = 0; i < cmds.size(); ++i) {
+          switch (cmsysProcess_GetStateByIndex(cp, static_cast<int>(i))) {
+            case kwsysProcess_StateByIndex_Exited: {
+              int exitCode =
+                cmsysProcess_GetExitValueByIndex(cp, static_cast<int>(i));
+              char buf[16];
+              sprintf(buf, "%d", exitCode);
+              res.push_back(buf);
+            } break;
+            case kwsysProcess_StateByIndex_Exception:
+              res.push_back(cmsysProcess_GetExceptionStringByIndex(
+                cp, static_cast<int>(i)));
+              break;
+            case kwsysProcess_StateByIndex_Error:
+            default:
+              res.push_back("Error getting the child return code");
+              break;
+          }
+        }
+        this->Makefile->AddDefinition(results_variable,
+                                      cmJoin(res, ";").c_str());
+      } break;
+      case cmsysProcess_State_Exception:
+        this->Makefile->AddDefinition(results_variable,
+                                      cmsysProcess_GetExceptionString(cp));
+        break;
+      case cmsysProcess_State_Error:
+        this->Makefile->AddDefinition(results_variable,
+                                      cmsysProcess_GetErrorString(cp));
+        break;
+      case cmsysProcess_State_Expired:
+        this->Makefile->AddDefinition(results_variable,
                                       "Process terminated due to timeout");
         break;
     }

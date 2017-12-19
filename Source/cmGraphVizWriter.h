@@ -3,11 +3,11 @@
 #ifndef CMGRAPHVIZWRITER_H
 #define CMGRAPHVIZWRITER_H
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmStateTypes.h"
 
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/RegularExpression.hxx"
 #include <map>
 #include <set>
 #include <string>
@@ -79,6 +79,7 @@ protected:
   bool GenerateForStaticLibs;
   bool GenerateForSharedLibs;
   bool GenerateForModuleLibs;
+  bool GenerateForInterface;
   bool GenerateForExternals;
   bool GeneratePerTarget;
   bool GenerateDependers;

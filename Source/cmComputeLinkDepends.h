@@ -3,7 +3,7 @@
 #ifndef cmComputeLinkDepends_h
 #define cmComputeLinkDepends_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmGraphAdjacencyList.h"
 #include "cmLinkItem.h"
@@ -40,7 +40,7 @@ public:
     bool IsFlag;
     LinkEntry()
       : Item()
-      , Target(CM_NULLPTR)
+      , Target(nullptr)
       , IsSharedDep(false)
       , IsFlag(false)
     {
@@ -93,7 +93,7 @@ private:
     const char* LibDepends;
   };
   std::queue<BFSEntry> BFSQueue;
-  void FollowLinkEntry(BFSEntry const&);
+  void FollowLinkEntry(BFSEntry qe);
 
   // Shared libraries that are included only because they are
   // dependencies of other shared libraries, not because they are part

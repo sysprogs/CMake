@@ -1,6 +1,6 @@
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
-#include <cmsys/FStream.hxx>
+#include "cmsys/FStream.hxx"
 #include <iostream>
 #include <map>
 #include <stdlib.h>
@@ -144,15 +144,11 @@ int main()
   cmsys::ifstream file("compile_commands.json");
   CompileCommandParser parser(file);
   parser.Parse();
-  for (CompileCommandParser::TranslationUnitsType::const_iterator
-         it = parser.GetTranslationUnits().begin(),
-         end = parser.GetTranslationUnits().end();
-       it != end; ++it) {
+  for (auto const& tu : parser.GetTranslationUnits()) {
     std::vector<std::string> command;
-    cmSystemTools::ParseUnixCommandLine(it->at("command").c_str(), command);
-    if (!cmSystemTools::RunSingleCommand(command, CM_NULLPTR, CM_NULLPTR,
-                                         CM_NULLPTR,
-                                         it->at("directory").c_str())) {
+    cmSystemTools::ParseUnixCommandLine(tu.at("command").c_str(), command);
+    if (!cmSystemTools::RunSingleCommand(command, nullptr, nullptr, nullptr,
+                                         tu.at("directory").c_str())) {
       std::cout << "ERROR: Failed to run command \"" << command[0] << "\""
                 << std::endl;
       exit(1);

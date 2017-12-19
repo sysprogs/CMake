@@ -324,6 +324,9 @@ static curl_version_info_data version_info = {
 #if defined(USE_LIBPSL)
   | CURL_VERSION_PSL
 #endif
+#if defined(CURL_WITH_MULTI_SSL)
+  | CURL_VERSION_MULTI_SSL
+#endif
   ,
   NULL, /* ssl_version */
   0,    /* ssl_version_num, this is kept at zero */
@@ -352,6 +355,10 @@ curl_version_info_data *curl_version_info(CURLversion stamp)
 #ifdef USE_SSL
   Curl_ssl_version(ssl_buffer, sizeof(ssl_buffer));
   version_info.ssl_version = ssl_buffer;
+  if(Curl_ssl->support_https_proxy)
+    version_info.features |= CURL_VERSION_HTTPS_PROXY;
+  else
+    version_info.features &= ~CURL_VERSION_HTTPS_PROXY;
 #endif
 
 #ifdef HAVE_LIBZ

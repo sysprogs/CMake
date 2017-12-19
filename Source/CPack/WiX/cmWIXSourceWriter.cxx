@@ -2,9 +2,9 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmWIXSourceWriter.h"
 
-#include <CPack/cmCPackGenerator.h>
+#include "cmCPackGenerator.h"
 
-#include <cmUuid.h>
+#include "cmUuid.h"
 
 #include <windows.h>
 
@@ -158,9 +158,7 @@ std::string cmWIXSourceWriter::EscapeAttributeValue(std::string const& value)
   std::string result;
   result.reserve(value.size());
 
-  char c = 0;
-  for (size_t i = 0; i < value.size(); ++i) {
-    c = value[i];
+  for (char c : value) {
     switch (c) {
       case '<':
         result += "&lt;";

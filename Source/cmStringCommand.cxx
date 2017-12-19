@@ -2,8 +2,9 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmStringCommand.h"
 
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/RegularExpression.hxx"
 #include <ctype.h>
+#include <memory> // IWYU pragma: keep
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,6 @@
 #include "cmSystemTools.h"
 #include "cmTimestamp.h"
 #include "cmUuid.h"
-#include "cm_auto_ptr.hxx"
 
 class cmExecutionStatus;
 
@@ -62,6 +62,9 @@ bool cmStringCommand::InitialPass(std::vector<std::string> const& args,
   if (subCommand == "APPEND") {
     return this->HandleAppendCommand(args);
   }
+  if (subCommand == "PREPEND") {
+    return this->HandlePrependCommand(args);
+  }
   if (subCommand == "CONCAT") {
     return this->HandleConcatCommand(args);
   }
@@ -105,8 +108,8 @@ bool cmStringCommand::HandleHashCommand(std::vector<std::string> const& args)
     return false;
   }
 
-  CM_AUTO_PTR<cmCryptoHash> hash(cmCryptoHash::New(args[0].c_str()));
-  if (hash.get()) {
+  std::unique_ptr<cmCryptoHash> hash(cmCryptoHash::New(args[0].c_str()));
+  if (hash) {
     std::string out = hash->HashString(args[2]);
     this->Makefile->AddDefinition(args[1], out.c_str());
     return true;
@@ -128,7 +131,7 @@ bool cmStringCommand::HandleToUpperLowerCommand(
     return false;
   }
 
-  std::string outvar = args[2];
+  std::string const& outvar = args[2];
   std::string output;
 
   if (toUpper) {
@@ -149,7 +152,7 @@ bool cmStringCommand::HandleAsciiCommand(std::vector<std::string> const& args)
     return false;
   }
   std::string::size_type cc;
-  std::string outvar = args[args.size() - 1];
+  std::string const& outvar = args[args.size() - 1];
   std::string output;
   for (cc = 1; cc < args.size() - 1; cc++) {
     int ch = atoi(args[cc].c_str());
@@ -212,7 +215,7 @@ bool cmStringCommand::HandleRegexCommand(std::vector<std::string> const& args)
     this->SetError("sub-command REGEX requires a mode to be specified.");
     return false;
   }
-  std::string mode = args[1];
+  std::string const& mode = args[1];
   if (mode == "MATCH") {
     if (args.size() < 5) {
       this->SetError("sub-command REGEX, mode MATCH needs "
@@ -247,8 +250,8 @@ bool cmStringCommand::RegexMatch(std::vector<std::string> const& args)
 {
   //"STRING(REGEX MATCH <regular_expression> <output variable>
   // <input> [<input>...])\n";
-  std::string regex = args[2];
-  std::string outvar = args[3];
+  std::string const& regex = args[2];
+  std::string const& outvar = args[3];
 
   this->Makefile->ClearMatches();
   // Compile the regular expression.
@@ -288,8 +291,8 @@ bool cmStringCommand::RegexMatchAll(std::vector<std::string> const& args)
 {
   //"STRING(REGEX MATCHALL <regular_expression> <output variable> <input>
   // [<input>...])\n";
-  std::string regex = args[2];
-  std::string outvar = args[3];
+  std::string const& regex = args[2];
+  std::string const& outvar = args[3];
 
   this->Makefile->ClearMatches();
   // Compile the regular expression.
@@ -309,6 +312,7 @@ bool cmStringCommand::RegexMatchAll(std::vector<std::string> const& args)
   std::string output;
   const char* p = input.c_str();
   while (re.find(p)) {
+    this->Makefile->ClearMatches();
     this->Makefile->StoreMatches(re);
     std::string::size_type l = re.start();
     std::string::size_type r = re.end();
@@ -334,9 +338,9 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
 {
   //"STRING(REGEX REPLACE <regular_expression> <replace_expression>
   // <output variable> <input> [<input>...])\n"
-  std::string regex = args[2];
-  std::string replace = args[3];
-  std::string outvar = args[4];
+  std::string const& regex = args[2];
+  std::string const& replace = args[3];
+  std::string const& outvar = args[4];
 
   // Pull apart the replace expression to find the escaped [0-9] values.
   std::vector<RegexReplacement> replacement;
@@ -391,6 +395,7 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
   std::string output;
   std::string::size_type base = 0;
   while (re.find(input.c_str() + base)) {
+    this->Makefile->ClearMatches();
     this->Makefile->StoreMatches(re);
     std::string::size_type l2 = re.start();
     std::string::size_type r = re.end();
@@ -407,13 +412,13 @@ bool cmStringCommand::RegexReplace(std::vector<std::string> const& args)
     }
 
     // Concatenate the replacement for the match.
-    for (unsigned int i = 0; i < replacement.size(); ++i) {
-      if (replacement[i].number < 0) {
+    for (RegexReplacement const& i : replacement) {
+      if (i.number < 0) {
         // This is just a plain-text part of the replacement.
-        output += replacement[i].value;
+        output += i.value;
       } else {
         // Replace with part of the match.
-        int n = replacement[i].number;
+        int n = i.number;
         std::string::size_type start = re.start(n);
         std::string::size_type end = re.end(n);
         std::string::size_type len = input.length() - base;
@@ -502,7 +507,7 @@ bool cmStringCommand::HandleCompareCommand(
     this->SetError("sub-command COMPARE requires a mode to be specified.");
     return false;
   }
-  std::string mode = args[1];
+  std::string const& mode = args[1];
   if ((mode == "EQUAL") || (mode == "NOTEQUAL") || (mode == "LESS") ||
       (mode == "LESS_EQUAL") || (mode == "GREATER") ||
       (mode == "GREATER_EQUAL")) {
@@ -637,6 +642,30 @@ bool cmStringCommand::HandleAppendCommand(std::vector<std::string> const& args)
     value = oldValue;
   }
   value += cmJoin(cmMakeRange(args).advance(2), std::string());
+  this->Makefile->AddDefinition(variable, value.c_str());
+  return true;
+}
+
+bool cmStringCommand::HandlePrependCommand(
+  std::vector<std::string> const& args)
+{
+  if (args.size() < 2) {
+    this->SetError("sub-command PREPEND requires at least one argument.");
+    return false;
+  }
+
+  // Skip if nothing to prepend.
+  if (args.size() < 3) {
+    return true;
+  }
+
+  const std::string& variable = args[1];
+
+  std::string value = cmJoin(cmMakeRange(args).advance(2), std::string());
+  const char* oldValue = this->Makefile->GetDefinition(variable);
+  if (oldValue) {
+    value += oldValue;
+  }
   this->Makefile->AddDefinition(variable, value.c_str());
   return true;
 }
@@ -789,7 +818,7 @@ bool cmStringCommand::HandleRandomCommand(std::vector<std::string> const& args)
   const char* alphaPtr = alphabet.c_str();
   int cc;
   for (cc = 0; cc < length; cc++) {
-    int idx = (int)(sizeofAlphabet * rand() / (RAND_MAX + 1.0));
+    int idx = static_cast<int>(sizeofAlphabet * rand() / (RAND_MAX + 1.0));
     result.push_back(*(alphaPtr + idx));
   }
   result.push_back(0);

@@ -10,3 +10,8 @@ add_library(CudaMixedObjectLib OBJECT static.cu static.cpp)
 add_executable(CudaObjectLibrary
                main.cpp
                $<TARGET_OBJECTS:CudaMixedObjectLib>)
+
+if(APPLE)
+  # Help the static cuda runtime find the driver (libcuda.dyllib) at runtime.
+  set_property(TARGET CudaObjectLibrary PROPERTY BUILD_RPATH ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+endif()

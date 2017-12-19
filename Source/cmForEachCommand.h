@@ -3,7 +3,8 @@
 #ifndef cmForEachCommand_h
 #define cmForEachCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -18,10 +19,10 @@ class cmForEachFunctionBlocker : public cmFunctionBlocker
 {
 public:
   cmForEachFunctionBlocker(cmMakefile* mf);
-  ~cmForEachFunctionBlocker() CM_OVERRIDE;
+  ~cmForEachFunctionBlocker() override;
   bool IsFunctionBlocked(const cmListFileFunction& lff, cmMakefile& mf,
-                         cmExecutionStatus&) CM_OVERRIDE;
-  bool ShouldRemove(const cmListFileFunction& lff, cmMakefile& mf) CM_OVERRIDE;
+                         cmExecutionStatus&) override;
+  bool ShouldRemove(const cmListFileFunction& lff, cmMakefile& mf) override;
 
   std::vector<std::string> Args;
   std::vector<cmListFileFunction> Functions;
@@ -38,24 +39,14 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE { return new cmForEachCommand; }
+  cmCommand* Clone() override { return new cmForEachCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * This determines if the command is invoked when in script mode.
-   */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "foreach"; }
+                   cmExecutionStatus& status) override;
 
 private:
   bool HandleInMode(std::vector<std::string> const& args);

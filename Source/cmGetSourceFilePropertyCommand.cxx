@@ -15,8 +15,8 @@ bool cmGetSourceFilePropertyCommand::InitialPass(
     this->SetError("called with incorrect number of arguments");
     return false;
   }
-  const char* var = args[0].c_str();
-  const char* file = args[1].c_str();
+  std::string const& var = args[0];
+  std::string const& file = args[1];
   cmSourceFile* sf = this->Makefile->GetSource(file);
 
   // for the location we must create a source file first
@@ -28,7 +28,7 @@ bool cmGetSourceFilePropertyCommand::InitialPass(
       this->Makefile->AddDefinition(var, sf->GetLanguage().c_str());
       return true;
     }
-    const char* prop = CM_NULLPTR;
+    const char* prop = nullptr;
     if (!args[2].empty()) {
       prop = sf->GetPropertyForUser(args[2]);
     }

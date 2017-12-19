@@ -9,11 +9,9 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "PathScale")
 endif()
 
 set(JSONCPP_SOURCES
-  src/lib_json/json_batchallocator.h
   src/lib_json/json_reader.cpp
   src/lib_json/json_tool.h
   src/lib_json/json_value.cpp
-  src/lib_json/json_valueiterator.inl
   src/lib_json/json_writer.cpp
   )
 
@@ -24,3 +22,4 @@ include_directories(
 
 add_library(cmjsoncpp ${JSONCPP_SOURCES})
 target_link_libraries(cmjsoncpp ${CMake_KWIML_LIBRARIES})
+set_property(TARGET cmjsoncpp PROPERTY CXX_INCLUDE_WHAT_YOU_USE "")

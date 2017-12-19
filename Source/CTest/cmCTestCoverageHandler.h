@@ -3,11 +3,11 @@
 #ifndef cmCTestCoverageHandler_h
 #define cmCTestCoverageHandler_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCTestGenericHandler.h"
 
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/RegularExpression.hxx"
 #include <iosfwd>
 #include <map>
 #include <set>
@@ -42,23 +42,23 @@ public:
   /*
    * The main entry point for this class
    */
-  int ProcessHandler() CM_OVERRIDE;
+  int ProcessHandler() override;
 
   cmCTestCoverageHandler();
 
-  void Initialize() CM_OVERRIDE;
+  void Initialize() override;
 
   /**
    * This method is called when reading CTest custom file
    */
-  void PopulateCustomVectors(cmMakefile* mf) CM_OVERRIDE;
+  void PopulateCustomVectors(cmMakefile* mf) override;
 
   /** Report coverage only for sources with these labels.  */
   void SetLabelFilter(std::set<std::string> const& labels);
 
 private:
-  bool ShouldIDoCoverage(const char* file, const char* srcDir,
-                         const char* binDir);
+  bool ShouldIDoCoverage(std::string const& file, std::string const& srcDir,
+                         std::string const& binDir);
   void CleanCoverageLogFiles(std::ostream& log);
   bool StartCoverageLogFile(cmGeneratedFileStream& ostr, int logFileCount);
   void EndCoverageLogFile(cmGeneratedFileStream& ostr, int logFileCount);

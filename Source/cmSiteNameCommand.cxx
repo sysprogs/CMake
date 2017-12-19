@@ -2,7 +2,7 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmSiteNameCommand.h"
 
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/RegularExpression.hxx"
 
 #include "cmMakefile.h"
 #include "cmStateTypes.h"
@@ -52,8 +52,8 @@ bool cmSiteNameCommand::InitialPass(std::vector<std::string> const& args,
   // try to find the hostname for this computer
   if (!cmSystemTools::IsOff(hostname_cmd.c_str())) {
     std::string host;
-    cmSystemTools::RunSingleCommand(hostname_cmd.c_str(), &host, CM_NULLPTR,
-                                    CM_NULLPTR, CM_NULLPTR,
+    cmSystemTools::RunSingleCommand(hostname_cmd.c_str(), &host, nullptr,
+                                    nullptr, nullptr,
                                     cmSystemTools::OUTPUT_NONE);
 
     // got the hostname

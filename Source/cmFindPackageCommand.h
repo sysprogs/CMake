@@ -3,8 +3,9 @@
 #ifndef cmFindPackageCommand_h
 #define cmFindPackageCommand_h
 
-#include <cmConfigure.h>
-#include <cm_kwiml.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
+#include "cm_kwiml.h"
 #include <map>
 #include <set>
 #include <string>
@@ -50,24 +51,14 @@ public:
   /**
    * This is a virtual constructor for the command.
    */
-  cmCommand* Clone() CM_OVERRIDE { return new cmFindPackageCommand; }
+  cmCommand* Clone() override { return new cmFindPackageCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the CMakeLists.txt file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * This determines if the command is invoked when in script mode.
-   */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "find_package"; }
+                   cmExecutionStatus& status) override;
 
 private:
   class PathLabel : public cmFindCommon::PathLabel
@@ -109,6 +100,7 @@ private:
   void StoreVersionFound();
 
   void ComputePrefixes();
+  void FillPrefixesPackageRoot();
   void FillPrefixesCMakeEnvironment();
   void FillPrefixesCMakeVariable();
   void FillPrefixesSystemEnvironment();
@@ -169,6 +161,7 @@ private:
   bool DebugMode;
   bool UseLib32Paths;
   bool UseLib64Paths;
+  bool UseLibx32Paths;
   bool PolicyScope;
   std::string LibraryArchitecture;
   std::vector<std::string> Names;

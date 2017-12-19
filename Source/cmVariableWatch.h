@@ -3,9 +3,10 @@
 #ifndef cmVariableWatch_h
 #define cmVariableWatch_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <map>
+#include <memory> // IWYU pragma: keep
 #include <string>
 #include <vector>
 
@@ -31,10 +32,9 @@ public:
    * Add watch to the variable
    */
   bool AddWatch(const std::string& variable, WatchMethod method,
-                void* client_data = CM_NULLPTR,
-                DeleteData delete_data = CM_NULLPTR);
+                void* client_data = nullptr, DeleteData delete_data = nullptr);
   void RemoveWatch(const std::string& variable, WatchMethod method,
-                   void* client_data = CM_NULLPTR);
+                   void* client_data = nullptr);
 
   /**
    * This method is called when variable is accessed
@@ -67,9 +67,9 @@ protected:
     void* ClientData;
     DeleteData DeleteDataCall;
     Pair()
-      : Method(CM_NULLPTR)
-      , ClientData(CM_NULLPTR)
-      , DeleteDataCall(CM_NULLPTR)
+      : Method(nullptr)
+      , ClientData(nullptr)
+      , DeleteDataCall(nullptr)
     {
     }
     ~Pair()
@@ -80,7 +80,7 @@ protected:
     }
   };
 
-  typedef std::vector<Pair*> VectorOfPairs;
+  typedef std::vector<std::shared_ptr<Pair>> VectorOfPairs;
   typedef std::map<std::string, VectorOfPairs> StringToVectorOfPairs;
 
   StringToVectorOfPairs WatchMap;

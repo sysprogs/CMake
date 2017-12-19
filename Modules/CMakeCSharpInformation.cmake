@@ -10,7 +10,7 @@ get_filename_component(CMAKE_BASE_NAME "${CMAKE_CSharp_COMPILER}" NAME_WE)
 
 set(CMAKE_BUILD_TYPE_INIT Debug)
 
-set(CMAKE_CSharp_FLAGS_INIT "/define:TRACE /langversion:3 /nowin32manifest")
+set(CMAKE_CSharp_FLAGS_INIT "/define:TRACE /langversion:3")
 set(CMAKE_CSharp_FLAGS_DEBUG_INIT "/debug:full /optimize- /warn:3 /errorreport:prompt /define:DEBUG")
 set(CMAKE_CSharp_FLAGS_RELEASE_INIT "/debug:none /optimize  /warn:1  /errorreport:queue")
 set(CMAKE_CSharp_FLAGS_RELWITHDEBINFO_INIT "/debug:full /optimize-")
@@ -43,7 +43,7 @@ endif()
 # on the initial values computed in the platform/*.cmake files
 # use _INIT variables so that this only happens the first time
 # and you can set these flags in the cmake cache
-set(CMAKE_CSharp_FLAGS_INIT "$ENV{CSharpFLAGS} ${CMAKE_CSharp_FLAGS_INIT}")
+set(CMAKE_CSharp_FLAGS_INIT "$ENV{CSFLAGS} ${CMAKE_CSharp_FLAGS_INIT}")
 # avoid just having a space as the initial value for the cache
 if(CMAKE_CSharp_FLAGS_INIT STREQUAL " ")
   set(CMAKE_CSharp_FLAGS_INIT)

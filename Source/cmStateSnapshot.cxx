@@ -18,6 +18,10 @@
 #include "cmVersion.h"
 #include "cmake.h"
 
+#if !defined(_WIN32)
+#include <sys/utsname.h>
+#endif
+
 #if defined(__CYGWIN__)
 #include "cmSystemTools.h"
 #endif
@@ -121,7 +125,7 @@ cmStateSnapshot cmStateSnapshot::GetCallStackBottom() const
   return cmStateSnapshot(this->State, pos);
 }
 
-void cmStateSnapshot::PushPolicy(cmPolicies::PolicyMap entry, bool weak)
+void cmStateSnapshot::PushPolicy(cmPolicies::PolicyMap const& entry, bool weak)
 {
   cmStateDetail::PositionType pos = this->Position;
   pos->Policies = this->State->PolicyStack.Push(
@@ -216,7 +220,7 @@ void cmStateSnapshot::SetDefinition(std::string const& name,
 
 void cmStateSnapshot::RemoveDefinition(std::string const& name)
 {
-  this->Position->Vars->Set(name, CM_NULLPTR);
+  this->Position->Vars->Set(name, nullptr);
 }
 
 std::vector<std::string> cmStateSnapshot::UnusedKeys() const
@@ -298,9 +302,15 @@ void cmStateSnapshot::SetDefaultDefinitions()
 #if defined(_WIN32)
   this->SetDefinition("WIN32", "1");
   this->SetDefinition("CMAKE_HOST_WIN32", "1");
+  this->SetDefinition("CMAKE_HOST_SYSTEM_NAME", "Windows");
 #else
   this->SetDefinition("UNIX", "1");
   this->SetDefinition("CMAKE_HOST_UNIX", "1");
+
+  struct utsname uts_name;
+  if (uname(&uts_name) >= 0) {
+    this->SetDefinition("CMAKE_HOST_SYSTEM_NAME", uts_name.sysname);
+  }
 #endif
 #if defined(__CYGWIN__)
   std::string legacy;

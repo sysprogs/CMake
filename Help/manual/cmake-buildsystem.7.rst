@@ -125,16 +125,22 @@ The object files collection can be used as source inputs to other targets:
 
   add_executable(test_exe $<TARGET_OBJECTS:archive> test.cpp)
 
-``OBJECT`` libraries may only be used locally as sources in a buildsystem --
-they may not be installed, exported, or used in the right hand side of
+``OBJECT`` libraries may not be used in the right hand side of
 :command:`target_link_libraries`.  They also may not be used as the ``TARGET``
-in a use of the :command:`add_custom_command(TARGET)` command signature.
+in a use of the :command:`add_custom_command(TARGET)` command signature.  They
+may be installed, and will be exported as an INTERFACE library.
 
 Although object libraries may not be named directly in calls to
 the :command:`target_link_libraries` command, they can be "linked"
 indirectly by using an :ref:`Interface Library <Interface Libraries>`
 whose :prop_tgt:`INTERFACE_SOURCES` target property is set to name
 ``$<TARGET_OBJECTS:objlib>``.
+
+Although object libraries may not be used as the ``TARGET``
+in a use of the :command:`add_custom_command(TARGET)` command signature,
+the list of objects can be used by :command:`add_custom_command(OUTPUT)` or
+:command:`file(GENERATE)` by using ``$<TARGET_OBJECTS:objlib>``.
+
 
 Build Specification and Usage Requirements
 ==========================================
@@ -260,7 +266,7 @@ The :command:`target_link_libraries` command has ``PRIVATE``,
 
 Because ``archive`` is a ``PUBLIC`` dependency of ``archiveExtras``, the
 usage requirements of it are propagated to ``consumer`` too.  Because
-``serialization`` is a ``PRIVATE`` dependency of ``archive``, the usage
+``serialization`` is a ``PRIVATE`` dependency of ``archiveExtras``, the usage
 requirements of it are not propagated to ``consumer``.
 
 Generally, a dependency should be specified in a use of
@@ -681,7 +687,8 @@ property are treated as ``SYSTEM`` include directories, as if they were
 listed in the :prop_tgt:`INTERFACE_SYSTEM_INCLUDE_DIRECTORIES` of the
 dependency. This can result in omission of compiler warnings for headers
 found in those directories.  This behavior for :ref:`imported targets` may
-be controlled with the :prop_tgt:`NO_SYSTEM_FROM_IMPORTED` target property.
+be controlled by setting the :prop_tgt:`NO_SYSTEM_FROM_IMPORTED` target
+property on the *consumers* of imported targets.
 
 If a binary target is linked transitively to a Mac OX framework, the
 ``Headers`` directory of the framework is also treated as a usage requirement.
@@ -964,7 +971,6 @@ are:
 * ``EXPORT_NAME``
 * ``IMPORTED``
 * ``NAME``
-* ``NO_SYSTEM_FROM_IMPORTED``
 * Properties matching ``IMPORTED_LIBNAME_*``
 * Properties matching ``MAP_IMPORTED_CONFIG_*``
 

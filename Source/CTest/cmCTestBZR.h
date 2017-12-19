@@ -3,7 +3,7 @@
 #ifndef cmCTestBZR_h
 #define cmCTestBZR_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCTestGlobalVC.h"
 
@@ -22,20 +22,20 @@ public:
   /** Construct with a CTest instance and update log stream.  */
   cmCTestBZR(cmCTest* ctest, std::ostream& log);
 
-  ~cmCTestBZR() CM_OVERRIDE;
+  ~cmCTestBZR() override;
 
 private:
   // Implement cmCTestVC internal API.
-  void NoteOldRevision() CM_OVERRIDE;
-  void NoteNewRevision() CM_OVERRIDE;
-  bool UpdateImpl() CM_OVERRIDE;
+  bool NoteOldRevision() override;
+  bool NoteNewRevision() override;
+  bool UpdateImpl() override;
 
   // URL of repository directory checked out in the working tree.
   std::string URL;
 
   std::string LoadInfo();
-  void LoadModifications() CM_OVERRIDE;
-  void LoadRevisions() CM_OVERRIDE;
+  bool LoadModifications() override;
+  bool LoadRevisions() override;
 
   // Parsing helper classes.
   class InfoParser;

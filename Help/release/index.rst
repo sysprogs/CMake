@@ -1,3 +1,5 @@
+:orphan:
+
 CMake Release Notes
 *******************
 
@@ -11,6 +13,8 @@ Releases
 .. toctree::
    :maxdepth: 1
 
+   3.10 <3.10>
+   3.9 <3.9>
    3.8 <3.8>
    3.7 <3.7>
    3.6 <3.6>

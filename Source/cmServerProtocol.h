@@ -2,20 +2,18 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
-#include "cmListFileCache.h"
-#include "cmake.h"
+#include "cmConfigure.h" // IWYU pragma: keep
 
-#if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cm_jsoncpp_writer.h"
-#endif
+#include "cm_jsoncpp_value.h"
+#include "cmake.h"
 
 #include <memory>
 #include <string>
+#include <utility>
 
-class cmake;
+class cmConnection;
 class cmFileMonitor;
 class cmServer;
-
 class cmServerRequest;
 
 class cmServerResponse
@@ -55,9 +53,11 @@ public:
   const std::string Type;
   const std::string Cookie;
   const Json::Value Data;
+  cmConnection* Connection;
 
 private:
-  cmServerRequest(cmServer* server, const std::string& t, const std::string& c,
+  cmServerRequest(cmServer* server, cmConnection* connection,
+                  const std::string& t, const std::string& c,
                   const Json::Value& d);
 
   void ReportProgress(int min, int current, int max,
@@ -72,8 +72,11 @@ private:
 
 class cmServerProtocol
 {
+  CM_DISABLE_COPY(cmServerProtocol)
+
 public:
-  virtual ~cmServerProtocol() {}
+  cmServerProtocol() = default;
+  virtual ~cmServerProtocol() = default;
 
   virtual std::pair<int, int> ProtocolVersion() const = 0;
   virtual bool IsExperimental() const = 0;
@@ -98,7 +101,7 @@ private:
   friend class cmServer;
 };
 
-class cmServerProtocol1_0 : public cmServerProtocol
+class cmServerProtocol1 : public cmServerProtocol
 {
 public:
   std::pair<int, int> ProtocolVersion() const override;

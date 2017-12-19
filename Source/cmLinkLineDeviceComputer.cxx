@@ -2,13 +2,19 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 
 #include "cmLinkLineDeviceComputer.h"
+
+#include <set>
+#include <sstream>
+
 #include "cmComputeLinkInformation.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalNinjaGenerator.h"
-#include "cmOutputConverter.h"
+#include "cmStateTypes.h"
+
+class cmOutputConverter;
 
 cmLinkLineDeviceComputer::cmLinkLineDeviceComputer(
-  cmOutputConverter* outputConverter, cmStateDirectory stateDir)
+  cmOutputConverter* outputConverter, cmStateDirectory const& stateDir)
   : cmLinkLineComputer(outputConverter, stateDir)
 {
 }
@@ -25,29 +31,43 @@ std::string cmLinkLineDeviceComputer::ComputeLinkLibraries(
   typedef cmComputeLinkInformation::ItemVector ItemVector;
   ItemVector const& items = cli.GetItems();
   std::string config = cli.GetConfig();
-  for (ItemVector::const_iterator li = items.begin(); li != items.end();
-       ++li) {
-    if (!li->Target) {
+  for (auto const& item : items) {
+    if (!item.Target) {
       continue;
     }
 
-    if (li->Target->GetType() == cmStateEnums::INTERFACE_LIBRARY ||
-        li->Target->GetType() == cmStateEnums::SHARED_LIBRARY ||
-        li->Target->GetType() == cmStateEnums::MODULE_LIBRARY) {
+    bool skippable = false;
+    switch (item.Target->GetType()) {
+      case cmStateEnums::SHARED_LIBRARY:
+      case cmStateEnums::MODULE_LIBRARY:
+      case cmStateEnums::INTERFACE_LIBRARY:
+        skippable = true;
+        break;
+      case cmStateEnums::STATIC_LIBRARY:
+        // If a static library is resolving its device linking, it should
+        // be removed for other device linking
+        skippable =
+          item.Target->GetPropertyAsBool("CUDA_RESOLVE_DEVICE_SYMBOLS");
+        break;
+      default:
+        break;
+    }
+
+    if (skippable) {
       continue;
     }
 
     std::set<std::string> langs;
-    li->Target->GetLanguages(langs, config);
+    item.Target->GetLanguages(langs, config);
     if (langs.count("CUDA") == 0) {
       continue;
     }
 
-    if (li->IsPath) {
+    if (item.IsPath) {
       fout << this->ConvertToOutputFormat(
-        this->ConvertToLinkReference(li->Value));
+        this->ConvertToLinkReference(item.Value));
     } else {
-      fout << li->Value;
+      fout << item.Value;
     }
     fout << " ";
   }
@@ -66,7 +86,7 @@ std::string cmLinkLineDeviceComputer::GetLinkerLanguage(cmGeneratorTarget*,
 }
 
 cmNinjaLinkLineDeviceComputer::cmNinjaLinkLineDeviceComputer(
-  cmOutputConverter* outputConverter, cmStateDirectory stateDir,
+  cmOutputConverter* outputConverter, cmStateDirectory const& stateDir,
   cmGlobalNinjaGenerator const* gg)
   : cmLinkLineDeviceComputer(outputConverter, stateDir)
   , GG(gg)

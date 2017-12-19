@@ -3,7 +3,8 @@
 #ifndef cmLocalXCodeGenerator_h
 #define cmLocalXCodeGenerator_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <map>
 #include <string>
 
@@ -26,16 +27,16 @@ public:
   ///! Set cache only and recurse to false by default.
   cmLocalXCodeGenerator(cmGlobalGenerator* gg, cmMakefile* mf);
 
-  virtual ~cmLocalXCodeGenerator();
-  virtual std::string GetTargetDirectory(
-    cmGeneratorTarget const* target) const;
-  virtual void AppendFlagEscape(std::string& flags,
-                                const std::string& rawFlag);
-  virtual void Generate();
+  ~cmLocalXCodeGenerator() override;
+  std::string GetTargetDirectory(
+    cmGeneratorTarget const* target) const override;
+  void AppendFlagEscape(std::string& flags,
+                        const std::string& rawFlag) override;
+  void Generate() override;
   virtual void GenerateInstallRules();
-  virtual void ComputeObjectFilenames(
+  void ComputeObjectFilenames(
     std::map<cmSourceFile const*, std::string>& mapping,
-    cmGeneratorTarget const* gt = 0);
+    cmGeneratorTarget const* gt = nullptr) override;
 
 private:
 };

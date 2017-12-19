@@ -3,22 +3,23 @@
 #ifndef cmCPackIFWPackage_h
 #define cmCPackIFWPackage_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
+#include "cmCPackIFWCommon.h"
+
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
 
 class cmCPackComponent;
 class cmCPackComponentGroup;
-class cmCPackIFWGenerator;
 class cmCPackIFWInstaller;
-class cmXMLWriter;
 
 /** \class cmCPackIFWPackage
  * \brief A single component to be installed by CPack IFW generator
  */
-class cmCPackIFWPackage
+class cmCPackIFWPackage : public cmCPackIFWCommon
 {
 public:
   // Types
@@ -69,10 +70,10 @@ public:
   // Configuration
 
   /// Human-readable name of the component
-  std::string DisplayName;
+  std::map<std::string, std::string> DisplayName;
 
   /// Human-readable description of the component
-  std::string Description;
+  std::map<std::string, std::string> Description;
 
   /// Version number of the component
   std::string Version;
@@ -113,20 +114,17 @@ public:
   /// Determines that the package must always be installed
   std::string ForcedInstallation;
 
+  /// List of components to replace
+  std::vector<std::string> Replaces;
+
   /// Package needs to be installed with elevated permissions
   std::string RequiresAdminRights;
 
+  /// Set to false if you want to hide the checkbox for an item
+  std::string Checkable;
+
 public:
   // Internal implementation
-
-  const char* GetOption(const std::string& op) const;
-  bool IsOn(const std::string& op) const;
-  bool IsSetToOff(const std::string& op) const;
-  bool IsSetToEmpty(const std::string& op) const;
-
-  bool IsVersionLess(const char* version);
-  bool IsVersionGreater(const char* version);
-  bool IsVersionEqual(const char* version);
 
   std::string GetComponentName(cmCPackComponent* component);
 
@@ -140,8 +138,6 @@ public:
 
   void GeneratePackageFile();
 
-  // Pointer to generator
-  cmCPackIFWGenerator* Generator;
   // Pointer to installer
   cmCPackIFWInstaller* Installer;
   // Collection of dependencies
@@ -152,9 +148,6 @@ public:
   std::set<DependenceStruct*> AlienAutoDependOn;
   // Patch to package directory
   std::string Directory;
-
-protected:
-  void WriteGeneratedByToStrim(cmXMLWriter& xout);
 };
 
 #endif // cmCPackIFWPackage_h

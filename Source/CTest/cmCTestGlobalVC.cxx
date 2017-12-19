@@ -48,15 +48,14 @@ void cmCTestGlobalVC::DoRevision(Revision const& revision,
   /* clang-format on */
 
   // Update information about revisions of the changed files.
-  for (std::vector<Change>::const_iterator ci = changes.begin();
-       ci != changes.end(); ++ci) {
-    if (const char* local = this->LocalPath(ci->Path)) {
+  for (Change const& c : changes) {
+    if (const char* local = this->LocalPath(c.Path)) {
       std::string dir = cmSystemTools::GetFilenamePath(local);
       std::string name = cmSystemTools::GetFilenameName(local);
       File& file = this->Dirs[dir][name];
       file.PriorRev = file.Rev ? file.Rev : &this->PriorRev;
       file.Rev = &rev;
-      this->Log << "  " << ci->Action << " " << local << " "
+      this->Log << "  " << c.Action << " " << local << " "
                 << "\n";
     }
   }
@@ -83,9 +82,9 @@ void cmCTestGlobalVC::WriteXMLDirectory(cmXMLWriter& xml,
   const char* slash = path.empty() ? "" : "/";
   xml.StartElement("Directory");
   xml.Element("Name", path);
-  for (Directory::const_iterator fi = dir.begin(); fi != dir.end(); ++fi) {
-    std::string full = path + slash + fi->first;
-    this->WriteXMLEntry(xml, path, fi->first, full, fi->second);
+  for (auto const& f : dir) {
+    std::string const full = path + slash + f.first;
+    this->WriteXMLEntry(xml, path, f.first, full, f.second);
   }
   xml.EndElement(); // Directory
 }
@@ -102,22 +101,21 @@ void cmCTestGlobalVC::WriteXMLGlobal(cmXMLWriter& xml)
 
 bool cmCTestGlobalVC::WriteXMLUpdates(cmXMLWriter& xml)
 {
+  bool result = true;
   cmCTestLog(this->CTest, HANDLER_OUTPUT,
              "   Gathering version information (one . per revision):\n"
              "    "
                << std::flush);
-  this->LoadRevisions();
+  result = this->LoadRevisions() && result;
   cmCTestLog(this->CTest, HANDLER_OUTPUT, std::endl);
 
-  this->LoadModifications();
+  result = this->LoadModifications() && result;
 
   this->WriteXMLGlobal(xml);
 
-  for (std::map<std::string, Directory>::const_iterator di =
-         this->Dirs.begin();
-       di != this->Dirs.end(); ++di) {
-    this->WriteXMLDirectory(xml, di->first, di->second);
+  for (auto const& d : this->Dirs) {
+    this->WriteXMLDirectory(xml, d.first, d.second);
   }
 
-  return true;
+  return result;
 }

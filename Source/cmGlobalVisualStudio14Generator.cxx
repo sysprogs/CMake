@@ -8,8 +8,8 @@
 #include "cmMakefile.h"
 #include "cmVS140CLFlagTable.h"
 #include "cmVS140CSharpFlagTable.h"
+#include "cmVS140LinkFlagTable.h"
 #include "cmVS14LibFlagTable.h"
-#include "cmVS14LinkFlagTable.h"
 #include "cmVS14MASMFlagTable.h"
 #include "cmVS14RCFlagTable.h"
 
@@ -35,7 +35,7 @@ class cmGlobalVisualStudio14Generator::Factory
 {
 public:
   cmGlobalGenerator* CreateGlobalGenerator(const std::string& name,
-                                           cmake* cm) const CM_OVERRIDE
+                                           cmake* cm) const override
   {
     std::string genName;
     const char* p = cmVS14GenName(name, genName);
@@ -57,22 +57,22 @@ public:
     return 0;
   }
 
-  void GetDocumentation(cmDocumentationEntry& entry) const CM_OVERRIDE
+  void GetDocumentation(cmDocumentationEntry& entry) const override
   {
     entry.Name = std::string(vs14generatorName) + " [arch]";
     entry.Brief = "Generates Visual Studio 2015 project files.  "
                   "Optional [arch] can be \"Win64\" or \"ARM\".";
   }
 
-  void GetGenerators(std::vector<std::string>& names) const CM_OVERRIDE
+  void GetGenerators(std::vector<std::string>& names) const override
   {
     names.push_back(vs14generatorName);
     names.push_back(vs14generatorName + std::string(" ARM"));
     names.push_back(vs14generatorName + std::string(" Win64"));
   }
 
-  bool SupportsToolset() const CM_OVERRIDE { return true; }
-  bool SupportsPlatform() const CM_OVERRIDE { return true; }
+  bool SupportsToolset() const override { return true; }
+  bool SupportsPlatform() const override { return true; }
 };
 
 cmGlobalGeneratorFactory* cmGlobalVisualStudio14Generator::NewFactory()
@@ -93,7 +93,7 @@ cmGlobalVisualStudio14Generator::cmGlobalVisualStudio14Generator(
   this->DefaultClFlagTable = cmVS140CLFlagTable;
   this->DefaultCSharpFlagTable = cmVS140CSharpFlagTable;
   this->DefaultLibFlagTable = cmVS14LibFlagTable;
-  this->DefaultLinkFlagTable = cmVS14LinkFlagTable;
+  this->DefaultLinkFlagTable = cmVS140LinkFlagTable;
   this->DefaultMasmFlagTable = cmVS14MASMFlagTable;
   this->DefaultRcFlagTable = cmVS14RCFlagTable;
   this->Version = VS14;
@@ -150,6 +150,13 @@ bool cmGlobalVisualStudio14Generator::SelectWindows10SDK(cmMakefile* mf,
       << " installed on this machine";
     mf->IssueMessage(cmake::FATAL_ERROR, e.str());
     return false;
+  }
+  if (!cmSystemTools::VersionCompareEqual(this->WindowsTargetPlatformVersion,
+                                          this->SystemVersion)) {
+    std::ostringstream e;
+    e << "Selecting Windows SDK version " << this->WindowsTargetPlatformVersion
+      << " to target Windows " << this->SystemVersion << ".";
+    mf->DisplayStatus(e.str().c_str(), -1);
   }
   mf->AddDefinition("CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION",
                     this->WindowsTargetPlatformVersion.c_str());
@@ -217,29 +224,48 @@ struct NoWindowsH
 std::string cmGlobalVisualStudio14Generator::GetWindows10SDKVersion()
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
-  // This logic is taken from the vcvarsqueryregistry.bat file from VS2015
-  // Try HKLM and then HKCU.
-  std::string win10Root;
-  if (!cmSystemTools::ReadRegistryValue(
-        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\"
-        "Windows Kits\\Installed Roots;KitsRoot10",
-        win10Root, cmSystemTools::KeyWOW64_32) &&
-      !cmSystemTools::ReadRegistryValue(
-        "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\"
-        "Windows Kits\\Installed Roots;KitsRoot10",
-        win10Root, cmSystemTools::KeyWOW64_32)) {
+  std::vector<std::string> win10Roots;
+
+  {
+    std::string win10Root;
+    if (cmSystemTools::GetEnv("CMAKE_WINDOWS_KITS_10_DIR", win10Root)) {
+      cmSystemTools::ConvertToUnixSlashes(win10Root);
+      win10Roots.push_back(win10Root);
+    }
+  }
+
+  {
+    // This logic is taken from the vcvarsqueryregistry.bat file from VS2015
+    // Try HKLM and then HKCU.
+    std::string win10Root;
+    if (cmSystemTools::ReadRegistryValue(
+          "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\"
+          "Windows Kits\\Installed Roots;KitsRoot10",
+          win10Root, cmSystemTools::KeyWOW64_32) ||
+        cmSystemTools::ReadRegistryValue(
+          "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\"
+          "Windows Kits\\Installed Roots;KitsRoot10",
+          win10Root, cmSystemTools::KeyWOW64_32)) {
+      cmSystemTools::ConvertToUnixSlashes(win10Root);
+      win10Roots.push_back(win10Root);
+    }
+  }
+
+  if (win10Roots.empty()) {
     return std::string();
   }
 
   std::vector<std::string> sdks;
-  std::string path = win10Root + "Include/*";
   // Grab the paths of the different SDKs that are installed
-  cmSystemTools::GlobDirs(path, sdks);
+  for (std::vector<std::string>::iterator i = win10Roots.begin();
+       i != win10Roots.end(); ++i) {
+    std::string path = *i + "/Include/*";
+    cmSystemTools::GlobDirs(path, sdks);
+  }
 
   // Skip SDKs that do not contain <um/windows.h> because that indicates that
   // only the UCRT MSIs were installed for them.
-  sdks.erase(std::remove_if(sdks.begin(), sdks.end(), NoWindowsH()),
-             sdks.end());
+  cmEraseIf(sdks, NoWindowsH());
 
   if (!sdks.empty()) {
     // Only use the filename, which will be the SDK version.

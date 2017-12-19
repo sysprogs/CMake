@@ -3,6 +3,9 @@
 use strict;
 use warnings;
 
+#my $cmake = "/home/pboettch/devel/upstream/cmake/build/bin/cmake";
+my $cmake = "cmake";
+
 my @variables;
 my @commands;
 my @properties;
@@ -10,7 +13,7 @@ my @modules;
 my %keywords; # command => keyword-list
 
 # unwanted upper-cases
-my %unwanted = map { $_ => 1 } qw(VS CXX IDE NOTFOUND NO_ DFOO DBAR);
+my %unwanted = map { $_ => 1 } qw(VS CXX IDE NOTFOUND NO_ DFOO DBAR NEW);
 	# cannot remove ALL - exists for add_custom_command
 
 # control-statements
@@ -24,8 +27,9 @@ my %deprecated = map { $_ => 1 } qw(build_name exec_program export_library_depen
 push @modules, "ExternalProject";
 
 # variables
-open(CMAKE, "cmake --help-variable-list|") or die "could not run cmake";
+open(CMAKE, "$cmake --help-variable-list|") or die "could not run cmake";
 while (<CMAKE>) {
+	next if /\</; # skip if containing < or >
 	chomp;
 	push @variables, $_;
 }
@@ -35,17 +39,16 @@ close(CMAKE);
 my %variables = map { $_ => 1 } @variables;
 
 # commands
-open(CMAKE, "cmake --help-command-list|");
+open(CMAKE, "$cmake --help-command-list|");
 while (my $cmd = <CMAKE>) {
 	chomp $cmd;
-
 	push @commands, $cmd;
 }
 close(CMAKE);
 
 # now generate a keyword-list per command
 foreach my $cmd (@commands) {
-	my @word = extract_upper("cmake --help-command $cmd|");
+	my @word = extract_upper("$cmake --help-command $cmd|");
 
 	next if scalar @word == 0;
 
@@ -54,7 +57,7 @@ foreach my $cmd (@commands) {
 
 # and now for modules
 foreach my $mod (@modules) {
-	my @word = extract_upper("cmake --help-module $mod|");
+	my @word = extract_upper("$cmake --help-module $mod|");
 
 	next if scalar @word == 0;
 
@@ -62,13 +65,26 @@ foreach my $mod (@modules) {
 }
 
 # and now for generator-expressions
-my @generator_expr = extract_upper("cmake --help-manual cmake-generator-expressions |");
+my @generator_expr = extract_upper("$cmake --help-manual cmake-generator-expressions |");
 
 # properties
-open(CMAKE, "cmake --help-property-list|");
+open(CMAKE, "$cmake --help-property-list|");
 while (<CMAKE>) {
+	next if /\</; # skip if containing < or >
 	chomp;
 	push @properties, $_;
+}
+close(CMAKE);
+
+# transform all properties in a hash
+my %properties = map { $_ => 1 } @properties;
+
+# version
+open(CMAKE, "$cmake --version|");
+my $version = 'unknown';
+while (<CMAKE>) {
+	chomp;
+	$version = $_ if /cmake version/;
 }
 close(CMAKE);
 
@@ -88,7 +104,7 @@ while(<IN>)
 			                 ! exists $deprecated{$_} } @commands;
 			print OUT " " x 12 , "\\ ", join(" ", @tmp), "\n";
 		} elsif ($1 eq "VARIABLE_LIST") {
-			print OUT " " x 12 , "\\ ", join(" ", @variables), "\n";
+			print OUT " " x 12 , "\\ ", join(" ", sort keys %variables), "\n";
 		} elsif ($1 eq "MODULES") {
 			print OUT " " x 12 , "\\ ", join("\n", @modules), "\n";
 		} elsif ($1 eq "GENERATOR_EXPRESSIONS") {
@@ -99,16 +115,20 @@ while(<IN>)
 			print OUT " " x 12 , "\\ ", join(" ", sort keys %loop), "\n";
 		} elsif ($1 eq "DEPRECATED") {
 			print OUT " " x 12 , "\\ ", join(" ", sort keys %deprecated), "\n";
+		} elsif ($1 eq "PROPERTIES") {
+			print OUT " " x 12 , "\\ ", join(" ", sort keys %properties), "\n";
 		} elsif ($1 eq "KEYWORDS") {
 			foreach my $k (sort keys %keywords) {
-				print OUT "syn keyword cmakeKW$k\n";
+				print OUT "syn keyword cmakeKW$k contained\n";
 				print OUT " " x 12, "\\ ", join(" ", @{$keywords{$k}}), "\n";
-				print OUT " " x 12, "\\ contained\n";
 				print OUT "\n";
 				push @keyword_hi, "hi def link cmakeKW$k ModeMsg";
 			}
 		} elsif ($1 eq "KEYWORDS_HIGHLIGHT") {
 			print OUT join("\n", @keyword_hi), "\n";
+		} elsif ($1 eq "VERSION") {
+			$_ =~ s/\@VERSION\@/$version/;
+			print OUT $_;
 		} else {
 			print "ERROR do not know how to replace $1\n";
 		}
@@ -126,11 +146,11 @@ sub extract_upper
 
 	open(KW, $input);
 	while (<KW>) {
-
 		foreach my $w (m/\b([A-Z_]{2,})\b/g) {
 			next
 				if exists $variables{$w} or  # skip if it is a variable
-				   exists $unwanted{$w};     # skip if not wanted
+				   exists $unwanted{$w} or   # skip if not wanted
+				   grep(/$w/, @word);     # skip if already in array
 
 			push @word, $w;
 		}

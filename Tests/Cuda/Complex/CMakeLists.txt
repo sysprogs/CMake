@@ -32,9 +32,16 @@ add_library(CudaComplexSharedLib SHARED dynamic.cu)
 target_link_libraries(CudaComplexSharedLib PUBLIC CudaComplexCppBase)
 
 add_library(CudaComplexMixedLib SHARED mixed.cpp mixed.cu)
+set_target_properties(CudaComplexMixedLib
+                       PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(CudaComplexMixedLib
                       PUBLIC CudaComplexSharedLib
                       PRIVATE CudaComplexSeperableLib)
 
 add_executable(CudaComplex main.cpp)
 target_link_libraries(CudaComplex PUBLIC CudaComplexMixedLib)
+
+if(APPLE)
+  # Help the static cuda runtime find the driver (libcuda.dyllib) at runtime.
+  set_property(TARGET CudaComplex PROPERTY BUILD_RPATH ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+endif()

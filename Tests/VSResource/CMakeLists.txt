@@ -18,9 +18,8 @@ if(CMAKE_RC_COMPILER MATCHES windres)
   message(STATUS "CMAKE_RC_COMPILER MATCHES windres")
   add_definitions(/DCMAKE_RCDEFINE=test.txt)
   add_definitions(/DCMAKE_RCDEFINE_NO_QUOTED_STRINGS)
-  if(MSYS AND CMAKE_CURRENT_BINARY_DIR MATCHES " ")
-    # windres cannot handle spaces in include dir, and
-    # for the MSys shell we do not convert to shortpath.
+  if(CMAKE_CURRENT_BINARY_DIR MATCHES " ")
+    # windres cannot handle spaces in include dir
     set(CMAKE_RC_NO_INCLUDE 1)
   endif()
 elseif(MSVC60)
@@ -51,5 +50,16 @@ add_library(ResourceLib STATIC lib.cpp lib.rc)
 add_executable(VSResource main.cpp test.rc)
 target_link_libraries(VSResource ResourceLib)
 
+if(MSVC AND NOT MSVC_VERSION VERSION_LESS 1600)
+  set_property(SOURCE test.rc PROPERTY COMPILE_FLAGS /nologo)
+endif()
+
 set_property(TARGET VSResource
   PROPERTY VS_GLOBAL_CMakeTestVsGlobalVariable "test val")
+
+if(CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
+  cmake_policy(PUSH)
+  cmake_policy(SET CMP0037 OLD)
+  add_library("My ResourceLib" lib.cpp lib.rc)
+  cmake_policy(POP)
+endif()

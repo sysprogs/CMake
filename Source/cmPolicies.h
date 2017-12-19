@@ -3,7 +3,7 @@
 #ifndef cmPolicies_h
 #define cmPolicies_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <bitset>
 #include <string>
@@ -126,7 +126,7 @@ class cmMakefile;
          3, 0, 0, cmPolicies::WARN)                                           \
   SELECT(POLICY, CMP0040,                                                     \
          "The target in the TARGET signature of add_custom_command() must "   \
-         "exist.",                                                            \
+         "exist and must be defined in the current directory.",               \
          3, 0, 0, cmPolicies::WARN)                                           \
   SELECT(POLICY, CMP0041,                                                     \
          "Error on relative include with generator expression.", 3, 0, 0,     \
@@ -200,7 +200,18 @@ class cmMakefile;
          7, 0, cmPolicies::WARN)                                              \
   SELECT(POLICY, CMP0067,                                                     \
          "Honor language standard in try_compile() source-file signature.",   \
-         3, 8, 0, cmPolicies::WARN)
+         3, 8, 0, cmPolicies::WARN)                                           \
+  SELECT(POLICY, CMP0068,                                                     \
+         "RPATH settings on macOS do not affect install_name.", 3, 9, 0,      \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0069,                                                     \
+         "INTERPROCEDURAL_OPTIMIZATION is enforced when enabled.", 3, 9, 0,   \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0070,                                                     \
+         "Define file(GENERATE) behavior for relative paths.", 3, 10, 0,      \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0071, "Let AUTOMOC and AUTOUIC process GENERATED files.", \
+         3, 10, 0, cmPolicies::WARN)
 
 #define CM_SELECT_ID(F, A1, A2, A3, A4, A5, A6) F(A1)
 #define CM_FOR_EACH_POLICY_ID(POLICY)                                         \
@@ -221,7 +232,9 @@ class cmMakefile;
   F(CMP0052)                                                                  \
   F(CMP0060)                                                                  \
   F(CMP0063)                                                                  \
-  F(CMP0065)
+  F(CMP0065)                                                                  \
+  F(CMP0068)                                                                  \
+  F(CMP0069)
 
 /** \class cmPolicies
  * \brief Handles changes in CMake behavior and policies
@@ -271,6 +284,7 @@ public:
 
   ///! return a warning string for a given policy
   static std::string GetPolicyWarning(cmPolicies::PolicyID id);
+  static std::string GetPolicyDeprecatedWarning(cmPolicies::PolicyID id);
 
   ///! return an error string for when a required policy is unspecified
   static std::string GetRequiredPolicyError(cmPolicies::PolicyID id);

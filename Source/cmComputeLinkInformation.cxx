@@ -260,7 +260,7 @@ cmComputeLinkInformation::cmComputeLinkInformation(
     this->GlobalGenerator, target, "linker search path");
   this->OrderRuntimeSearchPath = new cmOrderDirectories(
     this->GlobalGenerator, target, "runtime search path");
-  this->OrderDependentRPath = CM_NULLPTR;
+  this->OrderDependentRPath = nullptr;
 
   // Get the language used for linking this target.
   this->LinkLanguage = this->Target->GetLinkerLanguage(config);
@@ -281,7 +281,7 @@ cmComputeLinkInformation::cmComputeLinkInformation(
   // On platforms without import libraries there may be a special flag
   // to use when creating a plugin (module) that obtains symbols from
   // the program that will load it.
-  this->LoaderFlag = CM_NULLPTR;
+  this->LoaderFlag = nullptr;
   if (!this->UseImportLibrary &&
       this->Target->GetType() == cmStateEnums::MODULE_LIBRARY) {
     std::string loader_flag_var = "CMAKE_SHARED_MODULE_LOADER_";
@@ -468,13 +468,11 @@ bool cmComputeLinkInformation::Compute()
   cmComputeLinkDepends::EntryVector const& linkEntries = cld.Compute();
 
   // Add the link line items.
-  for (cmComputeLinkDepends::EntryVector::const_iterator lei =
-         linkEntries.begin();
-       lei != linkEntries.end(); ++lei) {
-    if (lei->IsSharedDep) {
-      this->AddSharedDepItem(lei->Item, lei->Target);
+  for (cmComputeLinkDepends::LinkEntry const& linkEntry : linkEntries) {
+    if (linkEntry.IsSharedDep) {
+      this->AddSharedDepItem(linkEntry.Item, linkEntry.Target);
     } else {
-      this->AddItem(lei->Item, lei->Target);
+      this->AddItem(linkEntry.Item, linkEntry.Target);
     }
   }
 
@@ -494,13 +492,13 @@ bool cmComputeLinkInformation::Compute()
     // directories.
     std::set<cmGeneratorTarget const*> const& wrongItems =
       cld.GetOldWrongConfigItems();
-    for (std::set<cmGeneratorTarget const*>::const_iterator i =
-           wrongItems.begin();
-         i != wrongItems.end(); ++i) {
-      cmGeneratorTarget const* tgt = *i;
+    for (cmGeneratorTarget const* tgt : wrongItems) {
       bool implib = (this->UseImportLibrary &&
                      (tgt->GetType() == cmStateEnums::SHARED_LIBRARY));
-      std::string lib = tgt->GetFullPath(this->Config, implib, true);
+      cmStateEnums::ArtifactType artifact = implib
+        ? cmStateEnums::ImportLibraryArtifact
+        : cmStateEnums::RuntimeBinaryArtifact;
+      std::string lib = tgt->GetFullPath(this->Config, artifact, true);
       this->OldLinkDirItems.push_back(lib);
     }
   }
@@ -537,11 +535,10 @@ void cmComputeLinkInformation::AddImplicitLinkInfo()
   // The link closure lists all languages whose implicit info is needed.
   cmGeneratorTarget::LinkClosure const* lc =
     this->Target->GetLinkClosure(this->Config);
-  for (std::vector<std::string>::const_iterator li = lc->Languages.begin();
-       li != lc->Languages.end(); ++li) {
+  for (std::string const& li : lc->Languages) {
     // Skip those of the linker language.  They are implicit.
-    if (*li != this->LinkLanguage) {
-      this->AddImplicitLinkInfo(*li);
+    if (li != this->LinkLanguage) {
+      this->AddImplicitLinkInfo(li);
     }
   }
 }
@@ -556,10 +553,9 @@ void cmComputeLinkInformation::AddImplicitLinkInfo(std::string const& lang)
   if (const char* libs = this->Makefile->GetDefinition(libVar)) {
     std::vector<std::string> libsVec;
     cmSystemTools::ExpandListArgument(libs, libsVec);
-    for (std::vector<std::string>::const_iterator i = libsVec.begin();
-         i != libsVec.end(); ++i) {
-      if (this->ImplicitLinkLibs.find(*i) == this->ImplicitLinkLibs.end()) {
-        this->AddItem(*i, CM_NULLPTR);
+    for (std::string const& i : libsVec) {
+      if (this->ImplicitLinkLibs.find(i) == this->ImplicitLinkLibs.end()) {
+        this->AddItem(i, nullptr);
       }
     }
   }
@@ -596,8 +592,11 @@ void cmComputeLinkInformation::AddItem(std::string const& item,
       // platform.  Add it now.
       std::string linkItem;
       linkItem = this->LoaderFlag;
+      cmStateEnums::ArtifactType artifact = this->UseImportLibrary
+        ? cmStateEnums::ImportLibraryArtifact
+        : cmStateEnums::RuntimeBinaryArtifact;
 
-      std::string exe = tgt->GetFullPath(config, this->UseImportLibrary, true);
+      std::string exe = tgt->GetFullPath(config, artifact, true);
       linkItem += exe;
       this->Items.push_back(Item(linkItem, true, tgt));
       this->Depends.push_back(exe);
@@ -610,16 +609,19 @@ void cmComputeLinkInformation::AddItem(std::string const& item,
       // Also add the item the interface specifies to be used in its place.
       std::string const& libName = tgt->GetImportedLibName(config);
       if (!libName.empty()) {
-        this->AddItem(libName, CM_NULLPTR);
+        this->AddItem(libName, nullptr);
       }
     } else {
       // Decide whether to use an import library.
       bool implib =
         (this->UseImportLibrary &&
          (impexe || tgt->GetType() == cmStateEnums::SHARED_LIBRARY));
+      cmStateEnums::ArtifactType artifact = implib
+        ? cmStateEnums::ImportLibraryArtifact
+        : cmStateEnums::RuntimeBinaryArtifact;
 
       // Pass the full path to the target file.
-      std::string lib = tgt->GetFullPath(config, implib, true);
+      std::string lib = tgt->GetFullPath(config, artifact, true);
       if (!this->LinkDependsNoShared ||
           tgt->GetType() != cmStateEnums::SHARED_LIBRARY) {
         this->Depends.push_back(lib);
@@ -689,7 +691,10 @@ void cmComputeLinkInformation::AddSharedDepItem(std::string const& item,
   // linked will be able to find it.
   std::string lib;
   if (tgt) {
-    lib = tgt->GetFullPath(this->Config, this->UseImportLibrary);
+    cmStateEnums::ArtifactType artifact = this->UseImportLibrary
+      ? cmStateEnums::ImportLibraryArtifact
+      : cmStateEnums::RuntimeBinaryArtifact;
+    lib = tgt->GetFullPath(this->Config, artifact);
     this->AddLibraryRuntimeInfo(lib, tgt);
   } else {
     lib = item;
@@ -698,7 +703,7 @@ void cmComputeLinkInformation::AddSharedDepItem(std::string const& item,
 
   // Check if we need to include the dependent shared library in other
   // path ordering.
-  cmOrderDirectories* order = CM_NULLPTR;
+  cmOrderDirectories* order = nullptr;
   if (this->SharedDependencyMode == SharedDepModeLibDir &&
       !this->LinkWithRuntimePath /* AddLibraryRuntimeInfo adds it */) {
     // Add the item to the linker search path.
@@ -710,7 +715,7 @@ void cmComputeLinkInformation::AddSharedDepItem(std::string const& item,
   if (order) {
     if (tgt) {
       std::string soName = tgt->GetSOName(this->Config);
-      const char* soname = soName.empty() ? CM_NULLPTR : soName.c_str();
+      const char* soname = soName.empty() ? nullptr : soName.c_str();
       order->AddRuntimeLibrary(lib, soname);
     } else {
       order->AddRuntimeLibrary(lib);
@@ -729,9 +734,9 @@ void cmComputeLinkInformation::ComputeLinkTypeInfo()
   this->LinkTypeEnabled = false;
 
   // Lookup link type selection flags.
-  const char* static_link_type_flag = CM_NULLPTR;
-  const char* shared_link_type_flag = CM_NULLPTR;
-  const char* target_type_str = CM_NULLPTR;
+  const char* static_link_type_flag = nullptr;
+  const char* shared_link_type_flag = nullptr;
+  const char* target_type_str = nullptr;
   switch (this->Target->GetType()) {
     case cmStateEnums::EXECUTABLE:
       target_type_str = "EXE";
@@ -799,18 +804,16 @@ void cmComputeLinkInformation::ComputeItemParserInfo()
         mf->GetDefinition("CMAKE_EXTRA_LINK_EXTENSIONS")) {
     std::vector<std::string> linkSuffixVec;
     cmSystemTools::ExpandListArgument(linkSuffixes, linkSuffixVec);
-    for (std::vector<std::string>::iterator i = linkSuffixVec.begin();
-         i != linkSuffixVec.end(); ++i) {
-      this->AddLinkExtension(i->c_str(), LinkUnknown);
+    for (std::string const& i : linkSuffixVec) {
+      this->AddLinkExtension(i.c_str(), LinkUnknown);
     }
   }
   if (const char* sharedSuffixes =
         mf->GetDefinition("CMAKE_EXTRA_SHARED_LIBRARY_SUFFIXES")) {
     std::vector<std::string> sharedSuffixVec;
     cmSystemTools::ExpandListArgument(sharedSuffixes, sharedSuffixVec);
-    for (std::vector<std::string>::iterator i = sharedSuffixVec.begin();
-         i != sharedSuffixVec.end(); ++i) {
-      this->AddLinkExtension(i->c_str(), LinkShared);
+    for (std::string const& i : sharedSuffixVec) {
+      this->AddLinkExtension(i.c_str(), LinkShared);
     }
   }
 
@@ -828,9 +831,8 @@ void cmComputeLinkInformation::ComputeItemParserInfo()
   // be the library name.  Match index 3 will be the library
   // extension.
   reg = "^(";
-  for (std::set<std::string>::iterator p = this->LinkPrefixes.begin();
-       p != this->LinkPrefixes.end(); ++p) {
-    reg += *p;
+  for (std::string const& p : this->LinkPrefixes) {
+    reg += p;
     reg += "|";
   }
   reg += ")";
@@ -894,8 +896,7 @@ std::string cmComputeLinkInformation::CreateExtensionRegex(
   // Build a list of extension choices.
   std::string libext = "(";
   const char* sep = "";
-  for (std::vector<std::string>::const_iterator i = exts.begin();
-       i != exts.end(); ++i) {
+  for (std::string const& i : exts) {
     // Separate this choice from the previous one.
     libext += sep;
     sep = "|";
@@ -903,9 +904,9 @@ std::string cmComputeLinkInformation::CreateExtensionRegex(
     // Store this extension choice with the "." escaped.
     libext += "\\";
 #if defined(_WIN32) && !defined(__CYGWIN__)
-    libext += this->NoCaseExpression(i->c_str());
+    libext += this->NoCaseExpression(i.c_str());
 #else
-    libext += *i;
+    libext += i;
 #endif
   }
 
@@ -1021,8 +1022,8 @@ void cmComputeLinkInformation::AddFullItem(std::string const& item)
   // See documentation of CMP0008.
   std::string generator = this->GlobalGenerator->GetName();
   if (this->Target->GetPolicyStatusCMP0008() != cmPolicies::NEW &&
-      (generator.find("Visual Studio") != generator.npos ||
-       generator.find("Xcode") != generator.npos)) {
+      (generator.find("Visual Studio") != std::string::npos ||
+       generator.find("Xcode") != std::string::npos)) {
     std::string file = cmSystemTools::GetFilenameName(item);
     if (!this->ExtractAnyLibraryName.find(file.c_str())) {
       this->HandleBadFullItem(item, file);
@@ -1445,10 +1446,8 @@ bool cmComputeLinkInformation::FinishLinkerSearchDirectories()
   }
 
   // Add the link directories for full path items.
-  for (std::vector<std::string>::const_iterator i =
-         this->OldLinkDirItems.begin();
-       i != this->OldLinkDirItems.end(); ++i) {
-    this->OrderLinkerSearchPath->AddLinkLibrary(*i);
+  for (std::string const& i : this->OldLinkDirItems) {
+    this->OrderLinkerSearchPath->AddLinkLibrary(i);
   }
   return true;
 }
@@ -1477,19 +1476,17 @@ void cmComputeLinkInformation::PrintLinkPolicyDiagnosis(std::ostream& os)
     std::string::size_type max_size = 76;
     std::string line;
     const char* sep = "  ";
-    for (std::vector<std::string>::const_iterator i =
-           this->OldUserFlagItems.begin();
-         i != this->OldUserFlagItems.end(); ++i) {
+    for (std::string const& i : this->OldUserFlagItems) {
       // If the addition of another item will exceed the limit then
       // output the current line and reset it.  Note that the separator
       // is either " " or ", " which is always 2 characters.
-      if (!line.empty() && (line.size() + i->size() + 2) > max_size) {
+      if (!line.empty() && (line.size() + i.size() + 2) > max_size) {
         os << line << "\n";
         sep = "  ";
-        line = "";
+        line.clear();
       }
       line += sep;
-      line += *i;
+      line += i;
       // Convert to the other separator.
       sep = ", ";
     }
@@ -1501,11 +1498,9 @@ void cmComputeLinkInformation::PrintLinkPolicyDiagnosis(std::ostream& os)
   // List the paths old behavior is adding.
   os << "and other libraries with known full path:\n";
   std::set<std::string> emitted;
-  for (std::vector<std::string>::const_iterator i =
-         this->OldLinkDirItems.begin();
-       i != this->OldLinkDirItems.end(); ++i) {
-    if (emitted.insert(cmSystemTools::GetFilenamePath(*i)).second) {
-      os << "  " << *i << "\n";
+  for (std::string const& i : this->OldLinkDirItems) {
+    if (emitted.insert(cmSystemTools::GetFilenamePath(i)).second) {
+      os << "  " << i << "\n";
     }
   }
 
@@ -1532,9 +1527,8 @@ void cmComputeLinkInformation::LoadImplicitLinkInfo()
   // and add them to the set
   if (const char* libraryArch =
         this->Makefile->GetDefinition("CMAKE_LIBRARY_ARCHITECTURE")) {
-    for (std::vector<std::string>::const_iterator i = implicitDirVec.begin();
-         i != implicitDirVec.end(); ++i) {
-      this->ImplicitLinkDirs.insert(*i + "/" + libraryArch);
+    for (std::string const& i : implicitDirVec) {
+      this->ImplicitLinkDirs.insert(i + "/" + libraryArch);
     }
   }
 
@@ -1561,11 +1555,9 @@ void cmComputeLinkInformation::LoadImplicitLinkInfo()
   }
 
   // Store implicit link libraries.
-  for (std::vector<std::string>::const_iterator i = implicitLibVec.begin();
-       i != implicitLibVec.end(); ++i) {
+  for (std::string const& item : implicitLibVec) {
     // Items starting in '-' but not '-l' are flags, not libraries,
     // and should not be filtered by this implicit list.
-    std::string const& item = *i;
     if (item[0] != '-' || item[1] == 'l') {
       this->ImplicitLinkLibs.insert(item);
     }
@@ -1611,7 +1603,7 @@ void cmComputeLinkInformation::AddLibraryRuntimeInfo(
   // Try to get the soname of the library.  Only files with this name
   // could possibly conflict.
   std::string soName = target->GetSOName(this->Config);
-  const char* soname = soName.empty() ? CM_NULLPTR : soName.c_str();
+  const char* soname = soName.empty() ? nullptr : soName.c_str();
 
   // Include this library in the runtime path ordering.
   this->OrderRuntimeSearchPath->AddRuntimeLibrary(fullPath, soname);
@@ -1682,10 +1674,9 @@ static void cmCLI_ExpandListUnique(const char* str,
 {
   std::vector<std::string> tmp;
   cmSystemTools::ExpandListArgument(str, tmp);
-  for (std::vector<std::string>::iterator i = tmp.begin(); i != tmp.end();
-       ++i) {
-    if (emitted.insert(*i).second) {
-      out.push_back(*i);
+  for (std::string const& i : tmp) {
+    if (emitted.insert(i).second) {
+      out.push_back(i);
     }
   }
 }
@@ -1725,19 +1716,24 @@ void cmComputeLinkInformation::GetRPath(std::vector<std::string>& runtimeDirs,
     }
   }
   if (use_build_rpath || use_link_rpath) {
-    std::string rootPath = this->Makefile->GetSafeDefinition("CMAKE_SYSROOT");
+    std::string rootPath;
+    if (const char* sysrootLink =
+          this->Makefile->GetDefinition("CMAKE_SYSROOT_LINK")) {
+      rootPath = sysrootLink;
+    } else {
+      rootPath = this->Makefile->GetSafeDefinition("CMAKE_SYSROOT");
+    }
     const char* stagePath =
       this->Makefile->GetDefinition("CMAKE_STAGING_PREFIX");
     const char* installPrefix =
       this->Makefile->GetSafeDefinition("CMAKE_INSTALL_PREFIX");
     cmSystemTools::ConvertToUnixSlashes(rootPath);
     std::vector<std::string> const& rdirs = this->GetRuntimeSearchPath();
-    for (std::vector<std::string>::const_iterator ri = rdirs.begin();
-         ri != rdirs.end(); ++ri) {
+    for (std::string const& ri : rdirs) {
       // Put this directory in the rpath if using build-tree rpath
       // support or if using the link path as an rpath.
       if (use_build_rpath) {
-        std::string d = *ri;
+        std::string d = ri;
         if (!rootPath.empty() && d.find(rootPath) == 0) {
           d = d.substr(rootPath.size());
         } else if (stagePath && *stagePath && d.find(stagePath) == 0) {
@@ -1755,11 +1751,11 @@ void cmComputeLinkInformation::GetRPath(std::vector<std::string>& runtimeDirs,
         const char* topSourceDir = this->CMakeInstance->GetHomeDirectory();
         const char* topBinaryDir =
           this->CMakeInstance->GetHomeOutputDirectory();
-        if (!cmSystemTools::ComparePath(*ri, topSourceDir) &&
-            !cmSystemTools::ComparePath(*ri, topBinaryDir) &&
-            !cmSystemTools::IsSubDirectory(*ri, topSourceDir) &&
-            !cmSystemTools::IsSubDirectory(*ri, topBinaryDir)) {
-          std::string d = *ri;
+        if (!cmSystemTools::ComparePath(ri, topSourceDir) &&
+            !cmSystemTools::ComparePath(ri, topBinaryDir) &&
+            !cmSystemTools::IsSubDirectory(ri, topSourceDir) &&
+            !cmSystemTools::IsSubDirectory(ri, topBinaryDir)) {
+          std::string d = ri;
           if (!rootPath.empty() && d.find(rootPath) == 0) {
             d = d.substr(rootPath.size());
           } else if (stagePath && *stagePath && d.find(stagePath) == 0) {
@@ -1782,12 +1778,11 @@ void cmComputeLinkInformation::GetRPath(std::vector<std::string>& runtimeDirs,
   {
     cmGeneratorTarget::LinkClosure const* lc =
       this->Target->GetLinkClosure(this->Config);
-    for (std::vector<std::string>::const_iterator li = lc->Languages.begin();
-         li != lc->Languages.end(); ++li) {
+    for (std::string const& li : lc->Languages) {
       std::string useVar =
-        "CMAKE_" + *li + "_USE_IMPLICIT_LINK_DIRECTORIES_IN_RUNTIME_PATH";
+        "CMAKE_" + li + "_USE_IMPLICIT_LINK_DIRECTORIES_IN_RUNTIME_PATH";
       if (this->Makefile->IsOn(useVar)) {
-        std::string dirVar = "CMAKE_" + *li + "_IMPLICIT_LINK_DIRECTORIES";
+        std::string dirVar = "CMAKE_" + li + "_IMPLICIT_LINK_DIRECTORIES";
         if (const char* dirs = this->Makefile->GetDefinition(dirVar)) {
           cmCLI_ExpandListUnique(dirs, runtimeDirs, emitted);
         }

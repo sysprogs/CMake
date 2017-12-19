@@ -4,7 +4,7 @@
 
 #include "cmSystemTools.h"
 #include "cmVisualStudioSlnData.h"
-#include <cmsys/FStream.hxx>
+#include "cmsys/FStream.hxx"
 
 #include <cassert>
 #include <stack>
@@ -329,7 +329,7 @@ bool cmVisualStudioSlnParser::State::Process(
     case FileStateIgnore:
       if (line.GetTag() == this->EndIgnoreTag) {
         this->Stack.pop();
-        this->EndIgnoreTag = "";
+        this->EndIgnoreTag.clear();
       }
       break;
     default:

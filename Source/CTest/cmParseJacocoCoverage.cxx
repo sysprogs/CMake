@@ -1,15 +1,13 @@
 #include "cmParseJacocoCoverage.h"
 
-#include <cmConfigure.h>
-
 #include "cmCTest.h"
 #include "cmCTestCoverageHandler.h"
 #include "cmSystemTools.h"
 #include "cmXMLParser.h"
 
-#include <cmsys/Directory.hxx>
-#include <cmsys/FStream.hxx>
-#include <cmsys/Glob.hxx>
+#include "cmsys/Directory.hxx"
+#include "cmsys/FStream.hxx"
+#include "cmsys/Glob.hxx"
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,25 +18,25 @@ public:
     : CTest(ctest)
     , Coverage(cont)
   {
-    this->FilePath = "";
-    this->PackagePath = "";
-    this->PackageName = "";
+    this->FilePath.clear();
+    this->PackagePath.clear();
+    this->PackageName.clear();
   }
 
-  ~XMLParser() CM_OVERRIDE {}
+  ~XMLParser() override {}
 
 protected:
-  void EndElement(const std::string& /*name*/) CM_OVERRIDE {}
+  void EndElement(const std::string& /*name*/) override {}
 
-  void StartElement(const std::string& name, const char** atts) CM_OVERRIDE
+  void StartElement(const std::string& name, const char** atts) override
   {
     if (name == "package") {
       this->PackageName = atts[1];
-      this->PackagePath = "";
+      this->PackagePath.clear();
     } else if (name == "sourcefile") {
       std::string fileName = atts[1];
 
-      if (this->PackagePath == "") {
+      if (this->PackagePath.empty()) {
         if (!this->FindPackagePath(fileName)) {
           cmCTestLog(this->CTest, ERROR_MESSAGE, "Cannot find file: "
                        << this->PackageName << "/" << fileName << std::endl);
@@ -121,9 +119,8 @@ protected:
     }
 
     // Check if any of the locations found match our package.
-    for (std::vector<std::string>::const_iterator fi = files.begin();
-         fi != files.end(); ++fi) {
-      std::string dir = cmsys::SystemTools::GetParentDirectory(*fi);
+    for (std::string const& f : files) {
+      std::string dir = cmsys::SystemTools::GetParentDirectory(f);
       if (cmsys::SystemTools::StringEndsWith(dir, this->PackageName.c_str())) {
         cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                            "Found package directory for " << fileName << ": "

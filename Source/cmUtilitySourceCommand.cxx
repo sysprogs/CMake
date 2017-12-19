@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "cmMakefile.h"
-#include "cmPolicies.h"
 #include "cmState.h"
 #include "cmStateTypes.h"
 #include "cmSystemTools.h"
@@ -16,11 +15,6 @@ class cmExecutionStatus;
 bool cmUtilitySourceCommand::InitialPass(std::vector<std::string> const& args,
                                          cmExecutionStatus&)
 {
-  if (this->Disallowed(
-        cmPolicies::CMP0034,
-        "The utility_source command should not be called; see CMP0034.")) {
-    return true;
-  }
   if (args.size() < 3) {
     this->SetError("called with incorrect number of arguments");
     return false;
@@ -29,7 +23,7 @@ bool cmUtilitySourceCommand::InitialPass(std::vector<std::string> const& args,
   std::vector<std::string>::const_iterator arg = args.begin();
 
   // The first argument is the cache entry name.
-  std::string cacheEntry = *arg++;
+  std::string const& cacheEntry = *arg++;
   const char* cacheValue = this->Makefile->GetDefinition(cacheEntry);
   // If it exists already and appears up to date then we are done.  If
   // the string contains "(IntDir)" but that is not the
@@ -39,7 +33,7 @@ bool cmUtilitySourceCommand::InitialPass(std::vector<std::string> const& args,
 
   bool haveCacheValue = false;
   if (this->Makefile->IsOn("CMAKE_CROSSCOMPILING")) {
-    haveCacheValue = (cacheValue != CM_NULLPTR);
+    haveCacheValue = (cacheValue != nullptr);
     if (!haveCacheValue) {
       std::string msg = "UTILITY_SOURCE is used in cross compiling mode for ";
       msg += cacheEntry;
@@ -51,7 +45,7 @@ bool cmUtilitySourceCommand::InitialPass(std::vector<std::string> const& args,
   } else {
     cmState* state = this->Makefile->GetState();
     haveCacheValue =
-      (cacheValue && (strstr(cacheValue, "(IntDir)") == CM_NULLPTR ||
+      (cacheValue && (strstr(cacheValue, "(IntDir)") == nullptr ||
                       (intDir && strcmp(intDir, "$(IntDir)") == 0)) &&
        (state->GetCacheMajorVersion() != 0 &&
         state->GetCacheMinorVersion() != 0));
@@ -63,11 +57,11 @@ bool cmUtilitySourceCommand::InitialPass(std::vector<std::string> const& args,
 
   // The second argument is the utility's executable name, which will be
   // needed later.
-  std::string utilityName = *arg++;
+  std::string const& utilityName = *arg++;
 
   // The third argument specifies the relative directory of the source
   // of the utility.
-  std::string relativeSource = *arg++;
+  std::string const& relativeSource = *arg++;
   std::string utilitySource = this->Makefile->GetCurrentSourceDirectory();
   utilitySource = utilitySource + "/" + relativeSource;
 

@@ -17,9 +17,9 @@
 #include "cmTargetExport.h"
 #include "cmake.h"
 
+#include "cmsys/FStream.hxx"
 #include <assert.h>
-#include <cm_auto_ptr.hxx>
-#include <cmsys/FStream.hxx>
+#include <memory> // IWYU pragma: keep
 #include <sstream>
 #include <string.h>
 #include <utility>
@@ -65,18 +65,17 @@ const char* cmExportFileGenerator::GetMainExportFileName() const
 bool cmExportFileGenerator::GenerateImportFile()
 {
   // Open the output file to generate it.
-  CM_AUTO_PTR<cmsys::ofstream> foutPtr;
+  std::unique_ptr<cmsys::ofstream> foutPtr;
   if (this->AppendMode) {
     // Open for append.
-    CM_AUTO_PTR<cmsys::ofstream> ap(
-      new cmsys::ofstream(this->MainImportFile.c_str(), std::ios::app));
-    foutPtr = ap;
+    foutPtr = cm::make_unique<cmsys::ofstream>(this->MainImportFile.c_str(),
+                                               std::ios::app);
   } else {
     // Generate atomically and with copy-if-different.
-    CM_AUTO_PTR<cmGeneratedFileStream> ap(
+    std::unique_ptr<cmGeneratedFileStream> ap(
       new cmGeneratedFileStream(this->MainImportFile.c_str(), true));
     ap->SetCopyIfDifferent(true);
-    foutPtr = ap;
+    foutPtr = std::move(ap);
   }
   if (!foutPtr.get() || !*foutPtr) {
     std::string se = cmSystemTools::GetLastSystemError();
@@ -137,7 +136,7 @@ void cmExportFileGenerator::PopulateInterfaceProperty(
   if (input) {
     if (!*input) {
       // Set to empty
-      properties[outputName] = "";
+      properties[outputName].clear();
       return;
     }
 
@@ -206,9 +205,8 @@ static bool checkInterfaceDirs(const std::string& prepro,
 
   bool hadFatalError = false;
 
-  for (std::vector<std::string>::iterator li = parts.begin();
-       li != parts.end(); ++li) {
-    size_t genexPos = cmGeneratorExpression::Find(*li);
+  for (std::string const& li : parts) {
+    size_t genexPos = cmGeneratorExpression::Find(li);
     if (genexPos == 0) {
       continue;
     }
@@ -233,20 +231,20 @@ static bool checkInterfaceDirs(const std::string& prepro,
         hadFatalError = true;
       }
     }
-    if (cmHasLiteralPrefix(li->c_str(), "${_IMPORT_PREFIX}")) {
+    if (cmHasLiteralPrefix(li.c_str(), "${_IMPORT_PREFIX}")) {
       continue;
     }
-    if (!cmSystemTools::FileIsFullPath(li->c_str())) {
+    if (!cmSystemTools::FileIsFullPath(li.c_str())) {
       /* clang-format off */
       e << "Target \"" << target->GetName() << "\" " << prop <<
            " property contains relative path:\n"
-           "  \"" << *li << "\"";
+           "  \"" << li << "\"";
       /* clang-format on */
       target->GetLocalGenerator()->IssueMessage(messageType, e.str());
     }
-    bool inBinary = isSubDirectory(li->c_str(), topBinaryDir);
-    bool inSource = isSubDirectory(li->c_str(), topSourceDir);
-    if (isSubDirectory(li->c_str(), installDir)) {
+    bool inBinary = isSubDirectory(li.c_str(), topBinaryDir);
+    bool inSource = isSubDirectory(li.c_str(), topSourceDir);
+    if (isSubDirectory(li.c_str(), installDir)) {
       // The include directory is inside the install tree.  If the
       // install tree is not inside the source tree or build tree then
       // fall through to the checks below that the include directory is not
@@ -261,7 +259,7 @@ static bool checkInterfaceDirs(const std::string& prepro,
             case cmPolicies::WARN: {
               std::ostringstream s;
               s << cmPolicies::GetPolicyWarning(cmPolicies::CMP0052) << "\n";
-              s << "Directory:\n    \"" << *li
+              s << "Directory:\n    \"" << li
                 << "\"\nin "
                    "INTERFACE_INCLUDE_DIRECTORIES of target \""
                 << target->GetName() << "\" is a subdirectory of the install "
@@ -273,6 +271,7 @@ static bool checkInterfaceDirs(const std::string& prepro,
                 << std::endl;
               target->GetLocalGenerator()->IssueMessage(cmake::AUTHOR_WARNING,
                                                         s.str());
+              CM_FALLTHROUGH;
             }
             case cmPolicies::OLD:
               shouldContinue = true;
@@ -292,7 +291,7 @@ static bool checkInterfaceDirs(const std::string& prepro,
       /* clang-format off */
       e << "Target \"" << target->GetName() << "\" " << prop <<
            " property contains path:\n"
-           "  \"" << *li << "\"\nwhich is prefixed in the build directory.";
+           "  \"" << li << "\"\nwhich is prefixed in the build directory.";
       /* clang-format on */
       target->GetLocalGenerator()->IssueMessage(messageType, e.str());
     }
@@ -301,7 +300,7 @@ static bool checkInterfaceDirs(const std::string& prepro,
         e << "Target \"" << target->GetName() << "\" " << prop
           << " property contains path:\n"
              "  \""
-          << *li << "\"\nwhich is prefixed in the source directory.";
+          << li << "\"\nwhich is prefixed in the source directory.";
         target->GetLocalGenerator()->IssueMessage(messageType, e.str());
       }
     }
@@ -313,17 +312,16 @@ static void prefixItems(std::string& exportDirs)
 {
   std::vector<std::string> entries;
   cmGeneratorExpression::Split(exportDirs, entries);
-  exportDirs = "";
+  exportDirs.clear();
   const char* sep = "";
-  for (std::vector<std::string>::const_iterator ei = entries.begin();
-       ei != entries.end(); ++ei) {
+  for (std::string const& e : entries) {
     exportDirs += sep;
     sep = ";";
-    if (!cmSystemTools::FileIsFullPath(ei->c_str()) &&
-        ei->find("${_IMPORT_PREFIX}") == std::string::npos) {
+    if (!cmSystemTools::FileIsFullPath(e.c_str()) &&
+        e.find("${_IMPORT_PREFIX}") == std::string::npos) {
       exportDirs += "${_IMPORT_PREFIX}/";
     }
-    exportDirs += *ei;
+    exportDirs += e;
   }
 }
 
@@ -342,7 +340,7 @@ void cmExportFileGenerator::PopulateSourcesInterface(
   }
 
   if (!*input) {
-    properties[propName] = "";
+    properties[propName].clear();
     return;
   }
 
@@ -373,7 +371,7 @@ void cmExportFileGenerator::PopulateIncludeDirectoriesInterface(
   std::string dirs = cmGeneratorExpression::Preprocess(
     tei->InterfaceIncludeDirectories, preprocessRule, true);
   this->ReplaceInstallPrefix(dirs);
-  CM_AUTO_PTR<cmCompiledGeneratorExpression> cge = ge.Parse(dirs);
+  std::unique_ptr<cmCompiledGeneratorExpression> cge = ge.Parse(dirs);
   std::string exportDirs =
     cge->Evaluate(target->GetLocalGenerator(), "", false, target);
 
@@ -395,7 +393,7 @@ void cmExportFileGenerator::PopulateIncludeDirectoriesInterface(
   }
   if ((input && !*input) && exportDirs.empty()) {
     // Set to empty
-    properties[propName] = "";
+    properties[propName].clear();
     return;
   }
 
@@ -441,6 +439,11 @@ void getCompatibleInterfaceProperties(cmGeneratorTarget* target,
                                       std::set<std::string>& ifaceProperties,
                                       const std::string& config)
 {
+  if (target->GetType() == cmStateEnums::OBJECT_LIBRARY) {
+    // object libraries have no link information, so nothing to compute
+    return;
+  }
+
   cmComputeLinkInformation* info = target->GetLinkInformation(config);
 
   if (!info) {
@@ -455,18 +458,17 @@ void getCompatibleInterfaceProperties(cmGeneratorTarget* target,
 
   const cmComputeLinkInformation::ItemVector& deps = info->GetItems();
 
-  for (cmComputeLinkInformation::ItemVector::const_iterator li = deps.begin();
-       li != deps.end(); ++li) {
-    if (!li->Target) {
+  for (auto const& dep : deps) {
+    if (!dep.Target) {
       continue;
     }
-    getPropertyContents(li->Target, "COMPATIBLE_INTERFACE_BOOL",
+    getPropertyContents(dep.Target, "COMPATIBLE_INTERFACE_BOOL",
                         ifaceProperties);
-    getPropertyContents(li->Target, "COMPATIBLE_INTERFACE_STRING",
+    getPropertyContents(dep.Target, "COMPATIBLE_INTERFACE_STRING",
                         ifaceProperties);
-    getPropertyContents(li->Target, "COMPATIBLE_INTERFACE_NUMBER_MIN",
+    getPropertyContents(dep.Target, "COMPATIBLE_INTERFACE_NUMBER_MIN",
                         ifaceProperties);
-    getPropertyContents(li->Target, "COMPATIBLE_INTERFACE_NUMBER_MAX",
+    getPropertyContents(dep.Target, "COMPATIBLE_INTERFACE_NUMBER_MAX",
                         ifaceProperties);
   }
 }
@@ -498,15 +500,13 @@ void cmExportFileGenerator::PopulateCompatibleInterfaceProperties(
     std::vector<std::string> configNames;
     gtarget->Target->GetMakefile()->GetConfigurations(configNames);
 
-    for (std::vector<std::string>::const_iterator ci = configNames.begin();
-         ci != configNames.end(); ++ci) {
-      getCompatibleInterfaceProperties(gtarget, ifaceProperties, *ci);
+    for (std::string const& cn : configNames) {
+      getCompatibleInterfaceProperties(gtarget, ifaceProperties, cn);
     }
   }
 
-  for (std::set<std::string>::const_iterator it = ifaceProperties.begin();
-       it != ifaceProperties.end(); ++it) {
-    this->PopulateInterfaceProperty("INTERFACE_" + *it, gtarget, properties);
+  for (std::string const& ip : ifaceProperties) {
+    this->PopulateInterfaceProperty("INTERFACE_" + ip, gtarget, properties);
   }
 }
 
@@ -518,10 +518,9 @@ void cmExportFileGenerator::GenerateInterfaceProperties(
     std::string targetName = this->Namespace;
     targetName += target->GetExportName();
     os << "set_target_properties(" << targetName << " PROPERTIES\n";
-    for (ImportPropertyMap::const_iterator pi = properties.begin();
-         pi != properties.end(); ++pi) {
-      os << "  " << pi->first << " " << cmExportFileGeneratorEscape(pi->second)
-         << "\n";
+    for (auto const& property : properties) {
+      os << "  " << property.first << " "
+         << cmExportFileGeneratorEscape(property.second) << "\n";
     }
     os << ")\n\n";
   }
@@ -565,15 +564,14 @@ void cmExportFileGenerator::ResolveTargetsInGeneratorExpressions(
   cmGeneratorExpression::Split(input, parts);
 
   std::string sep;
-  input = "";
-  for (std::vector<std::string>::iterator li = parts.begin();
-       li != parts.end(); ++li) {
-    if (cmGeneratorExpression::Find(*li) == std::string::npos) {
-      this->AddTargetNamespace(*li, target, missingTargets);
+  input.clear();
+  for (std::string& li : parts) {
+    if (cmGeneratorExpression::Find(li) == std::string::npos) {
+      this->AddTargetNamespace(li, target, missingTargets);
     } else {
-      this->ResolveTargetsInGeneratorExpression(*li, target, missingTargets);
+      this->ResolveTargetsInGeneratorExpression(li, target, missingTargets);
     }
-    input += sep + *li;
+    input += sep + li;
     sep = ";";
   }
 }
@@ -585,16 +583,17 @@ void cmExportFileGenerator::ResolveTargetsInGeneratorExpression(
   std::string::size_type pos = 0;
   std::string::size_type lastPos = pos;
 
-  while ((pos = input.find("$<TARGET_PROPERTY:", lastPos)) != input.npos) {
+  while ((pos = input.find("$<TARGET_PROPERTY:", lastPos)) !=
+         std::string::npos) {
     std::string::size_type nameStartPos =
       pos + sizeof("$<TARGET_PROPERTY:") - 1;
     std::string::size_type closePos = input.find('>', nameStartPos);
     std::string::size_type commaPos = input.find(',', nameStartPos);
     std::string::size_type nextOpenPos = input.find("$<", nameStartPos);
-    if (commaPos == input.npos     // Implied 'this' target
-        || closePos == input.npos  // Imcomplete expression.
-        || closePos < commaPos     // Implied 'this' target
-        || nextOpenPos < commaPos) // Non-literal
+    if (commaPos == std::string::npos    // Implied 'this' target
+        || closePos == std::string::npos // Imcomplete expression.
+        || closePos < commaPos           // Implied 'this' target
+        || nextOpenPos < commaPos)       // Non-literal
     {
       lastPos = nameStartPos;
       continue;
@@ -612,15 +611,15 @@ void cmExportFileGenerator::ResolveTargetsInGeneratorExpression(
   std::string errorString;
   pos = 0;
   lastPos = pos;
-  while ((pos = input.find("$<TARGET_NAME:", lastPos)) != input.npos) {
+  while ((pos = input.find("$<TARGET_NAME:", lastPos)) != std::string::npos) {
     std::string::size_type nameStartPos = pos + sizeof("$<TARGET_NAME:") - 1;
     std::string::size_type endPos = input.find('>', nameStartPos);
-    if (endPos == input.npos) {
+    if (endPos == std::string::npos) {
       errorString = "$<TARGET_NAME:...> expression incomplete";
       break;
     }
     std::string targetName = input.substr(nameStartPos, endPos - nameStartPos);
-    if (targetName.find("$<") != input.npos) {
+    if (targetName.find("$<") != std::string::npos) {
       errorString = "$<TARGET_NAME:...> requires its parameter to be a "
                     "literal.";
       break;
@@ -637,10 +636,10 @@ void cmExportFileGenerator::ResolveTargetsInGeneratorExpression(
   pos = 0;
   lastPos = pos;
   while (errorString.empty() &&
-         (pos = input.find("$<LINK_ONLY:", lastPos)) != input.npos) {
+         (pos = input.find("$<LINK_ONLY:", lastPos)) != std::string::npos) {
     std::string::size_type nameStartPos = pos + sizeof("$<LINK_ONLY:") - 1;
     std::string::size_type endPos = input.find('>', nameStartPos);
-    if (endPos == input.npos) {
+    if (endPos == std::string::npos) {
       errorString = "$<LINK_ONLY:...> expression incomplete";
       break;
     }
@@ -713,7 +712,7 @@ void cmExportFileGenerator::SetImportLinkInterface(
   }
 
   if (!*propContent) {
-    properties["IMPORTED_LINK_INTERFACE_LIBRARIES" + suffix] = "";
+    properties["IMPORTED_LINK_INTERFACE_LIBRARIES" + suffix].clear();
     return;
   }
 
@@ -790,13 +789,12 @@ void cmExportFileGenerator::SetImportLinkProperty(
   // Construct the property value.
   std::string link_entries;
   const char* sep = "";
-  for (typename std::vector<T>::const_iterator li = entries.begin();
-       li != entries.end(); ++li) {
+  for (T const& l : entries) {
     // Separate this from the previous entry.
     link_entries += sep;
     sep = ";";
 
-    std::string temp = *li;
+    std::string temp = l;
     this->AddTargetNamespace(temp, target, missingTargets);
     link_entries += temp;
   }
@@ -927,6 +925,9 @@ void cmExportFileGenerator::GenerateImportTargetCode(
     case cmStateEnums::UNKNOWN_LIBRARY:
       os << "add_library(" << targetName << " UNKNOWN IMPORTED)\n";
       break;
+    case cmStateEnums::OBJECT_LIBRARY:
+      os << "add_library(" << targetName << " OBJECT IMPORTED)\n";
+      break;
     case cmStateEnums::INTERFACE_LIBRARY:
       os << "add_library(" << targetName << " INTERFACE IMPORTED)\n";
       break;
@@ -978,10 +979,9 @@ void cmExportFileGenerator::GenerateImportPropertyCode(
   }
   os << ")\n";
   os << "set_target_properties(" << targetName << " PROPERTIES\n";
-  for (ImportPropertyMap::const_iterator pi = properties.begin();
-       pi != properties.end(); ++pi) {
-    os << "  " << pi->first << " " << cmExportFileGeneratorEscape(pi->second)
-       << "\n";
+  for (auto const& property : properties) {
+    os << "  " << property.first << " "
+       << cmExportFileGeneratorEscape(property.second) << "\n";
   }
   os << "  )\n"
      << "\n";
@@ -1005,9 +1005,9 @@ void cmExportFileGenerator::GenerateMissingTargetsCheckCode(
         "foreach(_target ";
   /* clang-format on */
   std::set<std::string> emitted;
-  for (unsigned int i = 0; i < missingTargets.size(); ++i) {
-    if (emitted.insert(missingTargets[i]).second) {
-      os << "\"" << missingTargets[i] << "\" ";
+  for (std::string const& missingTarget : missingTargets) {
+    if (emitted.insert(missingTarget).second) {
+      os << "\"" << missingTarget << "\" ";
     }
   }
   /* clang-format off */
@@ -1084,9 +1084,8 @@ void cmExportFileGenerator::GenerateImportedFileChecksCode(
         "list(APPEND _IMPORT_CHECK_FILES_FOR_"
      << targetName << " ";
 
-  for (std::set<std::string>::const_iterator li = importedLocations.begin();
-       li != importedLocations.end(); ++li) {
-    ImportPropertyMap::const_iterator pi = properties.find(*li);
+  for (std::string const& li : importedLocations) {
+    ImportPropertyMap::const_iterator pi = properties.find(li);
     if (pi != properties.end()) {
       os << cmExportFileGeneratorEscape(pi->second) << " ";
     }

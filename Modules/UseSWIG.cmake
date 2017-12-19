@@ -82,10 +82,6 @@ macro(SWIG_MODULE_INITIALIZE name language)
     set(SWIG_MODULE_${name}_REAL_NAME "_${name}")
   elseif("x${SWIG_MODULE_${name}_LANGUAGE}" STREQUAL "xPERL")
     set(SWIG_MODULE_${name}_EXTRA_FLAGS "-shadow")
-  elseif("x${SWIG_MODULE_${name}_LANGUAGE}" STREQUAL "xCSHARP")
-    # This makes sure that the name used in the generated DllImport
-    # matches the library name created by CMake
-    set(SWIG_MODULE_${name}_EXTRA_FLAGS "-dllimport;${name}")
   endif()
 endmacro()
 
@@ -125,8 +121,10 @@ macro(SWIG_GET_EXTRA_OUTPUT_FILES language outfiles generatedpath infile)
 
   endif()
   foreach(it ${SWIG_${language}_EXTRA_FILE_EXTENSIONS})
-    set(${outfiles} ${${outfiles}}
-      "${generatedpath}/${SWIG_GET_EXTRA_OUTPUT_FILES_module_basename}${it}")
+    set(extra_file "${generatedpath}/${SWIG_GET_EXTRA_OUTPUT_FILES_module_basename}${it}")
+    list(APPEND ${outfiles} ${extra_file})
+    # Treat extra outputs as plain files regardless of language.
+    set_property(SOURCE "${extra_file}" PROPERTY LANGUAGE "")
   endforeach()
 endmacro()
 
@@ -191,6 +189,13 @@ macro(SWIG_ADD_SOURCE_TO_MODULE name outfiles infile)
   # default is c, so add c++ flag if it is c++
   if(swig_source_file_cplusplus)
     set(swig_special_flags ${swig_special_flags} "-c++")
+  endif()
+  if("x${SWIG_MODULE_${name}_LANGUAGE}" STREQUAL "xCSHARP")
+    if(NOT ";${swig_source_file_flags};${CMAKE_SWIG_FLAGS};" MATCHES ";-dllimport;")
+      # This makes sure that the name used in the generated DllImport
+      # matches the library name created by CMake
+      set(SWIG_MODULE_${name}_EXTRA_FLAGS "-dllimport;${name}")
+    endif()
   endif()
   set(swig_extra_flags)
   if(SWIG_MODULE_${name}_EXTRA_FLAGS)
@@ -326,6 +331,9 @@ macro(SWIG_ADD_LIBRARY name)
     if (APPLE)
       set_target_properties (${SWIG_MODULE_${name}_REAL_NAME} PROPERTIES SUFFIX ".bundle")
     endif ()
+  else()
+    # assume empty prefix because we expect the module to be dynamically loaded
+    set_target_properties (${SWIG_MODULE_${name}_REAL_NAME} PROPERTIES PREFIX "")
   endif ()
 endmacro()
 

@@ -8,17 +8,17 @@
 #include "cmMakefile.h"
 #include "cmOutputConverter.h"
 #include "cmSystemTools.h"
-#include "cm_auto_ptr.hxx"
 #include "cmake.h"
+
+#include <memory> // IWYU pragma: keep
 
 static std::string cmIfCommandError(
   std::vector<cmExpandedCommandArgument> const& args)
 {
   std::string err = "given arguments:\n ";
-  for (std::vector<cmExpandedCommandArgument>::const_iterator i = args.begin();
-       i != args.end(); ++i) {
+  for (cmExpandedCommandArgument const& i : args) {
     err += " ";
-    err += cmOutputConverter::EscapeForCMake(i->GetValue());
+    err += cmOutputConverter::EscapeForCMake(i.GetValue());
   }
   err += "\n";
   return err;
@@ -37,7 +37,8 @@ bool cmIfFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
     // if this is the endif for this if statement, then start executing
     if (!this->ScopeDepth) {
       // Remove the function blocker for this scope or bail.
-      CM_AUTO_PTR<cmFunctionBlocker> fb(mf.RemoveFunctionBlocker(this, lff));
+      std::unique_ptr<cmFunctionBlocker> fb(
+        mf.RemoveFunctionBlocker(this, lff));
       if (!fb.get()) {
         return false;
       }
@@ -45,51 +46,68 @@ bool cmIfFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
       // execute the functions for the true parts of the if statement
       cmExecutionStatus status;
       int scopeDepth = 0;
-      for (unsigned int c = 0; c < this->Functions.size(); ++c) {
+      for (cmListFileFunction const& func : this->Functions) {
         // keep track of scope depth
-        if (!cmSystemTools::Strucmp(this->Functions[c].Name.c_str(), "if")) {
+        if (!cmSystemTools::Strucmp(func.Name.c_str(), "if")) {
           scopeDepth++;
         }
-        if (!cmSystemTools::Strucmp(this->Functions[c].Name.c_str(),
-                                    "endif")) {
+        if (!cmSystemTools::Strucmp(func.Name.c_str(), "endif")) {
           scopeDepth--;
         }
         // watch for our state change
         if (scopeDepth == 0 &&
-            !cmSystemTools::Strucmp(this->Functions[c].Name.c_str(), "else")) {
+            !cmSystemTools::Strucmp(func.Name.c_str(), "else")) {
+
+          if (this->ElseSeen) {
+            cmListFileBacktrace bt = mf.GetBacktrace(func);
+            mf.GetCMakeInstance()->IssueMessage(
+              cmake::FATAL_ERROR,
+              "A duplicate ELSE command was found inside an IF block.", bt);
+            cmSystemTools::SetFatalErrorOccured();
+            return true;
+          }
+
           this->IsBlocking = this->HasRun;
           this->HasRun = true;
+          this->ElseSeen = true;
 
           // if trace is enabled, print a (trivially) evaluated "else"
           // statement
           if (!this->IsBlocking && mf.GetCMakeInstance()->GetTrace()) {
-            mf.PrintCommandTrace(this->Functions[c]);
+            mf.PrintCommandTrace(func);
           }
         } else if (scopeDepth == 0 &&
-                   !cmSystemTools::Strucmp(this->Functions[c].Name.c_str(),
-                                           "elseif")) {
+                   !cmSystemTools::Strucmp(func.Name.c_str(), "elseif")) {
+          if (this->ElseSeen) {
+            cmListFileBacktrace bt = mf.GetBacktrace(func);
+            mf.GetCMakeInstance()->IssueMessage(
+              cmake::FATAL_ERROR,
+              "An ELSEIF command was found after an ELSE command.", bt);
+            cmSystemTools::SetFatalErrorOccured();
+            return true;
+          }
+
           if (this->HasRun) {
             this->IsBlocking = true;
           } else {
             // if trace is enabled, print the evaluated "elseif" statement
             if (mf.GetCMakeInstance()->GetTrace()) {
-              mf.PrintCommandTrace(this->Functions[c]);
+              mf.PrintCommandTrace(func);
             }
 
             std::string errorString;
 
             std::vector<cmExpandedCommandArgument> expandedArguments;
-            mf.ExpandArguments(this->Functions[c].Arguments,
-                               expandedArguments);
+            mf.ExpandArguments(func.Arguments, expandedArguments);
 
             cmake::MessageType messType;
 
             cmListFileContext conditionContext =
               cmListFileContext::FromCommandContext(
-                this->Functions[c], this->GetStartingContext().FilePath);
+                func, this->GetStartingContext().FilePath);
 
-            cmConditionEvaluator conditionEvaluator(
-              mf, conditionContext, mf.GetBacktrace(this->Functions[c]));
+            cmConditionEvaluator conditionEvaluator(mf, conditionContext,
+                                                    mf.GetBacktrace(func));
 
             bool isTrue = conditionEvaluator.IsTrue(expandedArguments,
                                                     errorString, messType);
@@ -97,7 +115,7 @@ bool cmIfFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
             if (!errorString.empty()) {
               std::string err = cmIfCommandError(expandedArguments);
               err += errorString;
-              cmListFileBacktrace bt = mf.GetBacktrace(this->Functions[c]);
+              cmListFileBacktrace bt = mf.GetBacktrace(func);
               mf.GetCMakeInstance()->IssueMessage(messType, err, bt);
               if (messType == cmake::FATAL_ERROR) {
                 cmSystemTools::SetFatalErrorOccured();
@@ -115,17 +133,17 @@ bool cmIfFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
         // should we execute?
         else if (!this->IsBlocking) {
           status.Clear();
-          mf.ExecuteCommand(this->Functions[c], status);
+          mf.ExecuteCommand(func, status);
           if (status.GetReturnInvoked()) {
-            inStatus.SetReturnInvoked(true);
+            inStatus.SetReturnInvoked();
             return true;
           }
           if (status.GetBreakInvoked()) {
-            inStatus.SetBreakInvoked(true);
+            inStatus.SetBreakInvoked();
             return true;
           }
           if (status.GetContinueInvoked()) {
-            inStatus.SetContinueInvoked(true);
+            inStatus.SetContinueInvoked();
             return true;
           }
         }

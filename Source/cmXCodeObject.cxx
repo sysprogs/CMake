@@ -42,8 +42,8 @@ cmXCodeObject::~cmXCodeObject()
 cmXCodeObject::cmXCodeObject(PBXType ptype, Type type)
 {
   this->Version = 15;
-  this->Target = 0;
-  this->Object = 0;
+  this->Target = nullptr;
+  this->Object = nullptr;
 
   this->IsA = ptype;
 
@@ -71,7 +71,7 @@ cmXCodeObject::cmXCodeObject(PBXType ptype, Type type)
 
   this->TypeValue = type;
   if (this->TypeValue == OBJECT) {
-    this->AddAttribute("isa", 0);
+    this->AddAttribute("isa", nullptr);
   }
 }
 
@@ -86,7 +86,7 @@ bool cmXCodeObject::IsEmpty() const
       return this->ObjectAttributes.empty();
     case OBJECT_REF:
     case OBJECT:
-      return this->Object == 0;
+      return this->Object == nullptr;
   }
   return true; // unreachable, but quiets warnings
 }
@@ -120,8 +120,9 @@ void cmXCodeObject::Print(std::ostream& out)
   out << "isa = " << PBXTypeNames[this->IsA] << ";" << separator;
   for (i = this->ObjectAttributes.begin(); i != this->ObjectAttributes.end();
        ++i) {
-    if (i->first == "isa")
+    if (i->first == "isa") {
       continue;
+    }
 
     PrintAttribute(out, 3, separator, indentFactor, i->first, i->second, this);
   }
@@ -129,9 +130,9 @@ void cmXCodeObject::Print(std::ostream& out)
   out << "};\n";
 }
 
-void cmXCodeObject::PrintAttribute(std::ostream& out, const int level,
-                                   const std::string separator,
-                                   const int factor, const std::string& name,
+void cmXCodeObject::PrintAttribute(std::ostream& out, int level,
+                                   const std::string& separator, int factor,
+                                   const std::string& name,
                                    const cmXCodeObject* object,
                                    const cmXCodeObject* parent)
 {
@@ -203,9 +204,9 @@ void cmXCodeObject::PrintList(std::vector<cmXCodeObject*> const& objs,
 {
   cmXCodeObject::Indent(1, out);
   out << "objects = {\n";
-  for (unsigned int i = 0; i < objs.size(); ++i) {
-    if (objs[i]->TypeValue == OBJECT) {
-      objs[i]->Print(out);
+  for (auto obj : objs) {
+    if (obj->TypeValue == OBJECT) {
+      obj->Print(out);
     }
   }
   cmXCodeObject::Indent(1, out);
@@ -224,11 +225,11 @@ void cmXCodeObject::PrintString(std::ostream& os, std::string String)
 {
   // The string needs to be quoted if it contains any characters
   // considered special by the Xcode project file parser.
-  bool needQuote = (String.empty() || String.find("//") != String.npos ||
+  bool needQuote = (String.empty() || String.find("//") != std::string::npos ||
                     String.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                              "abcdefghijklmnopqrstuvwxyz"
                                              "0123456789"
-                                             "$_./") != String.npos);
+                                             "$_./") != std::string::npos);
   const char* quote = needQuote ? "\"" : "";
 
   // Print the string, quoted and escaped as necessary.

@@ -3,7 +3,7 @@
 #ifndef cmCPackComponentGroup_h
 #define cmCPackComponentGroup_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <string>
 #include <vector>
@@ -36,7 +36,7 @@ class cmCPackComponent
 {
 public:
   cmCPackComponent()
-    : Group(CM_NULLPTR)
+    : Group(nullptr)
     , IsRequired(true)
     , IsHidden(false)
     , IsDisabledByDefault(false)
@@ -78,6 +78,10 @@ public:
   /// contains the files that are part of this component.
   std::string ArchiveFile;
 
+  /// The file to pass to --component-plist when using the
+  /// productbuild generator.
+  std::string Plist;
+
   /// The components that this component depends on.
   std::vector<cmCPackComponent*> Dependencies;
 
@@ -110,7 +114,7 @@ class cmCPackComponentGroup
 {
 public:
   cmCPackComponentGroup()
-    : ParentGroup(CM_NULLPTR)
+    : ParentGroup(nullptr)
   {
   }
 

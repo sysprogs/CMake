@@ -1,13 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-cmake_minimum_required(VERSION 2.8.12.2 FATAL_ERROR)
-if(POLICY CMP0025)
-  cmake_policy(SET CMP0025 NEW)
-endif()
-if(POLICY CMP0053)
-  cmake_policy(SET CMP0053 NEW)
-endif()
+cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 project(CMake)
 
 # Make sure we can find internal find_package modules only used for
@@ -21,6 +15,14 @@ if(CMAKE_BOOTSTRAP)
 endif()
 
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  if(CMAKE_SYSTEM_NAME STREQUAL "HP-UX")
+    message(FATAL_ERROR
+      "CMake no longer compiles on HP-UX.  See\n"
+      "  https://gitlab.kitware.com/cmake/cmake/issues/17137\n"
+      "Use CMake 3.9 or lower instead."
+      )
+  endif()
+
   set(CMake_BIN_DIR ${CMake_BINARY_DIR}/bin)
 endif()
 
@@ -55,15 +57,27 @@ if(NOT DEFINED CMAKE_C_STANDARD AND NOT CMake_NO_C_STANDARD)
   endif()
 endif()
 if(NOT DEFINED CMAKE_CXX_STANDARD AND NOT CMake_NO_CXX_STANDARD)
-  include(${CMake_SOURCE_DIR}/Source/Checks/cm_cxx14_cstdio.cmake)
-  if(NOT CMake_CXX14_CSTDIO_BROKEN)
-    set(CMAKE_CXX_STANDARD 14)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL SunPro AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.14)
+    set(CMAKE_CXX_STANDARD 98)
   else()
-    set(CMAKE_CXX_STANDARD 11)
+    include(${CMake_SOURCE_DIR}/Source/Checks/cm_cxx14_cstdio.cmake)
+    if(NOT CMake_CXX14_CSTDIO_BROKEN)
+      set(CMAKE_CXX_STANDARD 14)
+    else()
+      set(CMAKE_CXX_STANDARD 11)
+    endif()
   endif()
 endif()
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  # include special compile flags for some compilers
+  include(CompileFlags.cmake)
+
+  # check for available C++ features
   include(${CMake_SOURCE_DIR}/Source/Checks/cm_cxx_features.cmake)
+
+  if(NOT CMake_HAVE_CXX_UNIQUE_PTR)
+    message(FATAL_ERROR "The C++ compiler does not support C++11 (e.g. std::unique_ptr).")
+  endif()
 endif()
 
 # set the internal encoding of CMake to UTF-8
@@ -226,6 +240,37 @@ option(CMAKE_USE_FOLDERS "Enable folder grouping of projects in IDEs." ON)
 mark_as_advanced(CMAKE_USE_FOLDERS)
 
 
+option(CMake_RUN_CLANG_TIDY "Run clang-tidy with the compiler." OFF)
+if(CMake_RUN_CLANG_TIDY)
+  if(CMake_SOURCE_DIR STREQUAL CMake_BINARY_DIR)
+    message(FATAL_ERROR "CMake_RUN_CLANG_TIDY requires an out-of-source build!")
+  endif()
+  find_program(CLANG_TIDY_COMMAND NAMES clang-tidy)
+  if(NOT CLANG_TIDY_COMMAND)
+    message(FATAL_ERROR "CMake_RUN_CLANG_TIDY is ON but clang-tidy is not found!")
+  endif()
+  set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
+
+  # provide definitions for targets that require a rebuild once .clang-tidy changes
+  file(SHA1 ${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy clang_tidy_sha1)
+  set(CLANG_TIDY_DEFINITIONS "CLANG_TIDY_SHA1=${clang_tidy_sha1}")
+  unset(clang_tidy_sha1)
+
+endif()
+configure_file(.clang-tidy .clang-tidy COPYONLY)
+
+
+option(CMake_RUN_IWYU "Run include-what-you-use with the compiler." OFF)
+if(CMake_RUN_IWYU)
+  find_program(IWYU_COMMAND NAMES include-what-you-use iwyu)
+  if(NOT IWYU_COMMAND)
+    message(FATAL_ERROR "CMake_RUN_IWYU is ON but include-what-you-use is not found!")
+  endif()
+  set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE
+    "${IWYU_COMMAND};-Xiwyu;--mapping_file=${CMake_SOURCE_DIR}/Utilities/IWYU/mapping.imp")
+endif()
+
+
 #-----------------------------------------------------------------------
 # a macro that only sets the FOLDER target property if it's
 # "appropriate"
@@ -300,11 +345,7 @@ macro (CMAKE_BUILD_UTILITIES)
   endif()
 
   if(CMAKE_USE_SYSTEM_LIBRHASH)
-    if(NOT CMAKE_VERSION VERSION_LESS 3.0)
-      find_package(LibRHash)
-    else()
-      message(FATAL_ERROR "CMAKE_USE_SYSTEM_LIBRHASH requires CMake >= 3.0")
-    endif()
+    find_package(LibRHash)
     if(NOT LibRHash_FOUND)
       message(FATAL_ERROR
         "CMAKE_USE_SYSTEM_LIBRHASH is ON but LibRHash is not found!")
@@ -421,14 +462,15 @@ macro (CMAKE_BUILD_UTILITIES)
       if(NOT LIBLZMA_FOUND)
         message(FATAL_ERROR "CMAKE_USE_SYSTEM_LIBLZMA is ON but LibLZMA is not found!")
       endif()
-      set(LZMA_INCLUDE_DIR ${LIBLZMA_INCLUDE_DIRS})
-      set(LZMA_LIBRARY ${LIBLZMA_LIBRARIES})
     else()
       add_subdirectory(Utilities/cmliblzma)
       CMAKE_SET_TARGET_FOLDER(cmliblzma "Utilities/3rdParty")
-      set(LZMA_INCLUDE_DIR
+      set(LIBLZMA_HAS_AUTO_DECODER 1)
+      set(LIBLZMA_HAS_EASY_ENCODER 1)
+      set(LIBLZMA_HAS_LZMA_PRESET 1)
+      set(LIBLZMA_INCLUDE_DIR
         "${CMAKE_CURRENT_SOURCE_DIR}/Utilities/cmliblzma/liblzma/api")
-      set(LZMA_LIBRARY cmliblzma)
+      set(LIBLZMA_LIBRARY cmliblzma)
     endif()
   endif()
 
@@ -449,13 +491,14 @@ macro (CMAKE_BUILD_UTILITIES)
     add_definitions(-DLIBARCHIVE_STATIC)
     set(ENABLE_NETTLE OFF CACHE INTERNAL "Enable use of Nettle")
     set(ENABLE_OPENSSL ${CMAKE_USE_OPENSSL} CACHE INTERNAL "Enable use of OpenSSL")
-    set(ENABLE_LZMA ON CACHE INTERNAL "Enable the use of the system found LZMA library if found")
-    set(ENABLE_ZLIB ON CACHE INTERNAL "Enable the use of the system found ZLIB library if found")
-    set(ENABLE_BZip2 ON CACHE INTERNAL "Enable the use of the system found BZip2 library if found")
-    set(ENABLE_LIBXML2 OFF CACHE INTERNAL "Enable the use of the system found libxml2 library if found")
-    set(ENABLE_EXPAT ON CACHE INTERNAL "Enable the use of the system found EXPAT library if found")
-    set(ENABLE_PCREPOSIX OFF CACHE INTERNAL "Enable the use of the system found PCREPOSIX library if found")
-    set(ENABLE_LibGCC OFF CACHE INTERNAL "Enable the use of the system found LibGCC library if found")
+    set(ENABLE_LZMA ON CACHE INTERNAL "Enable the use of the system LZMA library if found")
+    set(ENABLE_LZO OFF CACHE INTERNAL "Enable the use of the system LZO library if found")
+    set(ENABLE_ZLIB ON CACHE INTERNAL "Enable the use of the system ZLIB library if found")
+    set(ENABLE_BZip2 ON CACHE INTERNAL "Enable the use of the system BZip2 library if found")
+    set(ENABLE_LIBXML2 OFF CACHE INTERNAL "Enable the use of the system libxml2 library if found")
+    set(ENABLE_EXPAT ON CACHE INTERNAL "Enable the use of the system EXPAT library if found")
+    set(ENABLE_PCREPOSIX OFF CACHE INTERNAL "Enable the use of the system PCREPOSIX library if found")
+    set(ENABLE_LibGCC OFF CACHE INTERNAL "Enable the use of the system LibGCC library if found")
     set(ENABLE_XATTR OFF CACHE INTERNAL "Enable extended attribute support")
     set(ENABLE_ACL OFF CACHE INTERNAL "Enable ACL support")
     set(ENABLE_ICONV OFF CACHE INTERNAL "Enable iconv support")
@@ -468,11 +511,7 @@ macro (CMAKE_BUILD_UTILITIES)
   #---------------------------------------------------------------------
   # Build jsoncpp library.
   if(CMAKE_USE_SYSTEM_JSONCPP)
-    if(NOT CMAKE_VERSION VERSION_LESS 3.0)
-      find_package(JsonCpp)
-    else()
-      message(FATAL_ERROR "CMAKE_USE_SYSTEM_JSONCPP requires CMake >= 3.0")
-    endif()
+    find_package(JsonCpp)
     if(NOT JsonCpp_FOUND)
       message(FATAL_ERROR
         "CMAKE_USE_SYSTEM_JSONCPP is ON but a JsonCpp is not found!")
@@ -486,54 +525,17 @@ macro (CMAKE_BUILD_UTILITIES)
 
   #---------------------------------------------------------------------
   # Build libuv library.
-  if(NOT DEFINED CMAKE_USE_LIBUV)
-    set(CMAKE_USE_LIBUV 1)
-    if(APPLE)
-      include(CheckCSourceCompiles)
-      check_c_source_compiles("
-#include <CoreServices/CoreServices.h>
-#include <AvailabilityMacros.h>
-#ifndef MAC_OS_X_VERSION_10_5
-#error \"MAC_OS_X_VERSION_10_5 is not defined\"
-#endif
-int main(void) { return 0; }
-" HAVE_CoreServices_OS_X_10_5)
-      if(NOT HAVE_CoreServices_OS_X_10_5)
-        set(CMAKE_USE_LIBUV 0)
-      endif()
-    elseif(CYGWIN)
-      # libuv does not support Cygwin
-      set(CMAKE_USE_LIBUV 0)
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "HP-UX")
-      # Disable until it can be ported.
-      set(CMAKE_USE_LIBUV 0)
-    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "sparc")
-      # Disable until it can be ported.
-      set(CMAKE_USE_LIBUV 0)
-    elseif(CMAKE_SYSTEM STREQUAL "SunOS-5.10")
-      # Disable until it can be ported.
-      set(CMAKE_USE_LIBUV 0)
+  if(CMAKE_USE_SYSTEM_LIBUV)
+    find_package(LibUV 1.0.0)
+    if(NOT LIBUV_FOUND)
+      message(FATAL_ERROR
+        "CMAKE_USE_SYSTEM_LIBUV is ON but a libuv is not found!")
     endif()
-  endif()
-  if(CMAKE_USE_LIBUV)
-    if(CMAKE_USE_SYSTEM_LIBUV)
-      if(NOT CMAKE_VERSION VERSION_LESS 3.0)
-        find_package(LibUV 1.0.0)
-      else()
-        message(FATAL_ERROR "CMAKE_USE_SYSTEM_LIBUV requires CMake >= 3.0")
-      endif()
-      if(NOT LIBUV_FOUND)
-        message(FATAL_ERROR
-          "CMAKE_USE_SYSTEM_LIBUV is ON but a libuv is not found!")
-      endif()
-      set(CMAKE_LIBUV_LIBRARIES LibUV::LibUV)
-    else()
-      set(CMAKE_LIBUV_LIBRARIES cmlibuv)
-      add_subdirectory(Utilities/cmlibuv)
-      CMAKE_SET_TARGET_FOLDER(cmlibuv "Utilities/3rdParty")
-    endif()
+    set(CMAKE_LIBUV_LIBRARIES LibUV::LibUV)
   else()
-    set(CMAKE_LIBUV_LIBRARIES)
+    set(CMAKE_LIBUV_LIBRARIES cmlibuv)
+    add_subdirectory(Utilities/cmlibuv)
+    CMAKE_SET_TARGET_FOLDER(cmlibuv "Utilities/3rdParty")
   endif()
 
   #---------------------------------------------------------------------
@@ -626,9 +628,6 @@ if(NOT CMake_TEST_EXTERNAL_CMAKE)
   if(BUILD_TESTING)
     include(${CMake_SOURCE_DIR}/Tests/CMakeInstall.cmake)
   endif()
-
-  # include special compile flags for some compilers
-  include(CompileFlags.cmake)
 
   # no clue why we are testing for this here
   include(CheckSymbolExists)
@@ -725,31 +724,6 @@ endif()
 # setup some Testing support (a macro defined in this file)
 CMAKE_SETUP_TESTING()
 
-# Check whether to build server mode or not:
-if(NOT CMake_TEST_EXTERNAL_CMAKE)
-  if(NOT DEFINED CMake_ENABLE_SERVER_MODE)
-    list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_auto_type CMake_HAVE_CXX_AUTO_TYPE)
-    list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_range_for CMake_HAVE_CXX_RANGE_FOR)
-    if(CMAKE_USE_LIBUV
-        AND CMake_HAVE_CXX_AUTO_TYPE
-        AND CMake_HAVE_CXX_MAKE_UNIQUE
-        AND CMake_HAVE_CXX_RANGE_FOR
-        )
-      set(CMake_ENABLE_SERVER_MODE 1)
-    else()
-      set(CMake_ENABLE_SERVER_MODE 0)
-    endif()
-  endif()
-  if(CMake_ENABLE_SERVER_MODE AND NOT CMAKE_USE_LIBUV)
-    message(FATAL_ERROR "The server mode requires libuv!")
-  endif()
-else()
-  set(CMake_ENABLE_SERVER_MODE 0)
-endif()
-if(NOT DEFINED CMake_TEST_SERVER_MODE)
-  set(CMake_TEST_SERVER_MODE ${CMake_ENABLE_SERVER_MODE})
-endif()
-
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
   if(NOT CMake_VERSION_IS_RELEASE)
     if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND
@@ -785,6 +759,9 @@ add_subdirectory(Tests)
 if(NOT CMake_TEST_EXTERNAL_CMAKE)
   if(BUILD_TESTING)
     CMAKE_SET_TARGET_FOLDER(CMakeLibTests "Tests")
+    IF(TARGET CMakeServerLibTests)
+      CMAKE_SET_TARGET_FOLDER(CMakeServerLibTests "Tests")
+    ENDIF()
   endif()
   if(TARGET documentation)
     CMAKE_SET_TARGET_FOLDER(documentation "Documentation")
@@ -810,6 +787,7 @@ if(NOT CMake_TEST_EXTERNAL_CMAKE)
     PATTERN "*.sh*" PERMISSIONS OWNER_READ OWNER_EXECUTE OWNER_WRITE
                                 GROUP_READ GROUP_EXECUTE
                                 WORLD_READ WORLD_EXECUTE
+    REGEX "Help/dev($|/)" EXCLUDE
     )
 
   # Install auxiliary files integrating with other tools.

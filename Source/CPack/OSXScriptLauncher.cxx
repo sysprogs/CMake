@@ -1,8 +1,8 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
    file Copyright.txt or https://cmake.org/licensing for details.  */
-#include <cmsys/FStream.hxx>
-#include <cmsys/Process.h>
-#include <cmsys/SystemTools.hxx>
+#include "cmsys/FStream.hxx"
+#include "cmsys/Process.h"
+#include "cmsys/SystemTools.hxx"
 #include <iostream>
 #include <stddef.h>
 #include <string>
@@ -20,7 +20,6 @@
 int main(int argc, char* argv[])
 {
   // if ( cmsys::SystemTools::FileExists(
-  std::string cwd = cmsys::SystemTools::GetCurrentWorkingDirectory();
   cmsys::ofstream ofs("/tmp/output.txt");
 
   CFStringRef fileName;
@@ -35,7 +34,7 @@ int main(int argc, char* argv[])
   }
   fileName = CFSTR("RuntimeScript");
   if (!(scriptFileURL =
-          CFBundleCopyResourceURL(appBundle, fileName, NULL, NULL))) {
+          CFBundleCopyResourceURL(appBundle, fileName, nullptr, nullptr))) {
     DebugError("CFBundleCopyResourceURL failed");
     return 1;
   }
@@ -72,7 +71,7 @@ int main(int argc, char* argv[])
   for (cc = 1; cc < argc; ++cc) {
     args.push_back(argv[cc]);
   }
-  args.push_back(0);
+  args.push_back(nullptr);
 
   cmsysProcess* cp = cmsysProcess_New();
   cmsysProcess_SetCommand(cp, &*args.begin());
@@ -84,10 +83,8 @@ int main(int argc, char* argv[])
   std::vector<char> tempOutput;
   char* data;
   int length;
-  while (cmsysProcess_WaitForData(cp, &data, &length, 0)) {
+  while (cmsysProcess_WaitForData(cp, &data, &length, nullptr)) {
     // Translate NULL characters in the output into valid text.
-    // Visual Studio 7 puts these characters in the output of its
-    // build process.
     for (int i = 0; i < length; ++i) {
       if (data[i] == '\0') {
         data[i] = ' ';
@@ -96,7 +93,7 @@ int main(int argc, char* argv[])
     std::cout.write(data, length);
   }
 
-  cmsysProcess_WaitForExit(cp, 0);
+  cmsysProcess_WaitForExit(cp, nullptr);
 
   bool result = true;
   if (cmsysProcess_GetState(cp) == cmsysProcess_State_Exited) {

@@ -2,7 +2,7 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmExportCommand.h"
 
-#include <cmsys/RegularExpression.hxx>
+#include "cmsys/RegularExpression.hxx"
 #include <map>
 #include <sstream>
 
@@ -35,7 +35,7 @@ cmExportCommand::cmExportCommand()
   , ExportOld(&Helper, "EXPORT_LINK_INTERFACE_LIBRARIES", &ArgumentGroup)
   , AndroidMKFile(&Helper, "ANDROID_MK")
 {
-  this->ExportSet = CM_NULLPTR;
+  this->ExportSet = nullptr;
 }
 
 // cmExportCommand
@@ -51,10 +51,10 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
     return this->HandlePackage(args);
   }
   if (args[0] == "EXPORT") {
-    this->ExportSetName.Follows(CM_NULLPTR);
+    this->ExportSetName.Follows(nullptr);
     this->ArgumentGroup.Follows(&this->ExportSetName);
   } else {
-    this->Targets.Follows(CM_NULLPTR);
+    this->Targets.Follows(nullptr);
     this->ArgumentGroup.Follows(&this->Targets);
   }
 
@@ -136,38 +136,40 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
     }
     this->ExportSet = setMap[setName];
   } else if (this->Targets.WasFound()) {
-    for (std::vector<std::string>::const_iterator currentTarget =
-           this->Targets.GetVector().begin();
-         currentTarget != this->Targets.GetVector().end(); ++currentTarget) {
-      if (this->Makefile->IsAlias(*currentTarget)) {
+    for (std::string const& currentTarget : this->Targets.GetVector()) {
+      if (this->Makefile->IsAlias(currentTarget)) {
         std::ostringstream e;
-        e << "given ALIAS target \"" << *currentTarget
+        e << "given ALIAS target \"" << currentTarget
           << "\" which may not be exported.";
         this->SetError(e.str());
         return false;
       }
 
-      if (cmTarget* target = gg->FindTarget(*currentTarget)) {
+      if (cmTarget* target = gg->FindTarget(currentTarget)) {
         if (target->GetType() == cmStateEnums::OBJECT_LIBRARY) {
-          std::ostringstream e;
-          e << "given OBJECT library \"" << *currentTarget
-            << "\" which may not be exported.";
-          this->SetError(e.str());
-          return false;
+          std::string reason;
+          if (!this->Makefile->GetGlobalGenerator()
+                 ->HasKnownObjectFileLocation(&reason)) {
+            std::ostringstream e;
+            e << "given OBJECT library \"" << currentTarget
+              << "\" which may not be exported" << reason << ".";
+            this->SetError(e.str());
+            return false;
+          }
         }
         if (target->GetType() == cmStateEnums::UTILITY) {
-          this->SetError("given custom target \"" + *currentTarget +
+          this->SetError("given custom target \"" + currentTarget +
                          "\" which may not be exported.");
           return false;
         }
       } else {
         std::ostringstream e;
-        e << "given target \"" << *currentTarget
+        e << "given target \"" << currentTarget
           << "\" which is not built by this project.";
         this->SetError(e.str());
         return false;
       }
-      targets.push_back(*currentTarget);
+      targets.push_back(currentTarget);
     }
     if (this->Append.IsEnabled()) {
       if (cmExportBuildFileGenerator* ebfg =
@@ -182,7 +184,7 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   // Setup export file generation.
-  cmExportBuildFileGenerator* ebfg = CM_NULLPTR;
+  cmExportBuildFileGenerator* ebfg = nullptr;
   if (android) {
     ebfg = new cmExportBuildAndroidMKGenerator;
   } else {
@@ -205,10 +207,8 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
   if (configurationTypes.empty()) {
     configurationTypes.push_back("");
   }
-  for (std::vector<std::string>::const_iterator ci =
-         configurationTypes.begin();
-       ci != configurationTypes.end(); ++ci) {
-    ebfg->AddConfiguration(*ci);
+  for (std::string const& ct : configurationTypes) {
+    ebfg->AddConfiguration(ct);
   }
   if (this->ExportSet) {
     gg->AddBuildExportExportSet(ebfg);
@@ -279,7 +279,6 @@ bool cmExportCommand::HandlePackage(std::vector<std::string> const& args)
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <windows.h>
 
-#undef GetCurrentDirectory
 void cmExportCommand::ReportRegistryError(std::string const& msg,
                                           std::string const& key, long err)
 {

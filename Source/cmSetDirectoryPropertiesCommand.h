@@ -3,7 +3,8 @@
 #ifndef cmSetDirectoryPropertiesCommand_h
 #define cmSetDirectoryPropertiesCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -15,30 +16,14 @@ class cmMakefile;
 class cmSetDirectoryPropertiesCommand : public cmCommand
 {
 public:
-  cmCommand* Clone() CM_OVERRIDE
-  {
-    return new cmSetDirectoryPropertiesCommand;
-  }
+  cmCommand* Clone() override { return new cmSetDirectoryPropertiesCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the input file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * This determines if the command is invoked when in script mode.
-   */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE
-  {
-    return "set_directory_properties";
-  }
+                   cmExecutionStatus& status) override;
 
   /**
    * Static entry point for use by other commands

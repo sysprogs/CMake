@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2016, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -249,7 +249,7 @@ Curl_addrinfo *Curl_ipv4_resolve_r(const char *hostname,
      */
 
     if(CURL_HOSTENT_SIZE >=
-       (sizeof(struct hostent)+sizeof(struct hostent_data))) {
+       (sizeof(struct hostent) + sizeof(struct hostent_data))) {
 
       /* August 22nd, 2000: Albert Chin-A-Young brought an updated version
        * that should work! September 20: Richard Prescott worked on the buffer
@@ -291,7 +291,7 @@ Curl_addrinfo *Curl_ipv4_resolve_r(const char *hostname,
      * gethostbyname() is the preferred one.
      */
   else {
-    h = gethostbyname((void*)hostname);
+    h = gethostbyname((void *)hostname);
 #endif /* HAVE_GETADDRINFO_THREADSAFE || HAVE_GETHOSTBYNAME_R */
   }
 

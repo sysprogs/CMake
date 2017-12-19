@@ -3,7 +3,8 @@
 #ifndef cmConfigureFileCommand_h
 #define cmConfigureFileCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -15,24 +16,14 @@ class cmExecutionStatus;
 class cmConfigureFileCommand : public cmCommand
 {
 public:
-  cmCommand* Clone() CM_OVERRIDE { return new cmConfigureFileCommand; }
+  cmCommand* Clone() override { return new cmConfigureFileCommand; }
 
   /**
    * This is called when the command is first encountered in
    * the input file.
    */
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-
-  /**
-   * The name of the command as specified in CMakeList.txt.
-   */
-  std::string GetName() const CM_OVERRIDE { return "configure_file"; }
-
-  /**
-   * This determines if the command is invoked when in script mode.
-   */
-  bool IsScriptable() const CM_OVERRIDE { return true; }
+                   cmExecutionStatus& status) override;
 
 private:
   int ConfigureFile();

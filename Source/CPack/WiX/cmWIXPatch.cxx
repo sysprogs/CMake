@@ -2,7 +2,7 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmWIXPatch.h"
 
-#include <CPack/cmCPackGenerator.h>
+#include "cmCPackGenerator.h"
 
 cmWIXPatch::cmWIXPatch(cmCPackLog* logger)
   : Logger(logger)
@@ -29,7 +29,9 @@ void cmWIXPatch::ApplyFragment(std::string const& id,
     return;
 
   const cmWIXPatchElement& fragment = i->second;
-
+  for (auto const& attr : fragment.attributes) {
+    writer.AddAttribute(attr.first, attr.second);
+  }
   this->ApplyElementChildren(fragment, writer);
 
   Fragments.erase(i);
@@ -38,11 +40,7 @@ void cmWIXPatch::ApplyFragment(std::string const& id,
 void cmWIXPatch::ApplyElementChildren(const cmWIXPatchElement& element,
                                       cmWIXSourceWriter& writer)
 {
-  for (cmWIXPatchElement::child_list_t::const_iterator j =
-         element.children.begin();
-       j != element.children.end(); ++j) {
-    cmWIXPatchNode* node = *j;
-
+  for (cmWIXPatchNode* node : element.children) {
     switch (node->type()) {
       case cmWIXPatchNode::ELEMENT:
         ApplyElement(dynamic_cast<const cmWIXPatchElement&>(*node), writer);
@@ -59,10 +57,8 @@ void cmWIXPatch::ApplyElement(const cmWIXPatchElement& element,
 {
   writer.BeginElement(element.name);
 
-  for (cmWIXPatchElement::attributes_t::const_iterator i =
-         element.attributes.begin();
-       i != element.attributes.end(); ++i) {
-    writer.AddAttribute(i->first, i->second);
+  for (auto const& attr : element.attributes) {
+    writer.AddAttribute(attr.first, attr.second);
   }
 
   this->ApplyElementChildren(element, writer);
@@ -73,14 +69,13 @@ void cmWIXPatch::ApplyElement(const cmWIXPatchElement& element,
 bool cmWIXPatch::CheckForUnappliedFragments()
 {
   std::string fragmentList;
-  for (cmWIXPatchParser::fragment_map_t::const_iterator i = Fragments.begin();
-       i != Fragments.end(); ++i) {
+  for (auto const& fragment : Fragments) {
     if (!fragmentList.empty()) {
       fragmentList += ", ";
     }
 
     fragmentList += "'";
-    fragmentList += i->first;
+    fragmentList += fragment.first;
     fragmentList += "'";
   }
 

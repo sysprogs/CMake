@@ -218,8 +218,8 @@ void CCONV cmAddUtilityCommand(void* arg, const char* utilityName,
   }
 
   // Pass the call to the makefile instance.
-  mf->AddUtilityCommand(utilityName, (all ? false : true), CM_NULLPTR,
-                        depends2, commandLines);
+  mf->AddUtilityCommand(utilityName, (all ? false : true), nullptr, depends2,
+                        commandLines);
 }
 void CCONV cmAddCustomCommand(void* arg, const char* source,
                               const char* command, int numArgs,
@@ -257,7 +257,7 @@ void CCONV cmAddCustomCommand(void* arg, const char* source,
   }
 
   // Pass the call to the makefile instance.
-  const char* no_comment = CM_NULLPTR;
+  const char* no_comment = nullptr;
   mf->AddCustomCommandOldStyle(target, outputs2, depends2, source,
                                commandLines, no_comment);
 }
@@ -291,8 +291,8 @@ void CCONV cmAddCustomCommandToOutput(void* arg, const char* output,
   }
 
   // Pass the call to the makefile instance.
-  const char* no_comment = CM_NULLPTR;
-  const char* no_working_dir = CM_NULLPTR;
+  const char* no_comment = nullptr;
+  const char* no_working_dir = nullptr;
   mf->AddCustomCommandToOutput(output, depends2, main_dependency, commandLines,
                                no_comment, no_working_dir);
 }
@@ -333,8 +333,8 @@ void CCONV cmAddCustomCommandToTarget(void* arg, const char* target,
   // Pass the call to the makefile instance.
   std::vector<std::string> no_byproducts;
   std::vector<std::string> no_depends;
-  const char* no_comment = CM_NULLPTR;
-  const char* no_working_dir = CM_NULLPTR;
+  const char* no_comment = nullptr;
+  const char* no_working_dir = nullptr;
   mf->AddCustomCommandToTarget(target, no_byproducts, no_depends, commandLines,
                                cctype, no_comment, no_working_dir);
 }
@@ -405,14 +405,8 @@ char CCONV* cmExpandVariablesInString(void* arg, const char* source,
 {
   cmMakefile* mf = static_cast<cmMakefile*>(arg);
   std::string barf = source;
-  std::string result = mf->ExpandVariablesInString(
-    barf, (escapeQuotes ? true : false), (atOnly ? true : false));
-  char* res = static_cast<char*>(malloc(result.size() + 1));
-  if (!result.empty()) {
-    strcpy(res, result.c_str());
-  }
-  res[result.size()] = '\0';
-  return res;
+  std::string result = mf->ExpandVariablesInString(barf, escapeQuotes, atOnly);
+  return strdup(result.c_str());
 }
 
 int CCONV cmExecuteCommand(void* arg, const char* name, int numArgs,
@@ -443,7 +437,7 @@ void CCONV cmExpandSourceListArguments(void* arg, int numArgs,
     result.push_back(args[i]);
   }
   int resargc = static_cast<int>(result.size());
-  char** resargv = CM_NULLPTR;
+  char** resargv = nullptr;
   if (resargc) {
     resargv = (char**)malloc(resargc * sizeof(char*));
   }
@@ -460,9 +454,7 @@ void CCONV cmFreeArguments(int argc, char** argv)
   for (i = 0; i < argc; ++i) {
     free(argv[i]);
   }
-  if (argv) {
-    free(argv);
-  }
+  free(argv);
 }
 
 int CCONV cmGetTotalArgumentSize(int argc, char** argv)
@@ -482,7 +474,7 @@ int CCONV cmGetTotalArgumentSize(int argc, char** argv)
 struct cmCPluginAPISourceFile
 {
   cmCPluginAPISourceFile()
-    : RealSourceFile(CM_NULLPTR)
+    : RealSourceFile(nullptr)
   {
   }
   cmSourceFile* RealSourceFile;
@@ -504,8 +496,8 @@ public:
   typedef derived::value_type value_type;
   ~cmCPluginAPISourceFileMap()
   {
-    for (iterator i = this->begin(); i != this->end(); ++i) {
-      delete i->second;
+    for (auto const& i : *this) {
+      delete i.second;
     }
   }
 };
@@ -513,13 +505,12 @@ cmCPluginAPISourceFileMap cmCPluginAPISourceFiles;
 
 void* CCONV cmCreateSourceFile(void)
 {
-  return (void*)new cmCPluginAPISourceFile;
+  return new cmCPluginAPISourceFile;
 }
 
 void* CCONV cmCreateNewSourceFile(void*)
 {
-  cmCPluginAPISourceFile* sf = new cmCPluginAPISourceFile;
-  return (void*)sf;
+  return new cmCPluginAPISourceFile;
 }
 
 void CCONV cmDestroySourceFile(void* arg)
@@ -552,9 +543,9 @@ void CCONV* cmGetSource(void* arg, const char* name)
       cmCPluginAPISourceFileMap::value_type entry(rsf, sf);
       i = cmCPluginAPISourceFiles.insert(entry).first;
     }
-    return (void*)i->second;
+    return i->second;
   }
-  return CM_NULLPTR;
+  return nullptr;
 }
 
 void* CCONV cmAddSource(void* arg, void* arg2)
@@ -562,15 +553,14 @@ void* CCONV cmAddSource(void* arg, void* arg2)
   cmMakefile* mf = static_cast<cmMakefile*>(arg);
   cmCPluginAPISourceFile* osf = static_cast<cmCPluginAPISourceFile*>(arg2);
   if (osf->FullPath.empty()) {
-    return CM_NULLPTR;
+    return nullptr;
   }
 
   // Create the real cmSourceFile instance and copy over saved information.
   cmSourceFile* rsf = mf->GetOrCreateSource(osf->FullPath);
   rsf->GetProperties() = osf->Properties;
-  for (std::vector<std::string>::iterator i = osf->Depends.begin();
-       i != osf->Depends.end(); ++i) {
-    rsf->AddDepend(*i);
+  for (std::string const& d : osf->Depends) {
+    rsf->AddDepend(d);
   }
 
   // Create the proxy for the real source file.
@@ -582,7 +572,7 @@ void* CCONV cmAddSource(void* arg, void* arg2)
 
   // Store the proxy in the map so it can be re-used and deleted later.
   cmCPluginAPISourceFiles[rsf] = sf;
-  return (void*)sf;
+  return sf;
 }
 
 const char* CCONV cmSourceFileGetSourceName(void* arg)
@@ -763,25 +753,19 @@ void CCONV cmSourceFileSetName2(void* arg, const char* name, const char* dir,
 char* CCONV cmGetFilenameWithoutExtension(const char* name)
 {
   std::string sres = cmSystemTools::GetFilenameWithoutExtension(name);
-  char* result = (char*)malloc(sres.size() + 1);
-  strcpy(result, sres.c_str());
-  return result;
+  return strdup(sres.c_str());
 }
 
 char* CCONV cmGetFilenamePath(const char* name)
 {
   std::string sres = cmSystemTools::GetFilenamePath(name);
-  char* result = (char*)malloc(sres.size() + 1);
-  strcpy(result, sres.c_str());
-  return result;
+  return strdup(sres.c_str());
 }
 
 char* CCONV cmCapitalized(const char* name)
 {
   std::string sres = cmSystemTools::Capitalized(name);
-  char* result = (char*)malloc(sres.size() + 1);
-  strcpy(result, sres.c_str());
-  return result;
+  return strdup(sres.c_str());
 }
 
 void CCONV cmCopyFileIfDifferent(const char* name1, const char* name2)

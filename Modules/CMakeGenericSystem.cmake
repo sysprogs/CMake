@@ -23,6 +23,8 @@ set(CMAKE_DL_LIBS "dl")
 
 set(CMAKE_FIND_LIBRARY_PREFIXES "lib")
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".a")
+set(CMAKE_AUTOMOC_COMPILER_PREDEFINES ON)
+set(CMAKE_AUTOMOC_MACRO_NAMES "Q_OBJECT" "Q_GADGET" "Q_NAMESPACE")
 
 # basically all general purpose OSs support shared libs
 set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
@@ -76,6 +78,8 @@ function(GetDefaultWindowsPrefixBase var)
   #
   if("${CMAKE_GENERATOR}" MATCHES "(Win64|IA64)")
     set(arch_hint "x64")
+  elseif("${CMAKE_GENERATOR_PLATFORM}" MATCHES "ARM64")
+    set(arch_hint "ARM64")
   elseif("${CMAKE_GENERATOR}" MATCHES "ARM")
     set(arch_hint "ARM")
   elseif("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")

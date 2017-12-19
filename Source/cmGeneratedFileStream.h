@@ -3,10 +3,10 @@
 #ifndef cmGeneratedFileStream_h
 #define cmGeneratedFileStream_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
-#include <cm_codecvt.hxx>
-#include <cmsys/FStream.hxx>
+#include "cm_codecvt.hxx"
+#include "cmsys/FStream.hxx"
 #include <string>
 
 // This is the first base class of cmGeneratedFileStream.  It will be
@@ -94,7 +94,7 @@ public:
    * file was successfully written before allowing the original to be
    * replaced.
    */
-  ~cmGeneratedFileStream() CM_OVERRIDE;
+  ~cmGeneratedFileStream() override;
 
   /**
    * Open an output file by name.  This should be used only with a

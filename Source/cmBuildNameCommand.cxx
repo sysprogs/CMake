@@ -2,11 +2,10 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmBuildNameCommand.h"
 
+#include "cmsys/RegularExpression.hxx"
 #include <algorithm>
-#include <cmsys/RegularExpression.hxx>
 
 #include "cmMakefile.h"
-#include "cmPolicies.h"
 #include "cmStateTypes.h"
 #include "cmSystemTools.h"
 
@@ -16,11 +15,6 @@ class cmExecutionStatus;
 bool cmBuildNameCommand::InitialPass(std::vector<std::string> const& args,
                                      cmExecutionStatus&)
 {
-  if (this->Disallowed(
-        cmPolicies::CMP0036,
-        "The build_name command should not be called; see CMP0036.")) {
-    return true;
-  }
   if (args.empty()) {
     this->SetError("called with incorrect number of arguments");
     return false;
@@ -42,7 +36,7 @@ bool cmBuildNameCommand::InitialPass(std::vector<std::string> const& args,
 
   std::string buildname = "WinNT";
   if (this->Makefile->GetDefinition("UNIX")) {
-    buildname = "";
+    buildname.clear();
     cmSystemTools::RunSingleCommand("uname -a", &buildname, &buildname);
     if (!buildname.empty()) {
       std::string RegExp = "([^ ]*) [^ ]* ([^ ]*) ";

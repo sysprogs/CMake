@@ -130,7 +130,7 @@ bool StartCompilerSetup::crossCompilerSetup() const
 void StartCompilerSetup::onSelectionChanged(bool on)
 {
   if (on) {
-    selectionChanged();
+    emit selectionChanged();
   }
 }
 
@@ -301,7 +301,7 @@ QString CrossCompilerSetup::getFindRoot() const
 
 void CrossCompilerSetup::setFindRoot(const QString& t)
 {
-  return this->crossFindRoot->setText(t);
+  this->crossFindRoot->setText(t);
 }
 
 int CrossCompilerSetup::getProgramMode() const

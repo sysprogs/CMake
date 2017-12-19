@@ -2,9 +2,9 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCacheManager.h"
 
+#include "cmsys/FStream.hxx"
+#include "cmsys/Glob.hxx"
 #include <algorithm>
-#include <cmsys/FStream.hxx>
-#include <cmsys/Glob.hxx>
 #include <sstream>
 #include <stdio.h>
 #include <string.h>
@@ -173,7 +173,7 @@ bool cmCacheManager::LoadCache(const std::string& path, bool internal,
 }
 
 const char* cmCacheManager::PersistentProperties[] = { "ADVANCED", "MODIFIED",
-                                                       "STRINGS", CM_NULLPTR };
+                                                       "STRINGS", nullptr };
 
 bool cmCacheManager::ReadPropertyEntry(std::string const& entryKey,
                                        CacheEntry& e)
@@ -205,8 +205,7 @@ bool cmCacheManager::ReadPropertyEntry(std::string const& entryKey,
   return false;
 }
 
-void cmCacheManager::WritePropertyEntries(std::ostream& os,
-                                          CacheIterator const& i)
+void cmCacheManager::WritePropertyEntries(std::ostream& os, CacheIterator i)
 {
   for (const char** p = this->PersistentProperties; *p; ++p) {
     if (const char* value = i.GetProperty(*p)) {
@@ -298,10 +297,8 @@ bool cmCacheManager::SaveCache(const std::string& path)
   fout << "########################\n";
   fout << "\n";
 
-  for (std::map<std::string, CacheEntry>::const_iterator i =
-         this->Cache.begin();
-       i != this->Cache.end(); ++i) {
-    const CacheEntry& ce = (*i).second;
+  for (auto const& i : this->Cache) {
+    CacheEntry const& ce = i.second;
     cmStateEnums::CacheEntryType t = ce.Type;
     if (!ce.Initialized) {
       /*
@@ -316,7 +313,7 @@ bool cmCacheManager::SaveCache(const std::string& path)
       } else {
         cmCacheManager::OutputHelpString(fout, "Missing description");
       }
-      this->OutputKey(fout, i->first);
+      this->OutputKey(fout, i.first);
       fout << ":" << cmState::CacheEntryTypeToString(t) << "=";
       this->OutputValue(fout, ce.Value);
       fout << "\n\n";
@@ -387,7 +384,7 @@ void cmCacheManager::OutputKey(std::ostream& fout, std::string const& key)
 {
   // support : in key name by double quoting
   const char* q =
-    (key.find(':') != key.npos || key.find("//") == 0) ? "\"" : "";
+    (key.find(':') != std::string::npos || key.find("//") == 0) ? "\"" : "";
   fout << q << key << q;
 }
 
@@ -441,7 +438,7 @@ cmCacheManager::CacheEntry* cmCacheManager::GetCacheEntry(
   if (i != this->Cache.end()) {
     return &i->second;
   }
-  return CM_NULLPTR;
+  return nullptr;
 }
 
 cmCacheManager::CacheIterator cmCacheManager::GetCacheIterator(const char* key)
@@ -456,18 +453,16 @@ const char* cmCacheManager::GetInitializedCacheValue(
   if (i != this->Cache.end() && i->second.Initialized) {
     return i->second.Value.c_str();
   }
-  return CM_NULLPTR;
+  return nullptr;
 }
 
 void cmCacheManager::PrintCache(std::ostream& out) const
 {
   out << "=================================================" << std::endl;
   out << "CMakeCache Contents:" << std::endl;
-  for (std::map<std::string, CacheEntry>::const_iterator i =
-         this->Cache.begin();
-       i != this->Cache.end(); ++i) {
-    if ((*i).second.Type != cmStateEnums::INTERNAL) {
-      out << (*i).first << " = " << (*i).second.Value << std::endl;
+  for (auto const& i : this->Cache) {
+    if (i.second.Type != cmStateEnums::INTERNAL) {
+      out << i.first << " = " << i.second.Value << std::endl;
     }
   }
   out << "\n\n";
@@ -485,21 +480,20 @@ void cmCacheManager::AddCacheEntry(const std::string& key, const char* value,
     e.Value = value;
     e.Initialized = true;
   } else {
-    e.Value = "";
+    e.Value.clear();
   }
   e.Type = type;
   // make sure we only use unix style paths
   if (type == cmStateEnums::FILEPATH || type == cmStateEnums::PATH) {
-    if (e.Value.find(';') != e.Value.npos) {
+    if (e.Value.find(';') != std::string::npos) {
       std::vector<std::string> paths;
       cmSystemTools::ExpandListArgument(e.Value, paths);
       const char* sep = "";
       e.Value = "";
-      for (std::vector<std::string>::iterator i = paths.begin();
-           i != paths.end(); ++i) {
-        cmSystemTools::ConvertToUnixSlashes(*i);
+      for (std::string& i : paths) {
+        cmSystemTools::ConvertToUnixSlashes(i);
         e.Value += sep;
-        e.Value += *i;
+        e.Value += i;
         sep = ";";
       }
     } else {
@@ -549,7 +543,7 @@ void cmCacheManager::CacheIterator::SetValue(const char* value)
     entry->Value = value;
     entry->Initialized = true;
   } else {
-    entry->Value = "";
+    entry->Value.clear();
   }
 }
 
@@ -611,7 +605,7 @@ const char* cmCacheManager::CacheIterator::GetProperty(
   if (!this->IsAtEnd()) {
     return this->GetEntry().GetProperty(prop);
   }
-  return CM_NULLPTR;
+  return nullptr;
 }
 
 void cmCacheManager::CacheIterator::SetProperty(const std::string& p,
@@ -648,5 +642,5 @@ void cmCacheManager::CacheIterator::SetProperty(const std::string& p, bool v)
 bool cmCacheManager::CacheIterator::PropertyExists(
   const std::string& prop) const
 {
-  return this->GetProperty(prop) != CM_NULLPTR;
+  return this->GetProperty(prop) != nullptr;
 }

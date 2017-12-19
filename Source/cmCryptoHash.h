@@ -3,19 +3,20 @@
 #ifndef cmCryptoHash_h
 #define cmCryptoHash_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
+#include <memory> // IWYU pragma: keep
 #include <stddef.h>
 #include <string>
 #include <vector>
-
-#include "cm_auto_ptr.hxx"
 
 /**
  * @brief Abstract base class for cryptographic hash generators
  */
 class cmCryptoHash
 {
+  CM_DISABLE_COPY(cmCryptoHash)
+
 public:
   enum Algo
   {
@@ -40,7 +41,7 @@ public:
   ///      SHA3_224, SHA3_256, SHA3_384, SHA3_512
   /// @return A valid auto pointer if algo is supported or
   ///         an invalid/NULL pointer otherwise
-  static CM_AUTO_PTR<cmCryptoHash> New(const char* algo);
+  static std::unique_ptr<cmCryptoHash> New(const char* algo);
 
   /// @brief Converts a hex character to its binary value (4 bits)
   /// @arg input Hex character [0-9a-fA-F].

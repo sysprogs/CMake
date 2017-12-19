@@ -16,11 +16,11 @@ bool cmGetTestPropertyCommand::InitialPass(
     return false;
   }
 
-  std::string testName = args[0];
-  std::string var = args[2];
+  std::string const& testName = args[0];
+  std::string const& var = args[2];
   cmTest* test = this->Makefile->GetTest(testName);
   if (test) {
-    const char* prop = CM_NULLPTR;
+    const char* prop = nullptr;
     if (!args[1].empty()) {
       prop = test->GetProperty(args[1]);
     }

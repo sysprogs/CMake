@@ -3,7 +3,7 @@
 #ifndef cmCTestGlobalVC_h
 #define cmCTestGlobalVC_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCTestVC.h"
 
@@ -26,11 +26,11 @@ public:
   /** Construct with a CTest instance and update log stream.  */
   cmCTestGlobalVC(cmCTest* ctest, std::ostream& log);
 
-  ~cmCTestGlobalVC() CM_OVERRIDE;
+  ~cmCTestGlobalVC() override;
 
 protected:
   // Implement cmCTestVC internal API.
-  bool WriteXMLUpdates(cmXMLWriter& xml) CM_OVERRIDE;
+  bool WriteXMLUpdates(cmXMLWriter& xml) override;
 
   /** Represent a vcs-reported action for one path in a revision.  */
   struct Change
@@ -64,8 +64,8 @@ protected:
   virtual void DoRevision(Revision const& revision,
                           std::vector<Change> const& changes);
   virtual void DoModification(PathStatus status, std::string const& path);
-  virtual void LoadModifications() = 0;
-  virtual void LoadRevisions() = 0;
+  virtual bool LoadModifications() = 0;
+  virtual bool LoadRevisions() = 0;
 
   virtual void WriteXMLGlobal(cmXMLWriter& xml);
   void WriteXMLDirectory(cmXMLWriter& xml, std::string const& path,

@@ -2,9 +2,8 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmConditionEvaluator.h"
 
+#include "cmsys/RegularExpression.hxx"
 #include <algorithm>
-#include <cmConfigure.h>
-#include <cmsys/RegularExpression.hxx>
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,7 +83,7 @@ bool cmConditionEvaluator::IsTrue(
   const std::vector<cmExpandedCommandArgument>& args, std::string& errorString,
   cmake::MessageType& status)
 {
-  errorString = "";
+  errorString.clear();
 
   // handle empty invocation
   if (args.empty()) {
@@ -139,7 +138,7 @@ const char* cmConditionEvaluator::GetDefinitionIfUnquoted(
   if ((this->Policy54Status != cmPolicies::WARN &&
        this->Policy54Status != cmPolicies::OLD) &&
       argument.WasQuoted()) {
-    return CM_NULLPTR;
+    return nullptr;
   }
 
   const char* def = this->Makefile.GetDefinition(argument.GetValue());
@@ -285,12 +284,12 @@ bool cmConditionEvaluator::GetBooleanValueWithAutoDereference(
   bool oldResult = this->GetBooleanValueOld(newArg, oneArg);
   if (newResult != oldResult) {
     switch (this->Policy12Status) {
-      case cmPolicies::WARN: {
+      case cmPolicies::WARN:
         errorString = "An argument named \"" + newArg.GetValue() +
           "\" appears in a conditional statement.  " +
           cmPolicies::GetPolicyWarning(cmPolicies::CMP0012);
         status = cmake::AUTHOR_WARNING;
-      }
+        CM_FALLTHROUGH;
       case cmPolicies::OLD:
         return oldResult;
       case cmPolicies::REQUIRED_IF_USED:
@@ -455,7 +454,7 @@ bool cmConditionEvaluator::HandleLevel1(cmArgumentList& newArgs, std::string&,
       if (this->IsKeyword(keyCOMMAND, *arg) && argP1 != newArgs.end()) {
         cmCommand* command =
           this->Makefile.GetState()->GetCommand(argP1->c_str());
-        this->HandlePredicate(command != CM_NULLPTR, reducible, arg, newArgs,
+        this->HandlePredicate(command != nullptr, reducible, arg, newArgs,
                               argP1, argP2);
       }
       // does a policy exist
@@ -467,7 +466,7 @@ bool cmConditionEvaluator::HandleLevel1(cmArgumentList& newArgs, std::string&,
       // does a target exist
       if (this->IsKeyword(keyTARGET, *arg) && argP1 != newArgs.end()) {
         this->HandlePredicate(
-          this->Makefile.FindTargetToUse(argP1->GetValue()) != CM_NULLPTR,
+          this->Makefile.FindTargetToUse(argP1->GetValue()) != nullptr,
           reducible, arg, newArgs, argP1, argP2);
       }
       // does a test exist
@@ -475,8 +474,8 @@ bool cmConditionEvaluator::HandleLevel1(cmArgumentList& newArgs, std::string&,
           this->Policy64Status != cmPolicies::WARN) {
         if (this->IsKeyword(keyTEST, *arg) && argP1 != newArgs.end()) {
           const cmTest* haveTest = this->Makefile.GetTest(argP1->c_str());
-          this->HandlePredicate(haveTest != CM_NULLPTR, reducible, arg,
-                                newArgs, argP1, argP2);
+          this->HandlePredicate(haveTest != nullptr, reducible, arg, newArgs,
+                                argP1, argP2);
         }
       } else if (this->Policy64Status == cmPolicies::WARN &&
                  this->IsKeyword(keyTEST, *arg)) {

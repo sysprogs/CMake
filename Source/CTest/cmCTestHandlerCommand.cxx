@@ -6,6 +6,7 @@
 #include "cmCTestGenericHandler.h"
 #include "cmMakefile.h"
 #include "cmSystemTools.h"
+#include "cmWorkingDirectory.h"
 #include "cmake.h"
 
 #include <sstream>
@@ -19,7 +20,7 @@ cmCTestHandlerCommand::cmCTestHandlerCommand()
   size_t cc;
   this->Arguments.reserve(INIT_SIZE);
   for (cc = 0; cc < INIT_SIZE; ++cc) {
-    this->Arguments.push_back(CM_NULLPTR);
+    this->Arguments.push_back(nullptr);
   }
   this->Arguments[ct_RETURN_VALUE] = "RETURN_VALUE";
   this->Arguments[ct_CAPTURE_CMAKE_ERROR] = "CAPTURE_CMAKE_ERROR";
@@ -88,7 +89,7 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
   SaveRestoreErrorState errorState;
   // Allocate space for argument values.
   this->Values.clear();
-  this->Values.resize(this->Last, CM_NULLPTR);
+  this->Values.resize(this->Last, nullptr);
 
   // Process input arguments.
   this->ArgumentDoing = ArgumentDoingNone;
@@ -96,12 +97,11 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
   // bad one so that CAPTURE_CMAKE_ERROR can override setting the
   // global error state
   bool foundBadArgument = false;
-  for (unsigned int i = 0; i < args.size(); ++i) {
+  for (std::string const& arg : args) {
     // Check this argument.
-    if (!this->CheckArgumentKeyword(args[i]) &&
-        !this->CheckArgumentValue(args[i])) {
+    if (!this->CheckArgumentKeyword(arg) && !this->CheckArgumentValue(arg)) {
       std::ostringstream e;
-      e << "called with unknown argument \"" << args[i] << "\".";
+      e << "called with unknown argument \"" << arg << "\".";
       this->SetError(e.str());
       foundBadArgument = true;
     }
@@ -123,8 +123,8 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
     if (capureCMakeError) {
       this->Makefile->AddDefinition(this->Values[ct_CAPTURE_CMAKE_ERROR],
                                     "-1");
-      const char* err = this->GetError();
-      if (err && !cmSystemTools::FindLastString(err, "unknown error.")) {
+      std::string const err = this->GetName() + " " + this->GetError();
+      if (!cmSystemTools::FindLastString(err.c_str(), "unknown error.")) {
         cmCTestLog(this->CTest, ERROR_MESSAGE, err << " error from command\n");
       }
       // return success because failure is recorded in CAPTURE_CMAKE_ERROR
@@ -216,8 +216,7 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
       handler->SetSubmitIndex(atoi(this->Values[ct_SUBMIT_INDEX]));
     }
   }
-  std::string current_dir = cmSystemTools::GetCurrentWorkingDirectory();
-  cmSystemTools::ChangeDirectory(
+  cmWorkingDirectory workdir(
     this->CTest->GetCTestConfiguration("BuildDirectory"));
   int res = handler->ProcessHandler();
   if (this->Values[ct_RETURN_VALUE] && *this->Values[ct_RETURN_VALUE]) {
@@ -243,7 +242,6 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
     this->Makefile->AddDefinition(this->Values[ct_CAPTURE_CMAKE_ERROR],
                                   returnString);
   }
-  cmSystemTools::ChangeDirectory(current_dir);
   return true;
 }
 

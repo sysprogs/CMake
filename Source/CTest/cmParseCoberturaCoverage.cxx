@@ -5,8 +5,7 @@
 #include "cmSystemTools.h"
 #include "cmXMLParser.h"
 
-#include <cmConfigure.h>
-#include <cmsys/FStream.hxx>
+#include "cmsys/FStream.hxx"
 #include <stdlib.h>
 #include <string.h>
 
@@ -22,13 +21,13 @@ public:
     this->SkipThisClass = false;
     this->FilePaths.push_back(this->Coverage.SourceDir);
     this->FilePaths.push_back(this->Coverage.BinaryDir);
-    this->CurFileName = "";
+    this->CurFileName.clear();
   }
 
-  ~XMLParser() CM_OVERRIDE {}
+  ~XMLParser() override {}
 
 protected:
-  void EndElement(const std::string& name) CM_OVERRIDE
+  void EndElement(const std::string& name) override
   {
     if (name == "source") {
       this->InSource = false;
@@ -39,7 +38,7 @@ protected:
     }
   }
 
-  void CharacterDataHandler(const char* data, int length) CM_OVERRIDE
+  void CharacterDataHandler(const char* data, int length) override
   {
     std::string tmp;
     tmp.insert(0, data, length);
@@ -51,7 +50,7 @@ protected:
     }
   }
 
-  void StartElement(const std::string& name, const char** atts) CM_OVERRIDE
+  void StartElement(const std::string& name, const char** atts) override
   {
     std::string FoundSource;
     std::string finalpath;
@@ -68,22 +67,22 @@ protected:
                                               << std::endl,
                              this->Coverage.Quiet);
           std::string filename = atts[tagCount + 1];
-          this->CurFileName = "";
+          this->CurFileName.clear();
 
           // Check if this is an absolute path that falls within our
           // source or binary directories.
-          for (size_t i = 0; i < FilePaths.size(); i++) {
-            if (filename.find(FilePaths[i]) == 0) {
+          for (std::string const& filePath : FilePaths) {
+            if (filename.find(filePath) == 0) {
               this->CurFileName = filename;
               break;
             }
           }
 
-          if (this->CurFileName == "") {
+          if (this->CurFileName.empty()) {
             // Check if this is a path that is relative to our source or
             // binary directories.
-            for (size_t i = 0; i < FilePaths.size(); i++) {
-              finalpath = FilePaths[i] + "/" + filename;
+            for (std::string const& filePath : FilePaths) {
+              finalpath = filePath + "/" + filename;
               if (cmSystemTools::FileExists(finalpath.c_str())) {
                 this->CurFileName = finalpath;
                 break;
@@ -92,7 +91,7 @@ protected:
           }
 
           cmsys::ifstream fin(this->CurFileName.c_str());
-          if (this->CurFileName == "" || !fin) {
+          if (this->CurFileName.empty() || !fin) {
             this->CurFileName =
               this->Coverage.BinaryDir + "/" + atts[tagCount + 1];
             fin.open(this->CurFileName.c_str());

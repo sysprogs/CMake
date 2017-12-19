@@ -64,8 +64,8 @@ The complete Config mode command signature is::
                [PATHS path1 [path2 ... ]]
                [PATH_SUFFIXES suffix1 [suffix2 ...]]
                [NO_DEFAULT_PATH]
-               [NO_CMAKE_ENVIRONMENT_PATH]
                [NO_CMAKE_PATH]
+               [NO_CMAKE_ENVIRONMENT_PATH]
                [NO_SYSTEM_ENVIRONMENT_PATH]
                [NO_CMAKE_PACKAGE_REGISTRY]
                [NO_CMAKE_BUILDS_PATH] # Deprecated; does nothing.
@@ -251,6 +251,7 @@ enabled.
 
 1. Search paths specified in cmake-specific cache variables.  These
    are intended to be used on the command line with a ``-DVAR=value``.
+   The values are interpreted as :ref:`;-lists <CMake Language Lists>`.
    This can be skipped if ``NO_CMAKE_PATH`` is passed::
 
      CMAKE_PREFIX_PATH
@@ -258,7 +259,9 @@ enabled.
      CMAKE_APPBUNDLE_PATH
 
 2. Search paths specified in cmake-specific environment variables.
-   These are intended to be set in the user's shell configuration.
+   These are intended to be set in the user's shell configuration,
+   and therefore use the host's native path separator
+   (``;`` on Windows and ``:`` on UNIX).
    This can be skipped if ``NO_CMAKE_ENVIRONMENT_PATH`` is passed::
 
      <package>_DIR

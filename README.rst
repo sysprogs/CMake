@@ -30,7 +30,13 @@ Building CMake
 Supported Platforms
 -------------------
 
-MS Windows, Mac OS X, Linux, FreeBSD, Solaris, HP-UX, IRIX, BeOS, QNX
+* Microsoft Windows
+* Apple macOS
+* Linux
+* FreeBSD
+* OpenBSD
+* Solaris
+* AIX
 
 Other UNIX-like operating systems may work too out of the box, if not
 it should not be a major problem to port CMake to this platform.
@@ -45,7 +51,7 @@ Building CMake from Scratch
 UNIX/Mac OSX/MinGW/MSYS/Cygwin
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You need to have a compiler and a make installed.
+You need to have a C++ compiler (supporting C++11) and a ``make`` installed.
 Run the ``bootstrap`` script you find in the source directory of CMake.
 You can use the ``--help`` option to see the supported options.
 You may use the ``--prefix=<install_prefix>`` option to specify a custom

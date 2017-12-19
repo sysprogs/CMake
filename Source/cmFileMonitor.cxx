@@ -2,12 +2,13 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmFileMonitor.h"
 
-#include <cmsys/SystemTools.hxx>
+#include "cmAlgorithms.h"
+#include "cmsys/SystemTools.hxx"
 
 #include <cassert>
-#include <iostream>
-#include <set>
+#include <stddef.h>
 #include <unordered_map>
+#include <utility>
 
 namespace {
 void on_directory_change(uv_fs_event_t* handle, const char* filename,
@@ -36,12 +37,7 @@ public:
 class cmVirtualDirectoryWatcher : public cmIBaseWatcher
 {
 public:
-  ~cmVirtualDirectoryWatcher() override
-  {
-    for (auto i : this->Children) {
-      delete i.second;
-    }
-  }
+  ~cmVirtualDirectoryWatcher() override { cmDeleteAll(this->Children); }
 
   cmIBaseWatcher* Find(const std::string& ps)
   {
@@ -53,8 +49,8 @@ public:
                int status) const final
   {
     if (pathSegment.empty()) {
-      for (const auto& i : this->Children) {
-        i.second->Trigger(std::string(), events, status);
+      for (auto const& child : this->Children) {
+        child.second->Trigger(std::string(), events, status);
       }
     } else {
       const auto i = this->Children.find(pathSegment);
@@ -66,24 +62,24 @@ public:
 
   void StartWatching() override
   {
-    for (const auto& i : this->Children) {
-      i.second->StartWatching();
+    for (auto const& child : this->Children) {
+      child.second->StartWatching();
     }
   }
 
   void StopWatching() override
   {
-    for (const auto& i : this->Children) {
-      i.second->StopWatching();
+    for (auto const& child : this->Children) {
+      child.second->StopWatching();
     }
   }
 
   std::vector<std::string> WatchedFiles() const final
   {
     std::vector<std::string> result;
-    for (const auto& i : this->Children) {
-      for (const auto& j : i.second->WatchedFiles()) {
-        result.push_back(j);
+    for (auto const& child : this->Children) {
+      for (std::string const& f : child.second->WatchedFiles()) {
+        result.push_back(f);
       }
     }
     return result;
@@ -92,9 +88,9 @@ public:
   std::vector<std::string> WatchedDirectories() const override
   {
     std::vector<std::string> result;
-    for (const auto& i : this->Children) {
-      for (const auto& j : i.second->WatchedDirectories()) {
-        result.push_back(j);
+    for (auto const& child : this->Children) {
+      for (std::string const& dir : child.second->WatchedDirectories()) {
+        result.push_back(dir);
       }
     }
     return result;
@@ -102,9 +98,7 @@ public:
 
   void Reset()
   {
-    for (auto c : this->Children) {
-      delete c.second;
-    }
+    cmDeleteAll(this->Children);
     this->Children.clear();
   }
 
@@ -177,7 +171,9 @@ public:
   {
     if (this->Handle) {
       uv_fs_event_stop(this->Handle);
-      uv_close(reinterpret_cast<uv_handle_t*>(this->Handle), &on_fs_close);
+      if (!uv_is_closing(reinterpret_cast<uv_handle_t*>(this->Handle))) {
+        uv_close(reinterpret_cast<uv_handle_t*>(this->Handle), &on_fs_close);
+      }
       this->Handle = nullptr;
     }
     cmVirtualDirectoryWatcher::StopWatching();
@@ -188,8 +184,9 @@ public:
   std::vector<std::string> WatchedDirectories() const override
   {
     std::vector<std::string> result = { Path() };
-    for (const auto& j : cmVirtualDirectoryWatcher::WatchedDirectories()) {
-      result.push_back(j);
+    for (std::string const& dir :
+         cmVirtualDirectoryWatcher::WatchedDirectories()) {
+      result.push_back(dir);
     }
     return result;
   }
@@ -236,7 +233,7 @@ public:
                 cmFileMonitor::Callback cb)
     : Parent(p)
     , PathSegment(ps)
-    , CbList({ cb })
+    , CbList({ std::move(cb) })
   {
     assert(p);
     assert(!ps.empty());
@@ -271,7 +268,7 @@ public:
     static_cast<void>(ps);
 
     const std::string path = this->Path();
-    for (const auto& cb : this->CbList) {
+    for (cmFileMonitor::Callback const& cb : this->CbList) {
       cb(path, events, status);
     }
   }
@@ -315,7 +312,7 @@ cmFileMonitor::~cmFileMonitor()
 void cmFileMonitor::MonitorPaths(const std::vector<std::string>& paths,
                                  Callback const& cb)
 {
-  for (const auto& p : paths) {
+  for (std::string const& p : paths) {
     std::vector<std::string> pathSegments;
     cmsys::SystemTools::SplitPath(p, pathSegments, true);
 

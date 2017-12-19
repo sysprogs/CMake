@@ -2,15 +2,12 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCommandArgumentParserHelper.h"
 
-#include <cm_kwiml.h>
-
 #include "cmCommandArgumentLexer.h"
 #include "cmMakefile.h"
 #include "cmState.h"
 #include "cmSystemTools.h"
 #include "cmake.h"
 
-#include <cmConfigure.h>
 #include <iostream>
 #include <sstream>
 #include <string.h>
@@ -22,7 +19,7 @@ cmCommandArgumentParserHelper::cmCommandArgumentParserHelper()
   this->WarnUninitialized = false;
   this->CheckSystemVars = false;
   this->FileLine = -1;
-  this->FileName = CM_NULLPTR;
+  this->FileName = nullptr;
   this->RemoveEmpty = true;
   this->EmptyVariable[0] = 0;
   strcpy(this->DCURLYVariable, "${");
@@ -91,13 +88,13 @@ char* cmCommandArgumentParserHelper::ExpandSpecialVariable(const char* key,
   e << "Syntax $" << key << "{} is not supported.  "
     << "Only ${}, $ENV{}, and $CACHE{} are allowed.";
   this->SetError(e.str());
-  return CM_NULLPTR;
+  return nullptr;
 }
 
 char* cmCommandArgumentParserHelper::ExpandVariable(const char* var)
 {
   if (!var) {
-    return CM_NULLPTR;
+    return nullptr;
   }
   if (this->FileLine >= 0 && strcmp(var, "CMAKE_CURRENT_LIST_LINE") == 0) {
     std::ostringstream ostr;
@@ -120,7 +117,7 @@ char* cmCommandArgumentParserHelper::ExpandVariable(const char* var)
         this->Makefile->IssueMessage(cmake::AUTHOR_WARNING, msg.str());
       }
     }
-    return CM_NULLPTR;
+    return nullptr;
   }
   if (this->EscapeQuotes && value) {
     return this->AddString(cmSystemTools::EscapeQuotes(value));
@@ -172,7 +169,7 @@ char* cmCommandArgumentParserHelper::CombineUnions(char* in1, char* in2)
 void cmCommandArgumentParserHelper::AllocateParserType(
   cmCommandArgumentParserHelper::ParserType* pt, const char* str, int len)
 {
-  pt->str = CM_NULLPTR;
+  pt->str = nullptr;
   if (len == 0) {
     len = static_cast<int>(strlen(str));
   }
@@ -237,7 +234,7 @@ int cmCommandArgumentParserHelper::ParseString(const char* str, int verb)
   this->InputBufferPos = 0;
   this->CurrentLine = 0;
 
-  this->Result = "";
+  this->Result.clear();
 
   yyscan_t yyscanner;
   cmCommandArgument_yylex_init(&yyscanner);
@@ -261,8 +258,8 @@ int cmCommandArgumentParserHelper::ParseString(const char* str, int verb)
 void cmCommandArgumentParserHelper::CleanupParser()
 {
   std::vector<char*>::iterator sit;
-  for (sit = this->Variables.begin(); sit != this->Variables.end(); ++sit) {
-    delete[] * sit;
+  for (char* var : this->Variables) {
+    delete[] var;
   }
   this->Variables.erase(this->Variables.begin(), this->Variables.end());
 }
@@ -301,7 +298,7 @@ void cmCommandArgumentParserHelper::SetMakefile(const cmMakefile* mf)
 void cmCommandArgumentParserHelper::SetResult(const char* value)
 {
   if (!value) {
-    this->Result = "";
+    this->Result.clear();
     return;
   }
   this->Result = value;

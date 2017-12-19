@@ -3,10 +3,10 @@
 #ifndef cmCTestBatchTestHandler_h
 #define cmCTestBatchTestHandler_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
-#include <cmCTestMultiProcessHandler.h>
-#include <cmsys/FStream.hxx>
+#include "cmCTestMultiProcessHandler.h"
+#include "cmsys/FStream.hxx"
 #include <string>
 
 /** \class cmCTestBatchTestHandler
@@ -17,8 +17,8 @@
 class cmCTestBatchTestHandler : public cmCTestMultiProcessHandler
 {
 public:
-  ~cmCTestBatchTestHandler() CM_OVERRIDE;
-  void RunTests() CM_OVERRIDE;
+  ~cmCTestBatchTestHandler() override;
+  void RunTests() override;
 
 protected:
   void WriteBatchScript();

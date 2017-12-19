@@ -5,35 +5,39 @@ include(${CMAKE_ROOT}/Modules/CMakeDetermineCompiler.cmake)
 include(${CMAKE_ROOT}/Modules//CMakeParseImplicitLinkInfo.cmake)
 
 if( NOT ( ("${CMAKE_GENERATOR}" MATCHES "Make") OR
-          ("${CMAKE_GENERATOR}" MATCHES "Ninja") ) )
+          ("${CMAKE_GENERATOR}" MATCHES "Ninja") OR
+          ("${CMAKE_GENERATOR}" MATCHES "Visual Studio (1|[89][0-9])") ) )
   message(FATAL_ERROR "CUDA language not currently supported by \"${CMAKE_GENERATOR}\" generator")
 endif()
 
-if(NOT CMAKE_CUDA_COMPILER)
-  set(CMAKE_CUDA_COMPILER_INIT NOTFOUND)
+if(${CMAKE_GENERATOR} MATCHES "Visual Studio")
+else()
+  if(NOT CMAKE_CUDA_COMPILER)
+    set(CMAKE_CUDA_COMPILER_INIT NOTFOUND)
 
-    # prefer the environment variable CUDACXX
-    if(NOT $ENV{CUDACXX} STREQUAL "")
-      get_filename_component(CMAKE_CUDA_COMPILER_INIT $ENV{CUDACXX} PROGRAM PROGRAM_ARGS CMAKE_CUDA_FLAGS_ENV_INIT)
-      if(CMAKE_CUDA_FLAGS_ENV_INIT)
-        set(CMAKE_CUDA_COMPILER_ARG1 "${CMAKE_CUDA_FLAGS_ENV_INIT}" CACHE STRING "First argument to CXX compiler")
+      # prefer the environment variable CUDACXX
+      if(NOT $ENV{CUDACXX} STREQUAL "")
+        get_filename_component(CMAKE_CUDA_COMPILER_INIT $ENV{CUDACXX} PROGRAM PROGRAM_ARGS CMAKE_CUDA_FLAGS_ENV_INIT)
+        if(CMAKE_CUDA_FLAGS_ENV_INIT)
+          set(CMAKE_CUDA_COMPILER_ARG1 "${CMAKE_CUDA_FLAGS_ENV_INIT}" CACHE STRING "First argument to CXX compiler")
+        endif()
+        if(NOT EXISTS ${CMAKE_CUDA_COMPILER_INIT})
+          message(FATAL_ERROR "Could not find compiler set in environment variable CUDACXX:\n$ENV{CUDACXX}.\n${CMAKE_CUDA_COMPILER_INIT}")
+        endif()
       endif()
-      if(NOT EXISTS ${CMAKE_CUDA_COMPILER_INIT})
-        message(FATAL_ERROR "Could not find compiler set in environment variable CUDACXX:\n$ENV{CUDACXX}.\n${CMAKE_CUDA_COMPILER_INIT}")
-      endif()
+
+    # finally list compilers to try
+    if(NOT CMAKE_CUDA_COMPILER_INIT)
+      set(CMAKE_CUDA_COMPILER_LIST nvcc)
     endif()
 
-  # finally list compilers to try
-  if(NOT CMAKE_CUDA_COMPILER_INIT)
-    set(CMAKE_CUDA_COMPILER_LIST nvcc)
+    _cmake_find_compiler(CUDA)
+  else()
+    _cmake_find_compiler_path(CUDA)
   endif()
 
-  _cmake_find_compiler(CUDA)
-else()
-  _cmake_find_compiler_path(CUDA)
+  mark_as_advanced(CMAKE_CUDA_COMPILER)
 endif()
-
-mark_as_advanced(CMAKE_CUDA_COMPILER)
 
 #Allow the user to specify a host compiler
 set(CMAKE_CUDA_HOST_COMPILER "" CACHE FILEPATH "Host compiler to be used by nvcc")
@@ -75,16 +79,23 @@ if(MSVC_CUDA_ARCHITECTURE_ID)
     "set(MSVC_CUDA_ARCHITECTURE_ID ${MSVC_CUDA_ARCHITECTURE_ID})")
 endif()
 
-#if this compiler vendor is matches NVIDIA we can determine
-#what the host compiler is. This only needs to be done if the CMAKE_CUDA_HOST_COMPILER
-#has NOT been explicitly set
-#
-#Find the line from compiler ID that contains a.out ( or last line )
-#We also need to find the implicit link lines. Which can be done by replacing
-#the compiler with cuda-fake-ld  and pass too CMAKE_PARSE_IMPLICIT_LINK_INFO
-if(CMAKE_CUDA_COMPILER_ID STREQUAL NVIDIA)
+if(${CMAKE_GENERATOR} MATCHES "Visual Studio")
+  set(CMAKE_CUDA_HOST_LINK_LAUNCHER "${CMAKE_LINKER}")
+  set(CMAKE_CUDA_HOST_IMPLICIT_LINK_LIBRARIES "")
+  set(CMAKE_CUDA_HOST_IMPLICIT_LINK_DIRECTORIES "")
+  set(CMAKE_CUDA_HOST_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES "")
+elseif(CMAKE_CUDA_COMPILER_ID STREQUAL NVIDIA)
   set(_nvcc_log "")
   string(REPLACE "\r" "" _nvcc_output_orig "${CMAKE_CUDA_COMPILER_PRODUCED_OUTPUT}")
+  if(_nvcc_output_orig MATCHES "#\\\$ +PATH= *([^\n]*)\n")
+    set(_nvcc_path "${CMAKE_MATCH_1}")
+    string(APPEND _nvcc_log "  found 'PATH=' string: [${_nvcc_path}]\n")
+    string(REPLACE ":" ";" _nvcc_path "${_nvcc_path}")
+  else()
+    set(_nvcc_path "")
+    string(REPLACE "\n" "\n    " _nvcc_output_log "\n${_nvcc_output_orig}")
+    string(APPEND _nvcc_log "  no 'PATH=' string found in nvcc output:${_nvcc_output_log}\n")
+  endif()
   if(_nvcc_output_orig MATCHES "#\\\$ +LIBRARIES= *([^\n]*)\n")
     set(_nvcc_libraries "${CMAKE_MATCH_1}")
     string(APPEND _nvcc_log "  found 'LIBRARIES=' string: [${_nvcc_libraries}]\n")
@@ -129,7 +140,26 @@ if(CMAKE_CUDA_COMPILER_ID STREQUAL NVIDIA)
     else()
       #extract the compiler that is being used for linking
       separate_arguments(_nvcc_link_line_args UNIX_COMMAND "${_nvcc_link_line}")
-      list(GET _nvcc_link_line_args 0 CMAKE_CUDA_HOST_LINK_LAUNCHER)
+      list(GET _nvcc_link_line_args 0 _nvcc_host_link_launcher)
+      if(IS_ABSOLUTE "${_nvcc_host_link_launcher}")
+        string(APPEND _nvcc_log "  extracted link launcher absolute path: [${_nvcc_host_link_launcher}]\n")
+        set(CMAKE_CUDA_HOST_LINK_LAUNCHER "${_nvcc_host_link_launcher}")
+      else()
+        string(APPEND _nvcc_log "  extracted link launcher name: [${_nvcc_host_link_launcher}]\n")
+        find_program(_nvcc_find_host_link_launcher
+          NAMES ${_nvcc_host_link_launcher}
+          PATHS ${_nvcc_path} NO_DEFAULT_PATH)
+        find_program(_nvcc_find_host_link_launcher
+          NAMES ${_nvcc_host_link_launcher})
+        if(_nvcc_find_host_link_launcher)
+          string(APPEND _nvcc_log "  found link launcher absolute path: [${_nvcc_find_host_link_launcher}]\n")
+          set(CMAKE_CUDA_HOST_LINK_LAUNCHER "${_nvcc_find_host_link_launcher}")
+        else()
+          string(APPEND _nvcc_log "  could not find link launcher absolute path\n")
+          set(CMAKE_CUDA_HOST_LINK_LAUNCHER "${_nvcc_host_link_launcher}")
+        endif()
+        unset(_nvcc_find_host_link_launcher CACHE)
+      endif()
     endif()
 
     #prefix the line with cuda-fake-ld so that implicit link info believes it is

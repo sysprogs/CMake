@@ -52,6 +52,7 @@ else()
       #  frt: Fujitsu F77 compiler
       #  pathf90/pathf95/pathf2003: PathScale Fortran compiler
       #  pgf77/pgf90/pgf95/pgfortran: Portland Group F77/F90/F95 compilers
+      #  flang: Flang Fortran compiler
       #  xlf/xlf90/xlf95: IBM (AIX) F77/F90/F95 compilers
       #  lf95: Lahey-Fujitsu F95 compiler
       #  fl32: Microsoft Fortran 77 "PowerStation" compiler
@@ -60,6 +61,7 @@ else()
       #  fort: Compaq (now HP) Fortran 90/95 compiler for Tru64 and Linux/Alpha
       #  ifc: Intel Fortran 95 compiler for Linux/x86
       #  efc: Intel Fortran 95 compiler for IA64
+      #  nagfor: NAG Fortran compiler
       #
       #  The order is 95 or newer compilers first, then 90,
       #  then 77 or older compilers, gnu is always last in the group,
@@ -67,8 +69,8 @@ else()
       set(CMAKE_Fortran_COMPILER_LIST
         ftn
         ifort ifc af95 af90 efc f95 pathf2003 pathf95 pgf95 pgfortran lf95 xlf95
-        fort gfortran gfortran-4 g95 f90 pathf90 pgf90 xlf90 epcf90 fort77
-        frt pgf77 xlf fl32 af77 g77 f77
+        fort flang gfortran gfortran-4 g95 f90 pathf90 pgf90 xlf90 epcf90 fort77
+        frt pgf77 xlf fl32 af77 g77 f77 nag
         )
 
       # Vendor-specific compiler names.
@@ -76,9 +78,11 @@ else()
       set(_Fortran_COMPILER_NAMES_Intel     ifort ifc efc)
       set(_Fortran_COMPILER_NAMES_Absoft    af95 af90 af77)
       set(_Fortran_COMPILER_NAMES_PGI       pgf95 pgfortran pgf90 pgf77)
+      set(_Fortran_COMPILER_NAMES_Flang     flang)
       set(_Fortran_COMPILER_NAMES_PathScale pathf2003 pathf95 pathf90)
       set(_Fortran_COMPILER_NAMES_XL        xlf)
       set(_Fortran_COMPILER_NAMES_VisualAge xlf95 xlf90 xlf)
+      set(_Fortran_COMPILER_NAMES_NAG       nagfor)
     endif()
 
     _cmake_find_compiler(Fortran)
@@ -255,6 +259,16 @@ if (CMAKE_CROSSCOMPILING  AND NOT _CMAKE_TOOLCHAIN_PREFIX)
 endif ()
 
 include(CMakeFindBinUtils)
+set(_CMAKE_PROCESSING_LANGUAGE "Fortran")
+include(Compiler/${CMAKE_Fortran_COMPILER_ID}-FindBinUtils OPTIONAL)
+unset(_CMAKE_PROCESSING_LANGUAGE)
+
+if(CMAKE_Fortran_COMPILER_ARCHITECTURE_ID)
+  set(_SET_CMAKE_Fortran_COMPILER_ARCHITECTURE_ID
+    "set(CMAKE_Fortran_COMPILER_ARCHITECTURE_ID ${CMAKE_Fortran_COMPILER_ARCHITECTURE_ID})")
+else()
+  set(_SET_CMAKE_Fortran_COMPILER_ARCHITECTURE_ID "")
+endif()
 
 if(MSVC_Fortran_ARCHITECTURE_ID)
   set(SET_MSVC_Fortran_ARCHITECTURE_ID

@@ -17,7 +17,7 @@ pairs.  Each such pair will be transformed into an entry in the
 solution global section.  Whitespace around key and value is ignored.
 List elements which do not contain an equal sign are skipped.
 
-This property only works for Visual Studio 7 and above; it is ignored
+This property only works for Visual Studio 8 and above; it is ignored
 on other generators.  The property only applies when set on a
 directory whose CMakeLists.txt contains a project() command.
 
@@ -26,4 +26,6 @@ and ExtensibilityAddIns by default.  If you set the corresponding
 property, it will override the default section.  For example, setting
 VS_GLOBAL_SECTION_POST_ExtensibilityGlobals will override the default
 contents of the ExtensibilityGlobals section, while keeping
-ExtensibilityAddIns on its default.
+ExtensibilityAddIns on its default.  However, CMake will always
+add a ``SolutionGuid`` to the ``ExtensibilityGlobals`` section
+if it is not specified explicitly.

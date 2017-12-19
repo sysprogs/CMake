@@ -3,7 +3,8 @@
 #ifndef cmFortran_h
 #define cmFortran_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <iosfwd>
 #include <set>
 #include <string>
@@ -20,6 +21,8 @@ class cmLocalGenerator;
  */
 class cmDependsFortran : public cmDepends
 {
+  CM_DISABLE_COPY(cmDependsFortran)
+
 public:
   /** Checking instances need to know the build directory name and the
       relative path from the build directory to the target file.  */
@@ -32,7 +35,7 @@ public:
   cmDependsFortran(cmLocalGenerator* lg);
 
   /** Virtual destructor to cleanup subclasses properly.  */
-  ~cmDependsFortran() CM_OVERRIDE;
+  ~cmDependsFortran() override;
 
   /** Callback from build system after a .mod file has been generated
       by a Fortran90 compiler to copy the .mod file to the
@@ -47,7 +50,7 @@ public:
 protected:
   // Finalize the dependency information for the target.
   bool Finalize(std::ostream& makeDepends,
-                std::ostream& internalDepends) CM_OVERRIDE;
+                std::ostream& internalDepends) override;
 
   // Find all the modules required by the target.
   void LocateModules();
@@ -59,7 +62,7 @@ protected:
   // Implement writing/checking methods required by superclass.
   bool WriteDependencies(const std::set<std::string>& sources,
                          const std::string& file, std::ostream& makeDepends,
-                         std::ostream& internalDepends) CM_OVERRIDE;
+                         std::ostream& internalDepends) override;
 
   // Actually write the depenencies to the streams.
   bool WriteDependenciesReal(const char* obj, cmFortranSourceInfo const& info,
@@ -76,9 +79,6 @@ protected:
   cmDependsFortranInternals* Internal;
 
 private:
-  cmDependsFortran(cmDependsFortran const&); // Purposely not implemented.
-  void operator=(cmDependsFortran const&);   // Purposely not implemented.
-
   std::string MaybeConvertToRelativePath(std::string const& base,
                                          std::string const& path);
 };

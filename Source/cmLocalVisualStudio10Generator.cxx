@@ -8,7 +8,7 @@
 #include "cmVisualStudio10TargetGenerator.h"
 #include "cmXMLParser.h"
 
-#include <cm_expat.h>
+#include "cm_expat.h"
 
 class cmVS10XMLParser : public cmXMLParser
 {
@@ -17,7 +17,12 @@ public:
   virtual void CharacterDataHandler(const char* data, int length)
   {
     if (this->DoGUID) {
-      this->GUID.assign(data + 1, length - 2);
+      if (data[0] == '{') {
+        // remove surrounding curly brackets
+        this->GUID.assign(data + 1, length - 2);
+      } else {
+        this->GUID.assign(data, length);
+      }
       this->DoGUID = false;
     }
   }
@@ -60,8 +65,8 @@ cmLocalVisualStudio10Generator::~cmLocalVisualStudio10Generator()
 void cmLocalVisualStudio10Generator::Generate()
 {
 
-  std::vector<cmGeneratorTarget*> tgts = this->GetGeneratorTargets();
-  for (std::vector<cmGeneratorTarget*>::iterator l = tgts.begin();
+  const std::vector<cmGeneratorTarget*>& tgts = this->GetGeneratorTargets();
+  for (std::vector<cmGeneratorTarget*>::const_iterator l = tgts.begin();
        l != tgts.end(); ++l) {
     if ((*l)->GetType() == cmStateEnums::INTERFACE_LIBRARY) {
       continue;

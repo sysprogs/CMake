@@ -1,17 +1,15 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
    file Copyright.txt or https://cmake.org/licensing for details.  */
-#include <cmConfigure.h>
 
 #include "CTest/cmCTestLaunch.h"
 #include "CTest/cmCTestScriptHandler.h"
 #include "cmCTest.h"
 #include "cmDocumentation.h"
 #include "cmSystemTools.h"
-#include "cmake.h"
 
-#include <cmsys/Encoding.hxx>
+#include "cmsys/Encoding.hxx"
 #if defined(_WIN32) && defined(CMAKE_BUILD_WITH_CMAKE)
-#include <cmsys/ConsoleBuf.hxx>
+#include "cmsys/ConsoleBuf.hxx"
 #endif
 #include <iostream>
 #include <string.h>
@@ -19,13 +17,13 @@
 #include <vector>
 
 static const char* cmDocumentationName[][2] = {
-  { CM_NULLPTR, "  ctest - Testing driver provided by CMake." },
-  { CM_NULLPTR, CM_NULLPTR }
+  { nullptr, "  ctest - Testing driver provided by CMake." },
+  { nullptr, nullptr }
 };
 
-static const char* cmDocumentationUsage[][2] = { { CM_NULLPTR,
+static const char* cmDocumentationUsage[][2] = { { nullptr,
                                                    "  ctest [options]" },
-                                                 { CM_NULLPTR, CM_NULLPTR } };
+                                                 { nullptr, nullptr } };
 
 static const char* cmDocumentationOptions[][2] = {
   { "-C <cfg>, --build-config <cfg>", "Choose configuration to test." },
@@ -52,6 +50,18 @@ static const char* cmDocumentationOptions[][2] = {
                                            "expression." },
   { "-LE <regex>, --label-exclude <regex>", "Exclude tests with labels "
                                             "matching regular expression." },
+  { "-FA <regex>, --fixture-exclude-any <regex>", "Do not automatically "
+                                                  "add any tests for "
+                                                  "fixtures matching "
+                                                  "regular expression." },
+  { "-FS <regex>, --fixture-exclude-setup <regex>", "Do not automatically "
+                                                    "add setup tests for "
+                                                    "fixtures matching "
+                                                    "regular expression." },
+  { "-FC <regex>, --fixture-exclude-cleanup <regex>", "Do not automatically "
+                                                      "add cleanup tests for "
+                                                      "fixtures matching "
+                                                      "regular expression." },
   { "-D <dashboard>, --dashboard <dashboard>", "Execute dashboard test" },
   { "-D <var>:<type>=<value>", "Define a variable for script mode" },
   { "-M <model>, --test-model <model>", "Sets the model for a dashboard" },
@@ -72,6 +82,8 @@ static const char* cmDocumentationOptions[][2] = {
   { "--max-width <width>", "Set the max width for a test name to output" },
   { "--interactive-debug-mode [0|1]", "Set the interactive mode to 0 or 1." },
   { "--no-label-summary", "Disable timing summary information for labels." },
+  { "--no-subproject-summary", "Disable timing summary information for "
+                               "subprojects." },
   { "--build-and-test", "Configure, build and run a test." },
   { "--build-target", "Specify a specific target to build." },
   { "--build-nocmake", "Run the build without running cmake first." },
@@ -107,7 +119,7 @@ static const char* cmDocumentationOptions[][2] = {
   { "--http1.0", "Submit using HTTP 1.0." },
   { "--no-compress-output", "Do not compress test output when submitting." },
   { "--print-labels", "Print all available test labels." },
-  { CM_NULLPTR, CM_NULLPTR }
+  { nullptr, nullptr }
 };
 
 // this is a test driver program for cmCTest.
@@ -158,11 +170,6 @@ int main(int argc, char const* const* argv)
     cmDocumentation doc;
     doc.addCTestStandardDocSections();
     if (doc.CheckOptions(argc, argv)) {
-      cmake hcm;
-      hcm.SetHomeDirectory("");
-      hcm.SetHomeOutputDirectory("");
-      hcm.AddCMakePaths();
-
       // Construct and print requested documentation.
       cmCTestScriptHandler* ch =
         static_cast<cmCTestScriptHandler*>(inst.GetHandler("script"));
@@ -179,6 +186,7 @@ int main(int argc, char const* const* argv)
 
   // copy the args to a vector
   std::vector<std::string> args;
+  args.reserve(argc);
   for (int i = 0; i < argc; ++i) {
     args.push_back(argv[i]);
   }

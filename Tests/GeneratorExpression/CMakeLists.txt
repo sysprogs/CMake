@@ -258,11 +258,13 @@ add_custom_target(check-part4 ALL
   VERBATIM
   )
 
+add_executable(srcgenex srcgenex.c)
+set_property(SOURCE srcgenex.c PROPERTY COMPILE_FLAGS "-DNAME=$<TARGET_PROPERTY:NAME>")
+
 #-----------------------------------------------------------------------------
 # Cover test properties with generator expressions.
 add_executable(echo echo.c)
 add_executable(pwd pwd.c)
-set_property(SOURCE echo.c PROPERTY COMPILE_FLAGS $<1:-DSRC_GENEX_WORKS>)
 
 add_test(NAME echo-configuration COMMAND echo $<CONFIGURATION>)
 set_property(TEST echo-configuration PROPERTY
@@ -292,3 +294,19 @@ set(CMP0044_TYPE NEW)
 add_subdirectory(CMP0044 ${CMAKE_BINARY_DIR}/CMP0044-NEW)
 set(CMP0044_TYPE OLD)
 add_subdirectory(CMP0044 ${CMAKE_BINARY_DIR}/CMP0044-OLD)
+
+if(NOT CMAKE_GENERATOR STREQUAL Xcode OR NOT CMAKE_OSX_ARCHITECTURES MATCHES "[;$]")
+  add_library(objlib OBJECT objlib1.c objlib2.c)
+  file(GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/objlib_files_$<CONFIGURATION>"
+    CONTENT "$<JOIN:$<TARGET_OBJECTS:objlib>,\n>\n"
+  )
+
+  add_custom_target(check_object_files ALL
+    COMMAND ${CMAKE_COMMAND}
+      "-DOBJLIB_LISTFILE=${CMAKE_CURRENT_BINARY_DIR}/objlib_files_$<CONFIGURATION>"
+      -DEXPECTED_NUM_OBJECTFILES=2
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/check_object_files.cmake"
+    DEPENDS objlib
+  )
+endif()

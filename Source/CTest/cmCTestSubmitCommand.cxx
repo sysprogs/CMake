@@ -86,7 +86,7 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
                          extraFiles.end());
     if (!this->CTest->SubmitExtraFiles(newExtraFiles)) {
       this->SetError("problem submitting extra files.");
-      return CM_NULLPTR;
+      return nullptr;
     }
   }
 
@@ -94,7 +94,7 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
     this->CTest->GetInitializedHandler("submit");
   if (!handler) {
     this->SetError("internal CTest error. Cannot instantiate submit handler");
-    return CM_NULLPTR;
+    return nullptr;
   }
 
   // If no FILES or PARTS given, *all* PARTS are submitted by default.
@@ -127,6 +127,12 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
   //
   if (this->PartsMentioned) {
     static_cast<cmCTestSubmitHandler*>(handler)->SelectParts(this->Parts);
+  }
+
+  // Pass along any HTTPHEADER to the handler if this option was given.
+  if (!this->HttpHeaders.empty()) {
+    static_cast<cmCTestSubmitHandler*>(handler)->SetHttpHeaders(
+      this->HttpHeaders);
   }
 
   static_cast<cmCTestSubmitHandler*>(handler)->SetOption(
@@ -182,6 +188,11 @@ bool cmCTestSubmitCommand::CheckArgumentKeyword(std::string const& arg)
     }
   }
   // Arguments used by both modes.
+  if (arg == "HTTPHEADER") {
+    this->ArgumentDoing = ArgumentDoingHttpHeader;
+    return true;
+  }
+
   if (arg == "RETRY_COUNT") {
     this->ArgumentDoing = ArgumentDoingRetryCount;
     return true;
@@ -227,6 +238,11 @@ bool cmCTestSubmitCommand::CheckArgumentValue(std::string const& arg)
       this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
       this->ArgumentDoing = ArgumentDoingError;
     }
+    return true;
+  }
+
+  if (this->ArgumentDoing == ArgumentDoingHttpHeader) {
+    this->HttpHeaders.push_back(arg);
     return true;
   }
 

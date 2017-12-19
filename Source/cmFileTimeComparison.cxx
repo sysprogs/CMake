@@ -4,16 +4,15 @@
 
 #include <string>
 #include <time.h>
+#include <unordered_map>
 #include <utility>
-
-#include "cm_unordered_map.hxx"
 
 // Use a platform-specific API to get file times efficiently.
 #if !defined(_WIN32) || defined(__CYGWIN__)
-#include <sys/stat.h>
+#include "cm_sys_stat.h"
 #define cmFileTimeComparison_Type struct stat
 #else
-#include <cmsys/Encoding.hxx>
+#include "cmsys/Encoding.hxx"
 #include <windows.h>
 #define cmFileTimeComparison_Type FILETIME
 #endif
@@ -27,7 +26,7 @@ public:
   bool FileTimesDiffer(const char* f1, const char* f2);
 
 private:
-  typedef CM_UNORDERED_MAP<std::string, cmFileTimeComparison_Type>
+  typedef std::unordered_map<std::string, cmFileTimeComparison_Type>
     FileStatsMap;
   FileStatsMap Files;
 
@@ -117,18 +116,22 @@ int cmFileTimeComparisonInternal::Compare(cmFileTimeComparison_Type* s1,
   // Compare using nanosecond resolution.
   if (s1->st_mtimespec.tv_sec < s2->st_mtimespec.tv_sec) {
     return -1;
-  } else if (s1->st_mtimespec.tv_sec > s2->st_mtimespec.tv_sec) {
+  }
+  if (s1->st_mtimespec.tv_sec > s2->st_mtimespec.tv_sec) {
     return 1;
-  } else if (s1->st_mtimespec.tv_nsec < s2->st_mtimespec.tv_nsec) {
+  }
+  if (s1->st_mtimespec.tv_nsec < s2->st_mtimespec.tv_nsec) {
     return -1;
-  } else if (s1->st_mtimespec.tv_nsec > s2->st_mtimespec.tv_nsec) {
+  }
+  if (s1->st_mtimespec.tv_nsec > s2->st_mtimespec.tv_nsec) {
     return 1;
   }
 #else
   // Compare using 1 second resolution.
   if (s1->st_mtime < s2->st_mtime) {
     return -1;
-  } else if (s1->st_mtime > s2->st_mtime) {
+  }
+  if (s1->st_mtime > s2->st_mtime) {
     return 1;
   }
 #endif
@@ -163,20 +166,20 @@ bool cmFileTimeComparisonInternal::TimesDiffer(cmFileTimeComparison_Type* s1,
   long long t2 = s2->st_mtimespec.tv_sec * bil + s2->st_mtimespec.tv_nsec;
   if (t1 < t2) {
     return (t2 - t1) >= bil;
-  } else if (t2 < t1) {
-    return (t1 - t2) >= bil;
-  } else {
-    return false;
   }
+  if (t2 < t1) {
+    return (t1 - t2) >= bil;
+  }
+  return false;
 #else
   // Times are integers in units of 1s.
   if (s1->st_mtime < s2->st_mtime) {
     return (s2->st_mtime - s1->st_mtime) >= 1;
-  } else if (s1->st_mtime > s2->st_mtime) {
-    return (s1->st_mtime - s2->st_mtime) >= 1;
-  } else {
-    return false;
   }
+  if (s1->st_mtime > s2->st_mtime) {
+    return (s1->st_mtime - s2->st_mtime) >= 1;
+  }
+  return false;
 #endif
 #else
   // Times are integers in units of 100ns.

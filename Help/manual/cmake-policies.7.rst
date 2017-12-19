@@ -51,6 +51,24 @@ The :variable:`CMAKE_MINIMUM_REQUIRED_VERSION` variable may also be used
 to determine whether to report an error on use of deprecated macros or
 functions.
 
+Policies Introduced by CMake 3.10
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0071: Let AUTOMOC and AUTOUIC process GENERATED files. </policy/CMP0071>
+   CMP0070: Define file(GENERATE) behavior for relative paths. </policy/CMP0070>
+
+Policies Introduced by CMake 3.9
+================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0069: INTERPROCEDURAL_OPTIMIZATION is enforced when enabled. </policy/CMP0069>
+   CMP0068: RPATH settings on macOS do not affect install_name. </policy/CMP0068>
+
 Policies Introduced by CMake 3.8
 ================================
 

@@ -32,7 +32,7 @@
 
 QCMakeThread::QCMakeThread(QObject* p)
   : QThread(p)
-  , CMakeInstance(CM_NULLPTR)
+  , CMakeInstance(nullptr)
 {
 }
 
@@ -48,7 +48,7 @@ void QCMakeThread::run()
   emit this->cmakeInitialized();
   this->exec();
   delete this->CMakeInstance;
-  this->CMakeInstance = CM_NULLPTR;
+  this->CMakeInstance = nullptr;
 }
 
 CMakeSetupDialog::CMakeSetupDialog()
@@ -990,10 +990,10 @@ void CMakeSetupDialog::removeSelectedCacheEntries()
 {
   QModelIndexList idxs = this->CacheValues->selectionModel()->selectedRows();
   QList<QPersistentModelIndex> pidxs;
-  foreach (QModelIndex i, idxs) {
+  foreach (QModelIndex const& i, idxs) {
     pidxs.append(i);
   }
-  foreach (QPersistentModelIndex pi, pidxs) {
+  foreach (QPersistentModelIndex const& pi, pidxs) {
     this->CacheValues->model()->removeRow(pi.row(), pi.parent());
   }
 }
@@ -1152,7 +1152,7 @@ void CMakeSetupDialog::showUserChanges()
   QString command;
   QString cache;
 
-  foreach (QCMakeProperty prop, changes) {
+  foreach (QCMakeProperty const& prop, changes) {
     QString type;
     switch (prop.Type) {
       case QCMakeProperty::BOOL:
@@ -1175,12 +1175,9 @@ void CMakeSetupDialog::showUserChanges()
       value = prop.Value.toString();
     }
 
-    QString line("%1:%2=");
-    line = line.arg(prop.Key);
-    line = line.arg(type);
-
-    command += QString("-D%1\"%2\" ").arg(line).arg(value);
-    cache += QString("%1%2\n").arg(line).arg(value);
+    QString const line = QString("%1:%2=").arg(prop.Key, type);
+    command += QString("-D%1\"%2\" ").arg(line, value);
+    cache += QString("%1%2\n").arg(line, value);
   }
 
   textedit->append(tr("Commandline options:"));
@@ -1198,7 +1195,7 @@ void CMakeSetupDialog::setSearchFilter(const QString& str)
   this->CacheValues->setSearchFilter(str);
 }
 
-void CMakeSetupDialog::doOutputContextMenu(const QPoint& pt)
+void CMakeSetupDialog::doOutputContextMenu(QPoint pt)
 {
   QMenu* menu = this->Output->createStandardContextMenu();
 

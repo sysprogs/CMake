@@ -3,7 +3,8 @@
 #ifndef cmBuildNameCommand_h
 #define cmBuildNameCommand_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <string>
 #include <vector>
 
@@ -14,11 +15,9 @@ class cmExecutionStatus;
 class cmBuildNameCommand : public cmCommand
 {
 public:
-  cmCommand* Clone() CM_OVERRIDE { return new cmBuildNameCommand; }
+  cmCommand* Clone() override { return new cmBuildNameCommand; }
   bool InitialPass(std::vector<std::string> const& args,
-                   cmExecutionStatus& status) CM_OVERRIDE;
-  std::string GetName() const CM_OVERRIDE { return "build_name"; }
-  bool IsScriptable() const CM_OVERRIDE { return true; }
+                   cmExecutionStatus& status) override;
 };
 
 #endif

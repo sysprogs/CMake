@@ -4,8 +4,8 @@
 #include "cmCTestCoverageHandler.h"
 #include "cmSystemTools.h"
 
-#include <cmsys/Directory.hxx>
-#include <cmsys/FStream.hxx>
+#include "cmsys/Directory.hxx"
+#include "cmsys/FStream.hxx"
 #include <map>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,10 +53,8 @@ void cmParseCacheCoverage::RemoveUnCoveredFiles()
   while (ci != this->Coverage.TotalCoverage.end()) {
     cmCTestCoverageHandlerContainer::SingleFileCoverageVector& v = ci->second;
     bool nothing = true;
-    for (cmCTestCoverageHandlerContainer::SingleFileCoverageVector::iterator
-           i = v.begin();
-         i != v.end(); ++i) {
-      if (*i > 0) {
+    for (int i : v) {
+      if (i > 0) {
         nothing = false;
         break;
       }
@@ -148,7 +146,7 @@ bool cmParseCacheCoverage::ReadCMCovFile(const char* file)
         cmCTestLog(this->CTest, ERROR_MESSAGE,
                    "Could not find mumps file for routine: " << routine
                                                              << "\n");
-        filepath = "";
+        filepath.clear();
         continue; // move to next line
       }
     }
@@ -156,8 +154,8 @@ bool cmParseCacheCoverage::ReadCMCovFile(const char* file)
     else {
       // Totals in arg 0 marks the end of a routine
       if (separateLine[0].substr(0, 6) == "Totals") {
-        routine = ""; // at the end of this routine
-        filepath = "";
+        routine.clear(); // at the end of this routine
+        filepath.clear();
         continue; // move to next line
       }
     }

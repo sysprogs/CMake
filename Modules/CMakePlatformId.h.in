@@ -114,6 +114,9 @@
 # elif defined(_M_IX86)
 #  define ARCHITECTURE_ID "X86"
 
+# elif defined(_M_ARM64)
+#  define ARCHITECTURE_ID "ARM64"
+
 # elif defined(_M_ARM)
 #  if _M_ARM == 4
 #   define ARCHITECTURE_ID "ARMV4I"
@@ -144,6 +147,16 @@
 #  define ARCHITECTURE_ID ""
 # endif
 
+#elif defined(__IAR_SYSTEMS_ICC__) || defined(__IAR_SYSTEMS_ICC)
+# if defined(__ICCARM__)
+#  define ARCHITECTURE_ID "ARM"
+
+# elif defined(__ICCAVR__)
+#  define ARCHITECTURE_ID "AVR"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
 #else
 #  define ARCHITECTURE_ID
 #endif
@@ -186,6 +199,15 @@ char const info_version[] = {
 #  endif
 # endif
   ']','\0'};
+#endif
+
+/* Construct a string literal encoding the internal version number. */
+#ifdef COMPILER_VERSION_INTERNAL
+char const info_version_internal[] = {
+  'I', 'N', 'F', 'O', ':',
+  'c','o','m','p','i','l','e','r','_','v','e','r','s','i','o','n','_',
+  'i','n','t','e','r','n','a','l','[',
+  COMPILER_VERSION_INTERNAL,']','\0'};
 #endif
 
 /* Construct a string literal encoding the version number components. */

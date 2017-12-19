@@ -6,9 +6,10 @@
 #include "cmCTestTestHandler.h"
 #include "cmGlobalGenerator.h"
 #include "cmSystemTools.h"
+#include "cmWorkingDirectory.h"
 #include "cmake.h"
 
-#include <cmsys/Process.h>
+#include "cmsys/Process.h"
 #include <stdlib.h>
 
 cmCTestBuildAndTestHandler::cmCTestBuildAndTestHandler()
@@ -31,7 +32,7 @@ const char* cmCTestBuildAndTestHandler::GetOutput()
 }
 int cmCTestBuildAndTestHandler::ProcessHandler()
 {
-  this->Output = "";
+  this->Output.clear();
   std::string output;
   cmSystemTools::ResetErrorOccuredFlag();
   int retv = this->RunCMakeAndTest(&this->Output);
@@ -42,9 +43,8 @@ int cmCTestBuildAndTestHandler::ProcessHandler()
 int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
                                          std::ostringstream& out,
                                          std::string& cmakeOutString,
-                                         std::string& cwd, cmake* cm)
+                                         cmake* cm)
 {
-  unsigned int k;
   std::vector<std::string> args;
   args.push_back(cmSystemTools::GetCMakeCommand());
   args.push_back(this->SourceDir);
@@ -64,7 +64,7 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
     args.push_back(toolset);
   }
 
-  const char* config = CM_NULLPTR;
+  const char* config = nullptr;
   if (!this->CTest->GetConfigType().empty()) {
     config = this->CTest->GetConfigType().c_str();
   }
@@ -79,14 +79,12 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
     args.push_back(btype);
   }
 
-  for (k = 0; k < this->BuildOptions.size(); ++k) {
-    args.push_back(this->BuildOptions[k]);
+  for (std::string const& opt : this->BuildOptions) {
+    args.push_back(opt);
   }
   if (cm->Run(args) != 0) {
     out << "Error: cmake execution failed\n";
     out << cmakeOutString << "\n";
-    // return to the original directory
-    cmSystemTools::ChangeDirectory(cwd);
     if (outstring) {
       *outstring = out.str();
     } else {
@@ -99,8 +97,6 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
     if (cm->Run(args) != 0) {
       out << "Error: cmake execution failed\n";
       out << cmakeOutString << "\n";
-      // return to the original directory
-      cmSystemTools::ChangeDirectory(cwd);
       if (outstring) {
         *outstring = out.str();
       } else {
@@ -118,21 +114,21 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
 void CMakeMessageCallback(const char* m, const char* /*unused*/,
                           bool& /*unused*/, void* s)
 {
-  std::string* out = (std::string*)s;
+  std::string* out = static_cast<std::string*>(s);
   *out += m;
   *out += "\n";
 }
 
 void CMakeProgressCallback(const char* msg, float /*unused*/, void* s)
 {
-  std::string* out = (std::string*)s;
+  std::string* out = static_cast<std::string*>(s);
   *out += msg;
   *out += "\n";
 }
 
 void CMakeOutputCallback(const char* m, size_t len, void* s)
 {
-  std::string* out = (std::string*)s;
+  std::string* out = static_cast<std::string*>(s);
   out->append(m, len);
 }
 
@@ -151,10 +147,10 @@ public:
   }
   ~cmCTestBuildAndTestCaptureRAII()
   {
-    this->CM.SetProgressCallback(CM_NULLPTR, CM_NULLPTR);
-    cmSystemTools::SetStderrCallback(CM_NULLPTR, CM_NULLPTR);
-    cmSystemTools::SetStdoutCallback(CM_NULLPTR, CM_NULLPTR);
-    cmSystemTools::SetMessageCallback(CM_NULLPTR, CM_NULLPTR);
+    this->CM.SetProgressCallback(nullptr, nullptr);
+    cmSystemTools::SetStderrCallback(nullptr, nullptr);
+    cmSystemTools::SetStdoutCallback(nullptr, nullptr);
+    cmSystemTools::SetMessageCallback(nullptr, nullptr);
   }
 };
 
@@ -170,7 +166,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     return 1;
   }
 
-  cmake cm;
+  cmake cm(cmake::RoleProject);
   cm.SetHomeDirectory("");
   cm.SetHomeOutputDirectory("");
   std::string cmakeOutString;
@@ -199,13 +195,12 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
   double clock_start = cmSystemTools::GetTime();
 
   // make sure the binary dir is there
-  std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
   out << "Internal cmake changing into directory: " << this->BinaryDir
       << std::endl;
   if (!cmSystemTools::FileIsDirectory(this->BinaryDir)) {
     cmSystemTools::MakeDirectory(this->BinaryDir.c_str());
   }
-  cmSystemTools::ChangeDirectory(this->BinaryDir);
+  cmWorkingDirectory workdir(this->BinaryDir);
 
   if (this->BuildNoCMake) {
     // Make the generator available for the Build call below.
@@ -217,18 +212,16 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     cm.LoadCache(this->BinaryDir);
   } else {
     // do the cmake step, no timeout here since it is not a sub process
-    if (this->RunCMake(outstring, out, cmakeOutString, cwd, &cm)) {
+    if (this->RunCMake(outstring, out, cmakeOutString, &cm)) {
       return 1;
     }
   }
 
   // do the build
-  std::vector<std::string>::iterator tarIt;
   if (this->BuildTargets.empty()) {
     this->BuildTargets.push_back("");
   }
-  for (tarIt = this->BuildTargets.begin(); tarIt != this->BuildTargets.end();
-       ++tarIt) {
+  for (std::string const& tar : this->BuildTargets) {
     double remainingTime = 0;
     if (this->Timeout > 0) {
       remainingTime = this->Timeout - cmSystemTools::GetTime() + clock_start;
@@ -240,7 +233,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
       }
     }
     std::string output;
-    const char* config = CM_NULLPTR;
+    const char* config = nullptr;
     if (!this->CTest->GetConfigType().empty()) {
       config = this->CTest->GetConfigType().c_str();
     }
@@ -253,7 +246,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
       config = "Debug";
     }
     int retVal = cm.GetGlobalGenerator()->Build(
-      this->SourceDir, this->BinaryDir, this->BuildProject, *tarIt, output,
+      this->SourceDir, this->BinaryDir, this->BuildProject, tar, output,
       this->BuildMakeProgram, config, !this->BuildNoClean, false, false,
       remainingTime);
     out << output;
@@ -296,25 +289,23 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
         << this->TestCommand << "\n";
     out << "tried to find it in these places:\n";
     out << fullPath << "\n";
-    for (unsigned int i = 0; i < failed.size(); ++i) {
-      out << failed[i] << "\n";
+    for (std::string const& fail : failed) {
+      out << fail << "\n";
     }
     if (outstring) {
       *outstring = out.str();
     } else {
       cmCTestLog(this->CTest, ERROR_MESSAGE, out.str());
     }
-    // return to the original directory
-    cmSystemTools::ChangeDirectory(cwd);
     return 1;
   }
 
   std::vector<const char*> testCommand;
   testCommand.push_back(fullPath.c_str());
-  for (size_t k = 0; k < this->TestCommandArgs.size(); ++k) {
-    testCommand.push_back(this->TestCommandArgs[k].c_str());
+  for (std::string const& testCommandArg : this->TestCommandArgs) {
+    testCommand.push_back(testCommandArg.c_str());
   }
-  testCommand.push_back(CM_NULLPTR);
+  testCommand.push_back(nullptr);
   std::string outs;
   int retval = 0;
   // run the test from the this->BuildRunDir if set
@@ -323,8 +314,8 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     cmSystemTools::ChangeDirectory(this->BuildRunDir);
   }
   out << "Running test command: \"" << fullPath << "\"";
-  for (size_t k = 0; k < this->TestCommandArgs.size(); ++k) {
-    out << " \"" << this->TestCommandArgs[k] << "\"";
+  for (std::string const& testCommandArg : this->TestCommandArgs) {
+    out << " \"" << testCommandArg << "\"";
   }
   out << "\n";
 
@@ -340,8 +331,8 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     }
   }
 
-  int runTestRes = this->CTest->RunTest(testCommand, &outs, &retval,
-                                        CM_NULLPTR, remainingTime, CM_NULLPTR);
+  int runTestRes = this->CTest->RunTest(testCommand, &outs, &retval, nullptr,
+                                        remainingTime, nullptr);
 
   if (runTestRes != cmsysProcess_State_Exited || retval != 0) {
     out << "Test command failed: " << testCommand[0] << "\n";

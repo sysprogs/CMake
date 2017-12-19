@@ -3,7 +3,7 @@
 #ifndef cmGlobalVisualStudioGenerator_h
 #define cmGlobalVisualStudioGenerator_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
 #include <map>
@@ -32,8 +32,6 @@ public:
   /** Known versions of Visual Studio.  */
   enum VSVersion
   {
-    VS7 = 70,
-    VS71 = 71,
     VS8 = 80,
     VS9 = 90,
     VS10 = 100,
@@ -87,6 +85,9 @@ public:
   // return true if target is C# only
   static bool TargetIsCSharpOnly(cmGeneratorTarget const* gt);
 
+  // return true if target can be referenced by C# targets
+  bool TargetCanBeReferenced(cmGeneratorTarget const* gt);
+
   /** Get the top-level registry key for this VS version.  */
   std::string GetRegistryBase();
 
@@ -117,7 +118,7 @@ public:
   };
   class OrderedTargetDependSet;
 
-  bool FindMakeProgram(cmMakefile*) CM_OVERRIDE;
+  bool FindMakeProgram(cmMakefile*) override;
 
   virtual std::string ExpandCFGIntDir(const std::string& str,
                                       const std::string& config) const;

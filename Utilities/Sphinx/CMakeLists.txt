@@ -3,7 +3,7 @@
 
 if(NOT CMake_SOURCE_DIR)
   set(CMakeHelp_STANDALONE 1)
-  cmake_minimum_required(VERSION 2.8.12.2 FATAL_ERROR)
+  cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
   get_filename_component(tmp "${CMAKE_CURRENT_SOURCE_DIR}" PATH)
   get_filename_component(CMake_SOURCE_DIR "${tmp}" PATH)
   include(${CMake_SOURCE_DIR}/Modules/CTestUseLaunchers.cmake)
@@ -128,18 +128,20 @@ endforeach()
 
 add_custom_target(documentation ALL DEPENDS ${doc_format_outputs})
 
-foreach(t
-    cmake
-    ccmake
-    cmake-gui
-    cpack
-    ctest
-    )
-  if(TARGET ${t})
-    # Build documentation after main executables.
-    add_dependencies(documentation ${t})
-  endif()
-endforeach()
+if(CMake_SPHINX_DEPEND_ON_EXECUTABLES)
+  foreach(t
+      cmake
+      ccmake
+      cmake-gui
+      cpack
+      ctest
+      )
+    if(TARGET ${t})
+      # Build documentation after main executables.
+      add_dependencies(documentation ${t})
+    endif()
+  endforeach()
+endif()
 
 if(SPHINX_MAN)
   file(GLOB man_rst RELATIVE ${CMake_SOURCE_DIR}/Help/manual

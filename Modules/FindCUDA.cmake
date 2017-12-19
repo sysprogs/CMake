@@ -2,6 +2,20 @@
 # FindCUDA
 # --------
 #
+# .. note::
+#
+#   The FindCUDA module has been superseded by first-class support
+#   for the CUDA language in CMake.  It is no longer necessary to
+#   use this module or call ``find_package(CUDA)``.  This module
+#   now exists only for compatibility with projects that have not
+#   been ported.
+#
+#   Instead, list ``CUDA`` among the languages named in the top-level
+#   call to the :command:`project` command, or call the
+#   :command:`enable_language` command with ``CUDA``.
+#   Then one can add CUDA (``.cu``) sources to programs directly
+#   in calls to :command:`add_library` and :command:`add_executable`.
+#
 # Tools for building CUDA C files: libraries and build dependencies.
 #
 # This script locates the NVIDIA CUDA C tools.  It should work on linux,
@@ -66,6 +80,13 @@
 #   CUDA_BUILD_EMULATION (Default OFF for device mode)
 #   -- Set to ON for Emulation mode. -D_DEVICEEMU is defined for CUDA C files
 #      when CUDA_BUILD_EMULATION is TRUE.
+#
+#   CUDA_LINK_LIBRARIES_KEYWORD (Default "")
+#    -- The <PRIVATE|PUBLIC|INTERFACE> keyword to use for internal
+#       target_link_libraries calls. The default is to use no keyword which
+#       uses the old "plain" form of target_link_libraries. Note that is matters
+#       because whatever is used inside the FindCUDA module must also be used
+#       outside - the two forms of target_link_libraries cannot be mixed.
 #
 #   CUDA_GENERATED_OUTPUT_DIR (Default CMAKE_CURRENT_BINARY_DIR)
 #   -- Set to the path you wish to have the generated files placed.  If it is
@@ -318,7 +339,27 @@
 #   CUDA_nppc_LIBRARY     -- NVIDIA Performance Primitives lib (core).
 #                            Only available for CUDA version 5.5+.
 #   CUDA_nppi_LIBRARY     -- NVIDIA Performance Primitives lib (image processing).
-#                            Only available for CUDA version 5.5+.
+#                            Only available for CUDA version 5.5 - 8.0.
+#   CUDA_nppial_LIBRARY   -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppicc_LIBRARY   -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppicom_LIBRARY  -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppidei_LIBRARY  -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppif_LIBRARY    -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppig_LIBRARY    -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppim_LIBRARY    -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppist_LIBRARY   -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppisu_LIBRARY   -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
+#   CUDA_nppitc_LIBRARY   -- NVIDIA Performance Primitives lib (image processing).
+#                            Only available for CUDA version 9.0.
 #   CUDA_npps_LIBRARY     -- NVIDIA Performance Primitives lib (signal processing).
 #                            Only available for CUDA version 5.5+.
 #   CUDA_nvcuvenc_LIBRARY -- CUDA Video Encoder library.
@@ -582,7 +623,6 @@ macro(cuda_unset_include_and_libraries)
   unset(CUDA_npps_LIBRARY CACHE)
   unset(CUDA_nvcuvenc_LIBRARY CACHE)
   unset(CUDA_nvcuvid_LIBRARY CACHE)
-  unset(CUDA_USE_STATIC_CUDA_RUNTIME CACHE)
   unset(CUDA_GPU_DETECT_OUTPUT CACHE)
 endmacro()
 
@@ -672,7 +712,11 @@ if(CMAKE_CROSSCOMPILING)
   # add known CUDA targetr root path to the set of directories we search for programs, libraries and headers
   set( CMAKE_FIND_ROOT_PATH "${CUDA_TOOLKIT_TARGET_DIR};${CMAKE_FIND_ROOT_PATH}")
   macro( cuda_find_host_program )
-    find_host_program( ${ARGN} )
+    if (COMMAND find_host_program)
+      find_host_program( ${ARGN} )
+    else()
+      find_program( ${ARGN} )
+    endif()
   endmacro()
 else()
   # for non-cross-compile, find_host_program == find_program and CUDA_TOOLKIT_TARGET_DIR == CUDA_TOOLKIT_ROOT_DIR
@@ -791,12 +835,17 @@ endif()
 if(CUDA_cudart_static_LIBRARY)
   # If static cudart available, use it by default, but provide a user-visible option to disable it.
   option(CUDA_USE_STATIC_CUDA_RUNTIME "Use the static version of the CUDA runtime library if available" ON)
-  set(CUDA_CUDART_LIBRARY_VAR CUDA_cudart_static_LIBRARY)
 else()
   # If not available, silently disable the option.
   set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE INTERNAL "")
+endif()
+
+if(CUDA_USE_STATIC_CUDA_RUNTIME)
+  set(CUDA_CUDART_LIBRARY_VAR CUDA_cudart_static_LIBRARY)
+else()
   set(CUDA_CUDART_LIBRARY_VAR CUDA_CUDART_LIBRARY)
 endif()
+
 if(NOT CUDA_VERSION VERSION_LESS "5.0")
   cuda_find_library_local_first(CUDA_cudadevrt_LIBRARY cudadevrt "\"cudadevrt\" library")
   mark_as_advanced(CUDA_cudadevrt_LIBRARY)
@@ -910,6 +959,24 @@ if(NOT CUDA_VERSION VERSION_LESS "3.2")
 endif()
 if(CUDA_VERSION VERSION_GREATER "5.0")
   find_cuda_helper_libs(cublas_device)
+endif()
+
+if(NOT CUDA_VERSION VERSION_LESS "9.0")
+  # In CUDA 9.0 NPP was nppi was removed
+  find_cuda_helper_libs(nppc)
+  find_cuda_helper_libs(nppial)
+  find_cuda_helper_libs(nppicc)
+  find_cuda_helper_libs(nppicom)
+  find_cuda_helper_libs(nppidei)
+  find_cuda_helper_libs(nppif)
+  find_cuda_helper_libs(nppig)
+  find_cuda_helper_libs(nppim)
+  find_cuda_helper_libs(nppist)
+  find_cuda_helper_libs(nppisu)
+  find_cuda_helper_libs(nppitc)
+  find_cuda_helper_libs(npps)
+  set(CUDA_npp_LIBRARY "${CUDA_nppc_LIBRARY};${CUDA_nppial_LIBRARY};${CUDA_nppicc_LIBRARY};${CUDA_nppicom_LIBRARY};${CUDA_nppidei_LIBRARY};${CUDA_nppif_LIBRARY};${CUDA_nppig_LIBRARY};${CUDA_nppim_LIBRARY};${CUDA_nppist_LIBRARY};${CUDA_nppisu_LIBRARY};${CUDA_nppitc_LIBRARY};${CUDA_npps_LIBRARY}")
+elseif(CUDA_VERSION VERSION_GREATER "5.0")
   # In CUDA 5.5 NPP was splitted onto 3 separate libraries.
   find_cuda_helper_libs(nppc)
   find_cuda_helper_libs(nppi)
@@ -1691,6 +1758,7 @@ function(CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS output_file cuda_target options
         COMMAND ${CUDA_NVCC_EXECUTABLE} ${nvcc_flags} -dlink ${object_files} -o ${output_file}
         ${flags}
         COMMENT "Building NVCC intermediate link file ${output_file_relative_path}"
+        COMMAND_EXPAND_LISTS
         ${_verbatim}
         )
     else()
@@ -1701,6 +1769,7 @@ function(CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS output_file cuda_target options
         COMMAND ${CMAKE_COMMAND} -E echo "Building NVCC intermediate link file ${output_file_relative_path}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${output_file_dir}"
         COMMAND ${CUDA_NVCC_EXECUTABLE} ${nvcc_flags} ${flags} -dlink ${object_files} -o "${output_file}"
+        COMMAND_EXPAND_LISTS
         ${_verbatim}
         )
     endif()
@@ -1740,12 +1809,12 @@ macro(CUDA_ADD_LIBRARY cuda_target)
   # variable will have been defined.
   CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS("${link_file}" ${cuda_target} "${_options}" "${${cuda_target}_SEPARABLE_COMPILATION_OBJECTS}")
 
-  target_link_libraries(${cuda_target}
+  target_link_libraries(${cuda_target} ${CUDA_LINK_LIBRARIES_KEYWORD}
     ${CUDA_LIBRARIES}
     )
 
   if(CUDA_SEPARABLE_COMPILATION)
-    target_link_libraries(${cuda_target}
+    target_link_libraries(${cuda_target} ${CUDA_LINK_LIBRARIES_KEYWORD}
       ${CUDA_cudadevrt_LIBRARY}
       )
   endif()
@@ -1790,7 +1859,7 @@ macro(CUDA_ADD_EXECUTABLE cuda_target)
   # variable will have been defined.
   CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS("${link_file}" ${cuda_target} "${_options}" "${${cuda_target}_SEPARABLE_COMPILATION_OBJECTS}")
 
-  target_link_libraries(${cuda_target}
+  target_link_libraries(${cuda_target} ${CUDA_LINK_LIBRARIES_KEYWORD}
     ${CUDA_LIBRARIES}
     )
 
@@ -1818,7 +1887,7 @@ macro(cuda_compile_base cuda_target format generated_files)
   else()
     set(_counter 1)
   endif()
-  set(_cuda_target "${_cuda_target}_${_counter}")
+  string(APPEND _cuda_target "_${_counter}")
   set_property(DIRECTORY PROPERTY _cuda_internal_phony_counter ${_counter})
 
   # Separate the sources from the options
@@ -1876,9 +1945,9 @@ endmacro()
 ###############################################################################
 macro(CUDA_ADD_CUFFT_TO_TARGET target)
   if (CUDA_BUILD_EMULATION)
-    target_link_libraries(${target} ${CUDA_cufftemu_LIBRARY})
+    target_link_libraries(${target} ${CUDA_LINK_LIBRARIES_KEYWORD} ${CUDA_cufftemu_LIBRARY})
   else()
-    target_link_libraries(${target} ${CUDA_cufft_LIBRARY})
+    target_link_libraries(${target} ${CUDA_LINK_LIBRARIES_KEYWORD} ${CUDA_cufft_LIBRARY})
   endif()
 endmacro()
 
@@ -1889,9 +1958,9 @@ endmacro()
 ###############################################################################
 macro(CUDA_ADD_CUBLAS_TO_TARGET target)
   if (CUDA_BUILD_EMULATION)
-    target_link_libraries(${target} ${CUDA_cublasemu_LIBRARY})
+    target_link_libraries(${target} ${CUDA_LINK_LIBRARIES_KEYWORD} ${CUDA_cublasemu_LIBRARY})
   else()
-    target_link_libraries(${target} ${CUDA_cublas_LIBRARY} ${CUDA_cublas_device_LIBRARY})
+    target_link_libraries(${target} ${CUDA_LINK_LIBRARIES_KEYWORD} ${CUDA_cublas_LIBRARY} ${CUDA_cublas_device_LIBRARY})
   endif()
 endmacro()
 

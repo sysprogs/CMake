@@ -3,7 +3,7 @@
 #ifndef cmInstallTargetGenerator_h
 #define cmInstallTargetGenerator_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmInstallGenerator.h"
 #include "cmScriptGenerator.h"
@@ -26,7 +26,7 @@ public:
                            std::vector<std::string> const& configurations,
                            const char* component, MessageLevel message,
                            bool exclude_from_all, bool optional);
-  ~cmInstallTargetGenerator() CM_OVERRIDE;
+  ~cmInstallTargetGenerator() override;
 
   /** Select the policy for installing shared library linkable name
       symlinks.  */
@@ -41,6 +41,9 @@ public:
 
   std::string GetInstallFilename(const std::string& config) const;
 
+  void GetInstallObjectNames(std::string const& config,
+                             std::vector<std::string>& objects) const;
+
   enum NameType
   {
     NameNormal,
@@ -53,7 +56,7 @@ public:
                                         const std::string& config,
                                         NameType nameType = NameNormal);
 
-  void Compute(cmLocalGenerator* lg) CM_OVERRIDE;
+  void Compute(cmLocalGenerator* lg) override;
 
   cmGeneratorTarget* GetTarget() const { return this->Target; }
 
@@ -62,41 +65,41 @@ public:
   std::string GetDestination(std::string const& config) const;
 
 protected:
-  void GenerateScript(std::ostream& os) CM_OVERRIDE;
+  void GenerateScript(std::ostream& os) override;
   void GenerateScriptForConfig(std::ostream& os, const std::string& config,
-                               Indent const& indent) CM_OVERRIDE;
-  typedef void (cmInstallTargetGenerator::*TweakMethod)(std::ostream&,
-                                                        Indent const&,
+                               Indent indent) override;
+  void GenerateScriptForConfigObjectLibrary(std::ostream& os,
+                                            const std::string& config,
+                                            Indent indent);
+  typedef void (cmInstallTargetGenerator::*TweakMethod)(std::ostream&, Indent,
                                                         const std::string&,
                                                         std::string const&);
-  void AddTweak(std::ostream& os, Indent const& indent,
-                const std::string& config, std::string const& file,
-                TweakMethod tweak);
-  void AddTweak(std::ostream& os, Indent const& indent,
-                const std::string& config,
+  void AddTweak(std::ostream& os, Indent indent, const std::string& config,
+                std::string const& file, TweakMethod tweak);
+  void AddTweak(std::ostream& os, Indent indent, const std::string& config,
                 std::vector<std::string> const& files, TweakMethod tweak);
   std::string GetDestDirPath(std::string const& file);
-  void PreReplacementTweaks(std::ostream& os, Indent const& indent,
+  void PreReplacementTweaks(std::ostream& os, Indent indent,
                             const std::string& config,
                             std::string const& file);
-  void PostReplacementTweaks(std::ostream& os, Indent const& indent,
+  void PostReplacementTweaks(std::ostream& os, Indent indent,
                              const std::string& config,
                              std::string const& file);
-  void AddInstallNamePatchRule(std::ostream& os, Indent const& indent,
+  void AddInstallNamePatchRule(std::ostream& os, Indent indent,
                                const std::string& config,
                                const std::string& toDestDirPath);
-  void AddChrpathPatchRule(std::ostream& os, Indent const& indent,
+  void AddChrpathPatchRule(std::ostream& os, Indent indent,
                            const std::string& config,
                            std::string const& toDestDirPath);
-  void AddRPathCheckRule(std::ostream& os, Indent const& indent,
+  void AddRPathCheckRule(std::ostream& os, Indent indent,
                          const std::string& config,
                          std::string const& toDestDirPath);
 
-  void AddStripRule(std::ostream& os, Indent const& indent,
+  void AddStripRule(std::ostream& os, Indent indent,
                     const std::string& toDestDirPath);
-  void AddRanlibRule(std::ostream& os, Indent const& indent,
+  void AddRanlibRule(std::ostream& os, Indent indent,
                      const std::string& toDestDirPath);
-  void AddUniversalInstallRule(std::ostream& os, Indent const& indent,
+  void AddUniversalInstallRule(std::ostream& os, Indent indent,
                                const std::string& toDestDirPath);
 
   std::string TargetName;

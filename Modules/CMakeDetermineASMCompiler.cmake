@@ -84,7 +84,7 @@ if(NOT CMAKE_ASM${ASM_DIALECT}_COMPILER_ID)
   set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_FLAGS_TI "-h")
   set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_REGEX_TI "Texas Instruments")
 
-  list(APPEND CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDORS GNU IAR)
+  list(APPEND CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDORS IAR)
   set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_FLAGS_IAR )
   set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_REGEX_IAR "IAR Assembler")
 
@@ -92,13 +92,42 @@ if(NOT CMAKE_ASM${ASM_DIALECT}_COMPILER_ID)
   set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_FLAGS_ARMCC )
   set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_REGEX_ARMCC "(ARM Compiler)|(ARM Assembler)")
 
-  include(CMakeDetermineCompilerId)
-  CMAKE_DETERMINE_COMPILER_ID_VENDOR(ASM${ASM_DIALECT})
+  list(APPEND CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDORS NASM)
+  set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_FLAGS_NASM "-v")
+  set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_REGEX_NASM "(NASM version)")
 
+  list(APPEND CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDORS YASM)
+  set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_FLAGS_YASM "--version")
+  set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_VENDOR_REGEX_YASM "(yasm)")
+
+  include(CMakeDetermineCompilerId)
+  set(userflags)
+  CMAKE_DETERMINE_COMPILER_ID_VENDOR(ASM${ASM_DIALECT} "${userflags}")
+  if("x${CMAKE_ASM${ASM_DIALECT}_COMPILER_ID}" STREQUAL "xIAR")
+    # primary necessary to detect architecture, so the right archiver and linker can be picked
+    # eg. IAR Assembler V8.10.1.12857/W32 for ARM
+    # Cut out identification first, newline handling is a pain
+    string(REGEX MATCH "IAR Assembler[^\r\n]*" _compileid "${CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_OUTPUT}")
+    if("${_compileid}" MATCHES "V([0-9]+\\.[0-9]+\\.[0-9]+)")
+      set(CMAKE_ASM${ASM_DIALECT}_COMPILER_VERSION ${CMAKE_MATCH_1})
+    endif()
+    if("${_compileid}" MATCHES "for[ ]+([A-Za-z0-9]+)")
+      set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ARCHITECTURE_ID ${CMAKE_MATCH_1})
+    endif()
+  endif()
+  unset(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID_OUTPUT)
+  unset(_compileid)
 endif()
 
+
 if(CMAKE_ASM${ASM_DIALECT}_COMPILER_ID)
-  message(STATUS "The ASM${ASM_DIALECT} compiler identification is ${CMAKE_ASM${ASM_DIALECT}_COMPILER_ID}")
+  if(CMAKE_ASM${ASM_DIALECT}_COMPILER_VERSION)
+    set(_version " ${CMAKE_ASM${ASM_DIALECT}_COMPILER_VERSION}")
+  else()
+    set(_version "")
+  endif()
+  message(STATUS "The ASM${ASM_DIALECT} compiler identification is ${CMAKE_ASM${ASM_DIALECT}_COMPILER_ID}${_version}")
+  unset(_version)
 else()
   message(STATUS "The ASM${ASM_DIALECT} compiler identification is unknown")
 endif()
@@ -135,6 +164,9 @@ endif ()
 
 
 include(CMakeFindBinUtils)
+set(_CMAKE_PROCESSING_LANGUAGE "ASM")
+include(Compiler/${CMAKE_ASM${ASM_DIALECT}_COMPILER_ID}-FindBinUtils OPTIONAL)
+unset(_CMAKE_PROCESSING_LANGUAGE)
 
 set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ENV_VAR "ASM${ASM_DIALECT}")
 
@@ -144,16 +176,37 @@ else()
   message(STATUS "Didn't find assembler")
 endif()
 
+foreach(_var
+    COMPILER
+    COMPILER_ID
+    COMPILER_ARG1
+    COMPILER_ENV_VAR
+    COMPILER_AR
+    COMPILER_RANLIB
+    COMPILER_VERSION
+    )
+  set(_CMAKE_ASM_${_var} "${CMAKE_ASM${ASM_DIALECT}_${_var}}")
+endforeach()
 
-set(_CMAKE_ASM_COMPILER "${CMAKE_ASM${ASM_DIALECT}_COMPILER}")
-set(_CMAKE_ASM_COMPILER_ID "${CMAKE_ASM${ASM_DIALECT}_COMPILER_ID}")
-set(_CMAKE_ASM_COMPILER_ARG1 "${CMAKE_ASM${ASM_DIALECT}_COMPILER_ARG1}")
-set(_CMAKE_ASM_COMPILER_ENV_VAR "${CMAKE_ASM${ASM_DIALECT}_COMPILER_ENV_VAR}")
+if(CMAKE_ASM${ASM_DIALECT}_COMPILER_ARCHITECTURE_ID)
+  set(_SET_CMAKE_ASM_COMPILER_ARCHITECTURE_ID
+    "set(CMAKE_ASM${ASM_DIALECT}_COMPILER_ARCHITECTURE_ID ${CMAKE_ASM${ASM_DIALECT}_COMPILER_ARCHITECTURE_ID})")
+else()
+  set(_SET_CMAKE_ASM_COMPILER_ARCHITECTURE_ID "")
+endif()
 
 # configure variables set in this file for fast reload later on
 configure_file(${CMAKE_ROOT}/Modules/CMakeASMCompiler.cmake.in
   ${CMAKE_PLATFORM_INFO_DIR}/CMakeASM${ASM_DIALECT}Compiler.cmake @ONLY)
 
-set(_CMAKE_ASM_COMPILER)
-set(_CMAKE_ASM_COMPILER_ARG1)
-set(_CMAKE_ASM_COMPILER_ENV_VAR)
+foreach(_var
+    COMPILER
+    COMPILER_ID
+    COMPILER_ARG1
+    COMPILER_ENV_VAR
+    COMPILER_AR
+    COMPILER_RANLIB
+    COMPILER_VERSION
+    )
+  unset(_CMAKE_ASM_${_var})
+endforeach()

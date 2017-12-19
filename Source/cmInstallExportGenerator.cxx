@@ -3,7 +3,6 @@
 #include "cmInstallExportGenerator.h"
 
 #include <algorithm>
-#include <map>
 #include <sstream>
 #include <utility>
 
@@ -29,7 +28,7 @@ cmInstallExportGenerator::cmInstallExportGenerator(
   , FileName(filename)
   , Namespace(name_space)
   , ExportOld(exportOld)
-  , LocalGenerator(CM_NULLPTR)
+  , LocalGenerator(nullptr)
 {
   if (android) {
 #ifdef CMAKE_BUILD_WITH_CMAKE
@@ -111,11 +110,9 @@ size_t cmInstallExportGenerator::GetMaxConfigLength() const
       len = this->ConfigurationName.size();
     }
   } else {
-    for (std::vector<std::string>::const_iterator ci =
-           this->ConfigurationTypes->begin();
-         ci != this->ConfigurationTypes->end(); ++ci) {
-      if (ci->size() > len) {
-        len = ci->size();
+    for (std::string const& c : *this->ConfigurationTypes) {
+      if (c.size() > len) {
+        len = c.size();
       }
     }
   }
@@ -153,10 +150,8 @@ void cmInstallExportGenerator::GenerateScript(std::ostream& os)
       this->EFGen->AddConfiguration("");
     }
   } else {
-    for (std::vector<std::string>::const_iterator ci =
-           this->ConfigurationTypes->begin();
-         ci != this->ConfigurationTypes->end(); ++ci) {
-      this->EFGen->AddConfiguration(*ci);
+    for (std::string const& c : *this->ConfigurationTypes) {
+      this->EFGen->AddConfiguration(c);
     }
   }
   this->EFGen->GenerateImportFile();
@@ -166,7 +161,7 @@ void cmInstallExportGenerator::GenerateScript(std::ostream& os)
 }
 
 void cmInstallExportGenerator::GenerateScriptConfigs(std::ostream& os,
-                                                     Indent const& indent)
+                                                     Indent indent)
 {
   // Create the main install rules first.
   this->cmInstallGenerator::GenerateScriptConfigs(os, indent);
@@ -174,22 +169,20 @@ void cmInstallExportGenerator::GenerateScriptConfigs(std::ostream& os,
   // Now create a configuration-specific install rule for the import
   // file of each configuration.
   std::vector<std::string> files;
-  for (std::map<std::string, std::string>::const_iterator i =
-         this->EFGen->GetConfigImportFiles().begin();
-       i != this->EFGen->GetConfigImportFiles().end(); ++i) {
-    files.push_back(i->second);
-    std::string config_test = this->CreateConfigTest(i->first);
+  for (auto const& i : this->EFGen->GetConfigImportFiles()) {
+    files.push_back(i.second);
+    std::string config_test = this->CreateConfigTest(i.first);
     os << indent << "if(" << config_test << ")\n";
     this->AddInstallRule(os, this->Destination, cmInstallType_FILES, files,
-                         false, this->FilePermissions.c_str(), CM_NULLPTR,
-                         CM_NULLPTR, CM_NULLPTR, indent.Next());
+                         false, this->FilePermissions.c_str(), nullptr,
+                         nullptr, nullptr, indent.Next());
     os << indent << "endif()\n";
     files.clear();
   }
 }
 
 void cmInstallExportGenerator::GenerateScriptActions(std::ostream& os,
-                                                     Indent const& indent)
+                                                     Indent indent)
 {
   // Remove old per-configuration export files if the main changes.
   std::string installedDir = "$ENV{DESTDIR}";
@@ -221,6 +214,6 @@ void cmInstallExportGenerator::GenerateScriptActions(std::ostream& os,
   std::vector<std::string> files;
   files.push_back(this->MainImportFile);
   this->AddInstallRule(os, this->Destination, cmInstallType_FILES, files,
-                       false, this->FilePermissions.c_str(), CM_NULLPTR,
-                       CM_NULLPTR, CM_NULLPTR, indent);
+                       false, this->FilePermissions.c_str(), nullptr, nullptr,
+                       nullptr, indent);
 }

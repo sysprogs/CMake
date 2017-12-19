@@ -3,7 +3,7 @@
 #ifndef cmExternalMakefileProjectGenerator_h
 #define cmExternalMakefileProjectGenerator_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <string>
 #include <vector>
@@ -99,7 +99,7 @@ public:
   }
 
   cmExternalMakefileProjectGenerator* CreateExternalMakefileProjectGenerator()
-    const CM_OVERRIDE
+    const override
   {
     T* p = new T;
     p->SetName(GetName());

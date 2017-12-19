@@ -399,6 +399,11 @@ function(gp_resolve_item context item exepath dirs resolved_item_var)
     set(ri "ri-NOTFOUND")
     find_file(ri "${item}" ${exepath} ${dirs} NO_DEFAULT_PATH)
     find_file(ri "${item}" ${exepath} ${dirs} /usr/lib)
+
+    get_filename_component(basename_item "${item}" NAME)
+    find_file(ri "${basename_item}" PATHS ${exepath} ${dirs} NO_DEFAULT_PATH)
+    find_file(ri "${basename_item}" PATHS /usr/lib)
+
     if(ri)
       #message(STATUS "info: 'find_file' in exepath/dirs (${ri})")
       set(resolved 1)
@@ -516,7 +521,7 @@ function(gp_resolved_file_type original_file file exepath dirs type_var)
     string(TOLOWER "${resolved_file}" lower)
 
     if(UNIX)
-      if(resolved_file MATCHES "^(/lib/|/lib32/|/lib64/|/usr/lib/|/usr/lib32/|/usr/lib64/|/usr/X11R6/|/usr/bin/)")
+      if(resolved_file MATCHES "^(/lib/|/lib32/|/libx32/|/lib64/|/usr/lib/|/usr/lib32/|/usr/libx32/|/usr/lib64/|/usr/X11R6/|/usr/bin/)")
         set(is_system 1)
       endif()
     endif()
@@ -604,7 +609,7 @@ function(gp_resolved_file_type original_file file exepath dirs type_var)
 
   if(NOT is_embedded)
     if(NOT IS_ABSOLUTE "${resolved_file}")
-      if(lower MATCHES "^msvc[^/]+dll" AND is_system)
+      if(lower MATCHES "^(msvc|api-ms-win-)[^/]+dll" AND is_system)
         message(STATUS "info: non-absolute msvc file '${file}' returning type '${type}'")
       else()
         message(STATUS "warning: gp_resolved_file_type non-absolute file '${file}' returning type '${type}' -- possibly incorrect")
@@ -654,7 +659,6 @@ function(get_prerequisites target prerequisites_var exclude_system recurse exepa
 
   if(NOT EXISTS "${target}")
     message("warning: target '${target}' does not exist...")
-    set(${prerequisites_var} "" PARENT_SCOPE)
     return()
   endif()
 
@@ -938,7 +942,11 @@ function(get_prerequisites target prerequisites_var exclude_system recurse exepa
         #
         if(NOT list_length_before_append EQUAL list_length_after_append)
           gp_resolve_item("${target}" "${item}" "${exepath}" "${dirs}" resolved_item "${rpaths}")
-          set(unseen_prereqs ${unseen_prereqs} "${resolved_item}")
+          if(EXISTS "${resolved_item}")
+            # Recurse only if we could resolve the item.
+            # Otherwise the prerequisites_var list will be cleared
+            set(unseen_prereqs ${unseen_prereqs} "${resolved_item}")
+          endif()
         endif()
       endif()
     endif()

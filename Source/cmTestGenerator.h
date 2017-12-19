@@ -3,7 +3,7 @@
 #ifndef cmTestGenerator_h
 #define cmTestGenerator_h
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmScriptGenerator.h"
 
@@ -20,25 +20,24 @@ class cmTest;
  */
 class cmTestGenerator : public cmScriptGenerator
 {
+  CM_DISABLE_COPY(cmTestGenerator)
+
 public:
   cmTestGenerator(cmTest* test,
                   std::vector<std::string> const& configurations =
                     std::vector<std::string>());
-  ~cmTestGenerator() CM_OVERRIDE;
+  ~cmTestGenerator() override;
 
   void Compute(cmLocalGenerator* lg);
 
 protected:
-  void GenerateScriptConfigs(std::ostream& os,
-                             Indent const& indent) CM_OVERRIDE;
-  void GenerateScriptActions(std::ostream& os,
-                             Indent const& indent) CM_OVERRIDE;
+  void GenerateScriptConfigs(std::ostream& os, Indent indent) override;
+  void GenerateScriptActions(std::ostream& os, Indent indent) override;
   void GenerateScriptForConfig(std::ostream& os, const std::string& config,
-                               Indent const& indent) CM_OVERRIDE;
-  void GenerateScriptNoConfig(std::ostream& os,
-                              Indent const& indent) CM_OVERRIDE;
-  bool NeedsScriptNoConfig() const CM_OVERRIDE;
-  void GenerateOldStyle(std::ostream& os, Indent const& indent);
+                               Indent indent) override;
+  void GenerateScriptNoConfig(std::ostream& os, Indent indent) override;
+  bool NeedsScriptNoConfig() const override;
+  void GenerateOldStyle(std::ostream& os, Indent indent);
 
   cmLocalGenerator* LG;
   cmTest* Test;

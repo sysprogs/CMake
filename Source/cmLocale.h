@@ -3,22 +3,25 @@
 #ifndef cmLocale_h
 #define cmLocale_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <locale.h>
 #include <string>
 
 class cmLocaleRAII
 {
-  std::string OldLocale;
+  CM_DISABLE_COPY(cmLocaleRAII)
 
 public:
   cmLocaleRAII()
-    : OldLocale(setlocale(LC_CTYPE, CM_NULLPTR))
+    : OldLocale(setlocale(LC_CTYPE, nullptr))
   {
     setlocale(LC_CTYPE, "");
   }
   ~cmLocaleRAII() { setlocale(LC_CTYPE, this->OldLocale.c_str()); }
+
+private:
+  std::string OldLocale;
 };
 
 #endif

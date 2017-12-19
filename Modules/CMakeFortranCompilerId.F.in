@@ -90,6 +90,13 @@
 # if defined(__PGIC_PATCHLEVEL__)
 #  define COMPILER_VERSION_PATCH DEC(__PGIC_PATCHLEVEL__)
 # endif
+#elif defined(__FLANG)
+        PRINT *, 'INFO:compiler[Flang]'
+# define COMPILER_VERSION_MAJOR DEC(__FLANG_MAJOR__)
+# define COMPILER_VERSION_MINOR DEC(__FLANG_MINOR__)
+# if defined(__FLANG_PATCHLEVEL__)
+#  define COMPILER_VERSION_PATCH DEC(__FLANG_PATCHLEVEL__)
+# endif
 #elif defined(_SGI_COMPILER_VERSION) || defined(_COMPILER_VERSION)
         PRINT *, 'INFO:compiler[MIPSpro]'
 #       if 0
@@ -103,6 +110,11 @@
         PRINT *, 'INFO:compiler[MIPSpro]'
 #elif defined(__hpux) || defined(__hpux__)
         PRINT *, 'INFO:compiler[HP]'
+#elif defined(NAGFOR)
+        PRINT *, 'INFO:compiler[NAG]'
+#define COMPILER_VERSION_MAJOR DEC(__NAG_COMPILER_RELEASE/10)
+#define COMPILER_VERSION_MINOR DEC(__NAG_COMPILER_RELEASE % 10)
+#define COMPILER_VERSION_PATCH DEC(__NAG_COMPILER_BUILD)
 #elif 1
 #       if 0
 !       The above 'elif 1' instead of 'else' is to work around a bug in the

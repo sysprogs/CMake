@@ -2,6 +2,8 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmMakefileExecutableTargetGenerator.h"
 
+#include <algorithm>
+#include <memory> // IWYU pragma: keep
 #include <sstream>
 #include <string>
 #include <vector>
@@ -20,8 +22,8 @@
 #include "cmState.h"
 #include "cmStateDirectory.h"
 #include "cmStateSnapshot.h"
+#include "cmStateTypes.h"
 #include "cmSystemTools.h"
-#include "cm_auto_ptr.hxx"
 #include "cmake.h"
 
 cmMakefileExecutableTargetGenerator::cmMakefileExecutableTargetGenerator(
@@ -120,7 +122,11 @@ void cmMakefileExecutableTargetGenerator::WriteDeviceExecutableRule(
     std::string buildEcho = "Linking ";
     buildEcho += linkLanguage;
     buildEcho += " device code ";
-    buildEcho += targetOutputReal;
+    buildEcho += this->LocalGenerator->ConvertToOutputFormat(
+      this->LocalGenerator->MaybeConvertToRelativePath(
+        this->LocalGenerator->GetCurrentBinaryDirectory(),
+        this->DeviceLinkObject),
+      cmOutputConverter::SHELL);
     this->LocalGenerator->AppendEcho(
       commands, buildEcho, cmLocalUnixMakefileGenerator3::EchoLink, &progress);
   }
@@ -144,7 +150,8 @@ void cmMakefileExecutableTargetGenerator::WriteDeviceExecutableRule(
                                       linkLanguage, *this->GeneratorTarget));
 
   // Add language feature flags.
-  this->AddFeatureFlags(flags, linkLanguage);
+  this->LocalGenerator->AddLanguageFlagsForLinking(
+    flags, this->GeneratorTarget, linkLanguage, this->ConfigName);
 
   this->LocalGenerator->AddArchitectureFlags(flags, this->GeneratorTarget,
                                              linkLanguage, this->ConfigName);
@@ -186,7 +193,7 @@ void cmMakefileExecutableTargetGenerator::WriteDeviceExecutableRule(
     // Set path conversion for link script shells.
     this->LocalGenerator->SetLinkScriptShell(useLinkScript);
 
-    CM_AUTO_PTR<cmLinkLineComputer> linkLineComputer(
+    std::unique_ptr<cmLinkLineComputer> linkLineComputer(
       new cmLinkLineDeviceComputer(
         this->LocalGenerator,
         this->LocalGenerator->GetStateSnapshot().GetDirectory()));
@@ -244,16 +251,15 @@ void cmMakefileExecutableTargetGenerator::WriteDeviceExecutableRule(
       launcher += " ";
     }
 
-    CM_AUTO_PTR<cmRulePlaceholderExpander> rulePlaceholderExpander(
+    std::unique_ptr<cmRulePlaceholderExpander> rulePlaceholderExpander(
       this->LocalGenerator->CreateRulePlaceholderExpander());
 
     // Expand placeholders in the commands.
     rulePlaceholderExpander->SetTargetImpLib(targetOutputReal);
-    for (std::vector<std::string>::iterator i = real_link_commands.begin();
-         i != real_link_commands.end(); ++i) {
-      *i = launcher + *i;
-      rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator, *i,
-                                                   vars);
+    for (std::string& real_link_command : real_link_commands) {
+      real_link_command = launcher + real_link_command;
+      rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator,
+                                                   real_link_command, vars);
     }
 
     // Restore path conversion to normal shells.
@@ -277,7 +283,7 @@ void cmMakefileExecutableTargetGenerator::WriteDeviceExecutableRule(
   commands1.clear();
 
   // Write the build rule.
-  this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, CM_NULLPTR,
+  this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, nullptr,
                                       targetOutputReal, depends, commands,
                                       false);
 
@@ -331,7 +337,8 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   } else {
     cmSystemTools::MakeDirectory(outpath.c_str());
     if (!targetNameImport.empty()) {
-      outpathImp = this->GeneratorTarget->GetDirectory(this->ConfigName, true);
+      outpathImp = this->GeneratorTarget->GetDirectory(
+        this->ConfigName, cmStateEnums::ImportLibraryArtifact);
       cmSystemTools::MakeDirectory(outpathImp.c_str());
       outpathImp += "/";
     }
@@ -426,7 +433,8 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   }
 
   // Add language feature flags.
-  this->AddFeatureFlags(flags, linkLanguage);
+  this->LocalGenerator->AddLanguageFlagsForLinking(
+    flags, this->GeneratorTarget, linkLanguage, this->ConfigName);
 
   this->LocalGenerator->AddArchitectureFlags(flags, this->GeneratorTarget,
                                              linkLanguage, this->ConfigName);
@@ -440,13 +448,16 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     linkFlags, this->GeneratorTarget->GetProperty(linkFlagsConfig));
 
   {
-    CM_AUTO_PTR<cmLinkLineComputer> linkLineComputer(
+    std::unique_ptr<cmLinkLineComputer> linkLineComputer(
       this->CreateLinkLineComputer(
         this->LocalGenerator,
         this->LocalGenerator->GetStateSnapshot().GetDirectory()));
 
     this->AddModuleDefinitionFlag(linkLineComputer.get(), linkFlags);
   }
+
+  this->LocalGenerator->AppendIPOLinkerFlags(linkFlags, this->GeneratorTarget,
+                                             this->ConfigName, linkLanguage);
 
   // Construct a list of files associated with this executable that
   // may need to be cleaned.
@@ -527,7 +538,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     // Set path conversion for link script shells.
     this->LocalGenerator->SetLinkScriptShell(useLinkScript);
 
-    CM_AUTO_PTR<cmLinkLineComputer> linkLineComputer(
+    std::unique_ptr<cmLinkLineComputer> linkLineComputer(
       this->CreateLinkLineComputer(
         this->LocalGenerator,
         this->LocalGenerator->GetStateSnapshot().GetDirectory()));
@@ -555,10 +566,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     }
 
     // maybe create .def file from list of objects
-    if (this->GeneratorTarget->IsExecutableWithExports() &&
-        this->Makefile->IsOn("CMAKE_SUPPORT_WINDOWS_EXPORT_ALL_SYMBOLS")) {
-      this->GenDefFile(real_link_commands, linkFlags);
-    }
+    this->GenDefFile(real_link_commands);
 
     std::string manifests = this->GetManifests();
 
@@ -610,7 +618,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     if (this->GeneratorTarget->GetPropertyAsBool("LINK_WHAT_YOU_USE")) {
       std::string cmakeCommand = this->LocalGenerator->ConvertToOutputFormat(
         cmSystemTools::GetCMakeCommand(), cmLocalGenerator::SHELL);
-      cmakeCommand += " -E __run_iwyu --lwyu=";
+      cmakeCommand += " -E __run_co_compile --lwyu=";
       cmakeCommand += targetOutPathReal;
       real_link_commands.push_back(cmakeCommand);
     }
@@ -624,16 +632,15 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
       launcher += " ";
     }
 
-    CM_AUTO_PTR<cmRulePlaceholderExpander> rulePlaceholderExpander(
+    std::unique_ptr<cmRulePlaceholderExpander> rulePlaceholderExpander(
       this->LocalGenerator->CreateRulePlaceholderExpander());
 
     // Expand placeholders in the commands.
     rulePlaceholderExpander->SetTargetImpLib(targetOutPathImport);
-    for (std::vector<std::string>::iterator i = real_link_commands.begin();
-         i != real_link_commands.end(); ++i) {
-      *i = launcher + *i;
-      rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator, *i,
-                                                   vars);
+    for (std::string& real_link_command : real_link_commands) {
+      real_link_command = launcher + real_link_command;
+      rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator,
+                                                   real_link_command, vars);
     }
 
     // Restore path conversion to normal shells.
@@ -678,7 +685,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   }
 
   // Write the build rule.
-  this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, CM_NULLPTR,
+  this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, nullptr,
                                       targetFullPathReal, depends, commands,
                                       false);
 
@@ -689,7 +696,7 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     depends.clear();
     commands.clear();
     depends.push_back(targetFullPathReal);
-    this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, CM_NULLPTR,
+    this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, nullptr,
                                         targetFullPath, depends, commands,
                                         false);
   }

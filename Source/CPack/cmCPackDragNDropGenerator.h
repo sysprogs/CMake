@@ -3,7 +3,8 @@
 #ifndef cmCPackDragNDropGenerator_h
 #define cmCPackDragNDropGenerator_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <sstream>
 #include <stddef.h>
 #include <string>
@@ -22,32 +23,30 @@ public:
   cmCPackTypeMacro(cmCPackDragNDropGenerator, cmCPackGenerator);
 
   cmCPackDragNDropGenerator();
-  virtual ~cmCPackDragNDropGenerator();
+  ~cmCPackDragNDropGenerator() override;
 
 protected:
-  int InitializeInternal() CM_OVERRIDE;
-  const char* GetOutputExtension() CM_OVERRIDE;
-  int PackageFiles() CM_OVERRIDE;
-  bool SupportsComponentInstallation() const CM_OVERRIDE;
+  int InitializeInternal() override;
+  const char* GetOutputExtension() override;
+  int PackageFiles() override;
+  bool SupportsComponentInstallation() const override;
 
   bool CopyFile(std::ostringstream& source, std::ostringstream& target);
   bool CreateEmptyFile(std::ostringstream& target, size_t size);
   bool RunCommand(std::ostringstream& command, std::string* output = 0);
 
   std::string GetComponentInstallDirNameSuffix(
-    const std::string& componentName) CM_OVERRIDE;
+    const std::string& componentName) override;
 
   int CreateDMG(const std::string& src_dir, const std::string& output_file);
-
-  std::string InstallPrefix;
 
 private:
   std::string slaDirectory;
   bool singleLicense;
 
   bool WriteLicense(cmGeneratedFileStream& outputStream, int licenseNumber,
-                    std::string licenseLanguage, std::string licenseFile,
-                    std::string* error);
+                    std::string licenseLanguage,
+                    const std::string& licenseFile, std::string* error);
   bool BreakLongLine(const std::string& line, std::vector<std::string>& lines,
                      std::string* error);
   void EscapeQuotesAndBackslashes(std::string& line);

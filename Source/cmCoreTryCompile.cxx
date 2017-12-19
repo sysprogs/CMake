@@ -2,12 +2,12 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCoreTryCompile.h"
 
-#include <cmConfigure.h>
-#include <cmsys/Directory.hxx>
+#include "cmsys/Directory.hxx"
 #include <set>
 #include <sstream>
 #include <stdio.h>
 #include <string.h>
+#include <utility>
 
 #include "cmAlgorithms.h"
 #include "cmExportTryCompileFileGenerator.h"
@@ -40,6 +40,8 @@ static std::string const kCMAKE_OSX_SYSROOT = "CMAKE_OSX_SYSROOT";
 static std::string const kCMAKE_POSITION_INDEPENDENT_CODE =
   "CMAKE_POSITION_INDEPENDENT_CODE";
 static std::string const kCMAKE_SYSROOT = "CMAKE_SYSROOT";
+static std::string const kCMAKE_SYSROOT_COMPILE = "CMAKE_SYSROOT_COMPILE";
+static std::string const kCMAKE_SYSROOT_LINK = "CMAKE_SYSROOT_LINK";
 static std::string const kCMAKE_TRY_COMPILE_OSX_ARCHITECTURES =
   "CMAKE_TRY_COMPILE_OSX_ARCHITECTURES";
 static std::string const kCMAKE_TRY_COMPILE_PLATFORM_VARIABLES =
@@ -69,7 +71,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
                                      bool isTryRun)
 {
   this->BinaryDirectory = argv[1];
-  this->OutputFile = "";
+  this->OutputFile.clear();
   // which signature were we called with ?
   this->SrcFileSignature = true;
 
@@ -99,7 +101,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
   }
 
   const char* sourceDirectory = argv[2].c_str();
-  const char* projectName = CM_NULLPTR;
+  const char* projectName = nullptr;
   std::string targetName;
   std::vector<std::string> cmakeFlags(1, "CMAKE_FLAGS"); // fake argv[0]
   std::vector<std::string> compileDefs;
@@ -216,6 +218,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
             if (tgt->IsExecutableWithExports()) {
               break;
             }
+            CM_FALLTHROUGH;
           default:
             this->Makefile->IssueMessage(
               cmake::FATAL_ERROR,
@@ -414,16 +417,15 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
     // Detect languages to enable.
     cmGlobalGenerator* gg = this->Makefile->GetGlobalGenerator();
     std::set<std::string> testLangs;
-    for (std::vector<std::string>::iterator si = sources.begin();
-         si != sources.end(); ++si) {
-      std::string ext = cmSystemTools::GetFilenameLastExtension(*si);
+    for (std::string const& si : sources) {
+      std::string ext = cmSystemTools::GetFilenameLastExtension(si);
       std::string lang = gg->GetLanguageFromExtension(ext.c_str());
       if (!lang.empty()) {
         testLangs.insert(lang);
       } else {
         std::ostringstream err;
         err << "Unknown extension \"" << ext << "\" for file\n"
-            << "  " << *si << "\n"
+            << "  " << si << "\n"
             << "try_compile() works only for enabled languages.  "
             << "Currently these are:\n  ";
         std::vector<std::string> langs;
@@ -464,11 +466,10 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
     }
 
     std::string projectLangs;
-    for (std::set<std::string>::iterator li = testLangs.begin();
-         li != testLangs.end(); ++li) {
-      projectLangs += " " + *li;
+    for (std::string const& li : testLangs) {
+      projectLangs += " " + li;
       std::string rulesOverrideBase = "CMAKE_USER_MAKE_RULES_OVERRIDE";
-      std::string rulesOverrideLang = rulesOverrideBase + "_" + *li;
+      std::string rulesOverrideLang = rulesOverrideBase + "_" + li;
       if (const char* rulesOverridePath =
             this->Makefile->GetDefinition(rulesOverrideLang)) {
         fprintf(fout, "set(%s \"%s\")\n", rulesOverrideLang.c_str(),
@@ -481,15 +482,14 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
     }
     fprintf(fout, "project(CMAKE_TRY_COMPILE%s)\n", projectLangs.c_str());
     fprintf(fout, "set(CMAKE_VERBOSE_MAKEFILE 1)\n");
-    for (std::set<std::string>::iterator li = testLangs.begin();
-         li != testLangs.end(); ++li) {
-      std::string langFlags = "CMAKE_" + *li + "_FLAGS";
+    for (std::string const& li : testLangs) {
+      std::string langFlags = "CMAKE_" + li + "_FLAGS";
       const char* flags = this->Makefile->GetDefinition(langFlags);
-      fprintf(fout, "set(CMAKE_%s_FLAGS %s)\n", li->c_str(),
+      fprintf(fout, "set(CMAKE_%s_FLAGS %s)\n", li.c_str(),
               cmOutputConverter::EscapeForCMake(flags ? flags : "").c_str());
       fprintf(fout, "set(CMAKE_%s_FLAGS \"${CMAKE_%s_FLAGS}"
                     " ${COMPILE_DEFINITIONS}\")\n",
-              li->c_str(), li->c_str());
+              li.c_str(), li.c_str());
     }
     switch (this->Makefile->GetPolicyStatus(cmPolicies::CMP0066)) {
       case cmPolicies::WARN:
@@ -513,14 +513,14 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
         this->Makefile->IssueMessage(
           cmake::FATAL_ERROR,
           cmPolicies::GetRequiredPolicyError(cmPolicies::CMP0066));
+        CM_FALLTHROUGH;
       case cmPolicies::NEW: {
         // NEW behavior is to pass config-specific compiler flags.
         static std::string const cfgDefault = "DEBUG";
         std::string const cfg =
           !tcConfig.empty() ? cmSystemTools::UpperCase(tcConfig) : cfgDefault;
-        for (std::set<std::string>::iterator li = testLangs.begin();
-             li != testLangs.end(); ++li) {
-          std::string const langFlagsCfg = "CMAKE_" + *li + "_FLAGS_" + cfg;
+        for (std::string const& li : testLangs) {
+          std::string const langFlagsCfg = "CMAKE_" + li + "_FLAGS_" + cfg;
           const char* flagsCfg = this->Makefile->GetDefinition(langFlagsCfg);
           fprintf(fout, "set(%s %s)\n", langFlagsCfg.c_str(),
                   cmOutputConverter::EscapeForCMake(flagsCfg ? flagsCfg : "")
@@ -550,6 +550,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
         this->Makefile->IssueMessage(
           cmake::FATAL_ERROR,
           cmPolicies::GetRequiredPolicyError(cmPolicies::CMP0056));
+        CM_FALLTHROUGH;
       case cmPolicies::NEW:
         // NEW behavior is to pass linker flags.
         {
@@ -608,6 +609,8 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
       vars.insert(kCMAKE_OSX_SYSROOT);
       vars.insert(kCMAKE_POSITION_INDEPENDENT_CODE);
       vars.insert(kCMAKE_SYSROOT);
+      vars.insert(kCMAKE_SYSROOT_COMPILE);
+      vars.insert(kCMAKE_SYSROOT_LINK);
       vars.insert(kCMAKE_WARN_DEPRECATED);
 
       if (const char* varListStr = this->Makefile->GetDefinition(
@@ -631,9 +634,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
         cmakeFlags.push_back(flag);
       }
 
-      for (std::set<std::string>::iterator vi = vars.begin(); vi != vars.end();
-           ++vi) {
-        std::string const& var = *vi;
+      for (std::string const& var : vars) {
         if (const char* val = this->Makefile->GetDefinition(var)) {
           std::string flag = "-D" + var + "=" + val;
           cmakeFlags.push_back(flag);
@@ -662,13 +663,12 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
       /* Create the actual static library.  */
       fprintf(fout, "add_library(%s STATIC", targetName.c_str());
     }
-    for (std::vector<std::string>::iterator si = sources.begin();
-         si != sources.end(); ++si) {
-      fprintf(fout, " \"%s\"", si->c_str());
+    for (std::string const& si : sources) {
+      fprintf(fout, " \"%s\"", si.c_str());
 
       // Add dependencies on any non-temporary sources.
-      if (si->find("CMakeTmp") == si->npos) {
-        this->Makefile->AddCMakeDependFile(*si);
+      if (si.find("CMakeTmp") == std::string::npos) {
+        this->Makefile->AddCMakeDependFile(si);
       }
     }
     fprintf(fout, ")\n");
@@ -688,6 +688,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
         case cmPolicies::WARN:
           warnCMP0067 = this->Makefile->PolicyOptionalWarningEnabled(
             "CMAKE_POLICY_WARNING_CMP0067");
+          CM_FALLTHROUGH;
         case cmPolicies::OLD:
           // OLD behavior is to not honor the language standard variables.
           honorStandard = false;
@@ -754,9 +755,8 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
         "is not honoring language standard variables in the test project:\n"
         ;
       /* clang-format on */
-      for (std::vector<std::string>::iterator vi = this->WarnCMP0067.begin();
-           vi != this->WarnCMP0067.end(); ++vi) {
-        w << "  " << *vi << "\n";
+      for (std::string const& vi : this->WarnCMP0067) {
+        w << "  " << vi << "\n";
       }
       this->Makefile->IssueMessage(cmake::AUTHOR_WARNING, w.str());
     }
@@ -919,8 +919,8 @@ void cmCoreTryCompile::CleanupFiles(const char* binDir)
 void cmCoreTryCompile::FindOutputFile(const std::string& targetName,
                                       cmStateEnums::TargetType targetType)
 {
-  this->FindErrorMessage = "";
-  this->OutputFile = "";
+  this->FindErrorMessage.clear();
+  this->OutputFile.clear();
   std::string tmpOutputFile = "/";
   if (targetType == cmStateEnums::EXECUTABLE) {
     tmpOutputFile += targetName;
@@ -955,10 +955,9 @@ void cmCoreTryCompile::FindOutputFile(const std::string& targetName,
 #endif
   searchDirs.push_back("/Development");
 
-  for (std::vector<std::string>::const_iterator it = searchDirs.begin();
-       it != searchDirs.end(); ++it) {
+  for (std::string const& sdir : searchDirs) {
     std::string command = this->BinaryDirectory;
-    command += *it;
+    command += sdir;
     command += tmpOutputFile;
     if (cmSystemTools::FileExists(command.c_str())) {
       this->OutputFile = cmSystemTools::CollapseFullPath(command);

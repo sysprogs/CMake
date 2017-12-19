@@ -7,13 +7,13 @@
 #include "cmCTestTestHandler.h"
 #include "cmProcess.h"
 #include "cmSystemTools.h"
+#include "cmWorkingDirectory.h"
 
-#include <cmConfigure.h>
-#include <cm_curl.h>
-#include <cm_zlib.h>
-#include <cmsys/Base64.h>
-#include <cmsys/Process.h>
-#include <cmsys/RegularExpression.hxx>
+#include "cm_curl.h"
+#include "cm_zlib.h"
+#include "cmsys/Base64.h"
+#include "cmsys/Process.h"
+#include "cmsys/RegularExpression.hxx"
 #include <iomanip>
 #include <sstream>
 #include <stdio.h>
@@ -24,14 +24,14 @@ cmCTestRunTest::cmCTestRunTest(cmCTestTestHandler* handler)
 {
   this->CTest = handler->CTest;
   this->TestHandler = handler;
-  this->TestProcess = CM_NULLPTR;
+  this->TestProcess = nullptr;
   this->TestResult.ExecutionTime = 0;
   this->TestResult.ReturnValue = 0;
   this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
   this->TestResult.TestCount = 0;
-  this->TestResult.Properties = CM_NULLPTR;
-  this->ProcessOutput = "";
-  this->CompressedOutput = "";
+  this->TestResult.Properties = nullptr;
+  this->ProcessOutput.clear();
+  this->CompressedOutput.clear();
   this->CompressionRatio = 2;
   this->StopTimePassed = false;
   this->NumberOfRunsLeft = 1; // default to 1 run of the test
@@ -64,12 +64,8 @@ bool cmCTestRunTest::CheckOutput()
 
       // Check for TIMEOUT_AFTER_MATCH property.
       if (!this->TestProperties->TimeoutRegularExpressions.empty()) {
-        std::vector<
-          std::pair<cmsys::RegularExpression, std::string> >::iterator regIt;
-        for (regIt = this->TestProperties->TimeoutRegularExpressions.begin();
-             regIt != this->TestProperties->TimeoutRegularExpressions.end();
-             ++regIt) {
-          if (regIt->first.find(this->ProcessOutput.c_str())) {
+        for (auto& reg : this->TestProperties->TimeoutRegularExpressions) {
+          if (reg.first.find(this->ProcessOutput.c_str())) {
             cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, this->GetIndex()
                          << ": "
                          << "Test timeout changed to "
@@ -163,17 +159,14 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
   int res =
     started ? this->TestProcess->GetProcessStatus() : cmsysProcess_State_Error;
   int retVal = this->TestProcess->GetExitValue();
-  std::vector<std::pair<cmsys::RegularExpression, std::string> >::iterator
-    passIt;
   bool forceFail = false;
+  bool skipped = false;
   bool outputTestErrorsToConsole = false;
   if (!this->TestProperties->RequiredRegularExpressions.empty() &&
       this->FailedDependencies.empty()) {
     bool found = false;
-    for (passIt = this->TestProperties->RequiredRegularExpressions.begin();
-         passIt != this->TestProperties->RequiredRegularExpressions.end();
-         ++passIt) {
-      if (passIt->first.find(this->ProcessOutput.c_str())) {
+    for (auto& pass : this->TestProperties->RequiredRegularExpressions) {
+      if (pass.first.find(this->ProcessOutput.c_str())) {
         found = true;
         reason = "Required regular expression found.";
         break;
@@ -184,23 +177,19 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
       forceFail = true;
     }
     reason += "Regex=[";
-    for (passIt = this->TestProperties->RequiredRegularExpressions.begin();
-         passIt != this->TestProperties->RequiredRegularExpressions.end();
-         ++passIt) {
-      reason += passIt->second;
+    for (auto& pass : this->TestProperties->RequiredRegularExpressions) {
+      reason += pass.second;
       reason += "\n";
     }
     reason += "]";
   }
   if (!this->TestProperties->ErrorRegularExpressions.empty() &&
       this->FailedDependencies.empty()) {
-    for (passIt = this->TestProperties->ErrorRegularExpressions.begin();
-         passIt != this->TestProperties->ErrorRegularExpressions.end();
-         ++passIt) {
-      if (passIt->first.find(this->ProcessOutput.c_str())) {
+    for (auto& pass : this->TestProperties->ErrorRegularExpressions) {
+      if (pass.first.find(this->ProcessOutput.c_str())) {
         reason = "Error regular expression found in output.";
         reason += " Regex=[";
-        reason += passIt->second;
+        reason += pass.second;
         reason += "]";
         forceFail = true;
         break;
@@ -214,7 +203,11 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     if (this->TestProperties->SkipReturnCode >= 0 &&
         this->TestProperties->SkipReturnCode == retVal) {
       this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
+      std::ostringstream s;
+      s << "SKIP_RETURN_CODE=" << this->TestProperties->SkipReturnCode;
+      this->TestResult.CompletionStatus = s.str();
       cmCTestLog(this->CTest, HANDLER_OUTPUT, "***Skipped ");
+      skipped = true;
     } else if ((success && !this->TestProperties->WillFail) ||
                (!success && this->TestProperties->WillFail)) {
       this->TestResult.Status = cmCTestTestHandler::COMPLETED;
@@ -231,6 +224,8 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
   } else if (res == cmsysProcess_State_Exception) {
     outputTestErrorsToConsole = this->CTest->OutputTestOutputOnTestFailure;
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "***Exception: ");
+    this->TestResult.ExceptionStatus =
+      this->TestProcess->GetExitExceptionString();
     switch (this->TestProcess->GetExitException()) {
       case cmsysProcess_Exception_Fault:
         cmCTestLog(this->CTest, HANDLER_OUTPUT, "SegFault");
@@ -249,9 +244,12 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
         this->TestResult.Status = cmCTestTestHandler::NUMERICAL;
         break;
       default:
-        cmCTestLog(this->CTest, HANDLER_OUTPUT, "Other");
+        cmCTestLog(this->CTest, HANDLER_OUTPUT,
+                   this->TestResult.ExceptionStatus);
         this->TestResult.Status = cmCTestTestHandler::OTHER_FAULT;
     }
+  } else if ("Disabled" == this->TestResult.CompletionStatus) {
+    cmCTestLog(this->CTest, HANDLER_OUTPUT, "***Not Run (Disabled) ");
   } else // cmsysProcess_State_Error
   {
     cmCTestLog(this->CTest, HANDLER_OUTPUT, "***Not Run ");
@@ -270,14 +268,11 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     *this->TestHandler->LogFile << "Test time = " << buf << std::endl;
   }
 
-  // Set the working directory to the tests directory
-  std::string oldpath = cmSystemTools::GetCurrentWorkingDirectory();
-  cmSystemTools::ChangeDirectory(this->TestProperties->Directory);
-
-  this->DartProcessing();
-
-  // restore working directory
-  cmSystemTools::ChangeDirectory(oldpath);
+  // Set the working directory to the tests directory to process Dart files.
+  {
+    cmWorkingDirectory workdir(this->TestProperties->Directory);
+    this->DartProcessing();
+  }
 
   // if this is doing MemCheck then all the output needs to be put into
   // Output since that is what is parsed by cmCTestMemCheckHandler
@@ -335,7 +330,9 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
       compress ? this->CompressedOutput : this->ProcessOutput;
     this->TestResult.CompressOutput = compress;
     this->TestResult.ReturnValue = this->TestProcess->GetExitValue();
-    this->TestResult.CompletionStatus = "Completed";
+    if (!skipped) {
+      this->TestResult.CompletionStatus = "Completed";
+    }
     this->TestResult.ExecutionTime = this->TestProcess->GetTotalTime();
     this->MemCheckPostProcess();
     this->ComputeWeightedCost();
@@ -346,7 +343,7 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     this->TestHandler->TestResults.push_back(this->TestResult);
   }
   delete this->TestProcess;
-  return passed;
+  return passed || skipped;
 }
 
 bool cmCTestRunTest::StartAgain()
@@ -356,11 +353,8 @@ bool cmCTestRunTest::StartAgain()
   }
   this->RunAgain = false; // reset
   // change to tests directory
-  std::string current_dir = cmSystemTools::GetCurrentWorkingDirectory();
-  cmSystemTools::ChangeDirectory(this->TestProperties->Directory);
+  cmWorkingDirectory workdir(this->TestProperties->Directory);
   this->StartTest(this->TotalNumberOfTests);
-  // change back
-  cmSystemTools::ChangeDirectory(current_dir);
   return true;
 }
 
@@ -418,6 +412,24 @@ bool cmCTestRunTest::StartTest(size_t total)
                << this->TestProperties->Index << ": "
                << this->TestProperties->Name << std::endl);
   this->ProcessOutput.clear();
+
+  // Return immediately if test is disabled
+  if (this->TestProperties->Disabled) {
+    this->TestResult.Properties = this->TestProperties;
+    this->TestResult.ExecutionTime = 0;
+    this->TestResult.CompressOutput = false;
+    this->TestResult.ReturnValue = -1;
+    this->TestResult.CompletionStatus = "Disabled";
+    this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
+    this->TestResult.TestCount = this->TestProperties->Index;
+    this->TestResult.Name = this->TestProperties->Name;
+    this->TestResult.Path = this->TestProperties->Directory;
+    this->TestProcess = new cmProcess;
+    this->TestResult.Output = "Disabled";
+    this->TestResult.FullCommandLine.clear();
+    return false;
+  }
+
   this->ComputeArguments();
   std::vector<std::string>& args = this->TestProperties->Args;
   this->TestResult.Properties = this->TestProperties;
@@ -433,16 +445,14 @@ bool cmCTestRunTest::StartTest(size_t total)
   if (!this->FailedDependencies.empty()) {
     this->TestProcess = new cmProcess;
     std::string msg = "Failed test dependencies:";
-    for (std::set<std::string>::const_iterator it =
-           this->FailedDependencies.begin();
-         it != this->FailedDependencies.end(); ++it) {
-      msg += " " + *it;
+    for (std::string const& failedDep : this->FailedDependencies) {
+      msg += " " + failedDep;
     }
     *this->TestHandler->LogFile << msg << std::endl;
     cmCTestLog(this->CTest, HANDLER_OUTPUT, msg << std::endl);
     this->TestResult.Output = msg;
-    this->TestResult.FullCommandLine = "";
-    this->TestResult.CompletionStatus = "Not Run";
+    this->TestResult.FullCommandLine.clear();
+    this->TestResult.CompletionStatus = "Fixture dependency failed";
     this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
     return false;
   }
@@ -461,18 +471,14 @@ bool cmCTestRunTest::StartTest(size_t total)
     *this->TestHandler->LogFile << msg << std::endl;
     cmCTestLog(this->CTest, ERROR_MESSAGE, msg << std::endl);
     this->TestResult.Output = msg;
-    this->TestResult.FullCommandLine = "";
-    this->TestResult.CompletionStatus = "Not Run";
+    this->TestResult.FullCommandLine.clear();
+    this->TestResult.CompletionStatus = "Missing Configuration";
     this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
     return false;
   }
 
   // Check if all required files exist
-  for (std::vector<std::string>::iterator i =
-         this->TestProperties->RequiredFiles.begin();
-       i != this->TestProperties->RequiredFiles.end(); ++i) {
-    std::string file = *i;
-
+  for (std::string const& file : this->TestProperties->RequiredFiles) {
     if (!cmSystemTools::FileExists(file.c_str())) {
       // Required file was not found
       this->TestProcess = new cmProcess;
@@ -481,14 +487,14 @@ bool cmCTestRunTest::StartTest(size_t total)
       cmCTestLog(this->CTest, ERROR_MESSAGE,
                  "Unable to find required file: " << file << std::endl);
       this->TestResult.Output = "Unable to find required file: " + file;
-      this->TestResult.FullCommandLine = "";
-      this->TestResult.CompletionStatus = "Not Run";
+      this->TestResult.FullCommandLine.clear();
+      this->TestResult.CompletionStatus = "Required Files Missing";
       this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
       return false;
     }
   }
   // log and return if we did not find the executable
-  if (this->ActualCommand == "") {
+  if (this->ActualCommand.empty()) {
     // if the command was not found create a TestResult object
     // that has that information
     this->TestProcess = new cmProcess;
@@ -497,8 +503,8 @@ bool cmCTestRunTest::StartTest(size_t total)
     cmCTestLog(this->CTest, ERROR_MESSAGE,
                "Unable to find executable: " << args[1] << std::endl);
     this->TestResult.Output = "Unable to find executable: " + args[1];
-    this->TestResult.FullCommandLine = "";
-    this->TestResult.CompletionStatus = "Not Run";
+    this->TestResult.FullCommandLine.clear();
+    this->TestResult.CompletionStatus = "Unable to find executable";
     this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
     return false;
   }
@@ -536,10 +542,9 @@ void cmCTestRunTest::ComputeArguments()
 
   // Prepends memcheck args to our command string
   this->TestHandler->GenerateTestCommand(this->Arguments, this->Index);
-  for (std::vector<std::string>::iterator i = this->Arguments.begin();
-       i != this->Arguments.end(); ++i) {
+  for (std::string const& arg : this->Arguments) {
     testCommand += " \"";
-    testCommand += *i;
+    testCommand += arg;
     testCommand += "\"";
   }
 
@@ -563,10 +568,8 @@ void cmCTestRunTest::ComputeArguments()
                  << ": "
                  << "Environment variables: " << std::endl);
   }
-  for (std::vector<std::string>::const_iterator e =
-         this->TestProperties->Environment.begin();
-       e != this->TestProperties->Environment.end(); ++e) {
-    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, this->Index << ":  " << *e
+  for (std::string const& env : this->TestProperties->Environment) {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, this->Index << ":  " << env
                                                                 << std::endl);
   }
 }
@@ -574,8 +577,7 @@ void cmCTestRunTest::ComputeArguments()
 void cmCTestRunTest::DartProcessing()
 {
   if (!this->ProcessOutput.empty() &&
-      this->ProcessOutput.find("<DartMeasurement") !=
-        this->ProcessOutput.npos) {
+      this->ProcessOutput.find("<DartMeasurement") != std::string::npos) {
     if (this->TestHandler->DartStuff.find(this->ProcessOutput.c_str())) {
       this->TestResult.DartString = this->TestHandler->DartStuff.match(1);
       // keep searching and replacing until none are left
@@ -593,11 +595,11 @@ double cmCTestRunTest::ResolveTimeout()
 {
   double timeout = this->TestProperties->Timeout;
 
-  if (this->CTest->GetStopTime() == "") {
+  if (this->CTest->GetStopTime().empty()) {
     return timeout;
   }
   struct tm* lctime;
-  time_t current_time = time(CM_NULLPTR);
+  time_t current_time = time(nullptr);
   lctime = gmtime(&current_time);
   int gm_hour = lctime->tm_hour;
   time_t gm_time = mktime(lctime);
@@ -741,9 +743,8 @@ void cmCTestRunTest::WriteLogOutputTop(size_t completed, size_t total)
                               << std::endl;
   *this->TestHandler->LogFile << "Command: \"" << this->ActualCommand << "\"";
 
-  for (std::vector<std::string>::iterator i = this->Arguments.begin();
-       i != this->Arguments.end(); ++i) {
-    *this->TestHandler->LogFile << " \"" << *i << "\"";
+  for (std::string const& arg : this->Arguments) {
+    *this->TestHandler->LogFile << " \"" << arg << "\"";
   }
   *this->TestHandler->LogFile
     << std::endl

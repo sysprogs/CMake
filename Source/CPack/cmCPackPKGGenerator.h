@@ -3,7 +3,8 @@
 #ifndef cmCPackPKGGenerator_h
 #define cmCPackPKGGenerator_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <set>
 #include <sstream>
 #include <string>
@@ -26,13 +27,13 @@ public:
    * Construct generator
    */
   cmCPackPKGGenerator();
-  virtual ~cmCPackPKGGenerator();
+  ~cmCPackPKGGenerator() override;
 
-  bool SupportsComponentInstallation() const CM_OVERRIDE;
+  bool SupportsComponentInstallation() const override;
 
 protected:
-  int InitializeInternal() CM_OVERRIDE;
-  const char* GetOutputPostfix() CM_OVERRIDE { return "darwin"; }
+  int InitializeInternal() override;
+  const char* GetOutputPostfix() override { return "darwin"; }
 
   // Copies or creates the resource file with the given name to the
   // package or package staging directory dirName. The variable

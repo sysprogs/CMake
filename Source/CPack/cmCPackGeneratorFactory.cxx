@@ -2,13 +2,16 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCPackGeneratorFactory.h"
 
-#include <cmConfigure.h>
 #include <ostream>
 #include <utility>
 
 #include "IFW/cmCPackIFWGenerator.h"
 #include "cmAlgorithms.h"
 #include "cmCPack7zGenerator.h"
+#ifdef HAVE_FREEBSD_PKG
+#include "cmCPackFreeBSDGenerator.h"
+#endif
+#include "cmCPackDebGenerator.h"
 #include "cmCPackGenerator.h"
 #include "cmCPackLog.h"
 #include "cmCPackNSISGenerator.h"
@@ -34,7 +37,6 @@
 
 #if !defined(_WIN32) && !defined(__QNXNTO__) && !defined(__BEOS__) &&         \
   !defined(__HAIKU__)
-#include "cmCPackDebGenerator.h"
 #include "cmCPackRPMGenerator.h"
 #endif
 
@@ -99,6 +101,10 @@ cmCPackGeneratorFactory::cmCPackGeneratorFactory()
     this->RegisterGenerator("TZ", "Tar Compress compression",
                             cmCPackTarCompressGenerator::CreateGenerator);
   }
+  if (cmCPackDebGenerator::CanGenerate()) {
+    this->RegisterGenerator("DEB", "Debian packages",
+                            cmCPackDebGenerator::CreateGenerator);
+  }
 #ifdef __APPLE__
   if (cmCPackDragNDropGenerator::CanGenerate()) {
     this->RegisterGenerator("DragNDrop", "Mac OSX Drag And Drop",
@@ -123,13 +129,15 @@ cmCPackGeneratorFactory::cmCPackGeneratorFactory()
 #endif
 #if !defined(_WIN32) && !defined(__QNXNTO__) && !defined(__BEOS__) &&         \
   !defined(__HAIKU__)
-  if (cmCPackDebGenerator::CanGenerate()) {
-    this->RegisterGenerator("DEB", "Debian packages",
-                            cmCPackDebGenerator::CreateGenerator);
-  }
   if (cmCPackRPMGenerator::CanGenerate()) {
     this->RegisterGenerator("RPM", "RPM packages",
                             cmCPackRPMGenerator::CreateGenerator);
+  }
+#endif
+#ifdef HAVE_FREEBSD_PKG
+  if (cmCPackFreeBSDGenerator::CanGenerate()) {
+    this->RegisterGenerator("FREEBSD", "FreeBSD pkg(8) packages",
+                            cmCPackFreeBSDGenerator::CreateGenerator);
   }
 #endif
 }
@@ -144,7 +152,7 @@ cmCPackGenerator* cmCPackGeneratorFactory::NewGenerator(
 {
   cmCPackGenerator* gen = this->NewGeneratorInternal(name);
   if (!gen) {
-    return CM_NULLPTR;
+    return nullptr;
   }
   this->Generators.push_back(gen);
   gen->SetLogger(this->Logger);
@@ -157,7 +165,7 @@ cmCPackGenerator* cmCPackGeneratorFactory::NewGeneratorInternal(
   cmCPackGeneratorFactory::t_GeneratorCreatorsMap::iterator it =
     this->GeneratorCreators.find(name);
   if (it == this->GeneratorCreators.end()) {
-    return CM_NULLPTR;
+    return nullptr;
   }
   return (it->second)();
 }

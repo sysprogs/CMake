@@ -45,13 +45,6 @@ include(GenerateExportHeader)
 
 set(CMAKE_CXX_STANDARD 98)
 
-# Those versions of the HP compiler that need a flag to get proper C++98
-# template support also need a flag to use the newer C++ library.
-if (CMAKE_CXX_COMPILER_ID STREQUAL HP AND
-    CMAKE_CXX98_STANDARD_COMPILE_OPTION STREQUAL "+hpxstd98")
-  string(APPEND CMAKE_CXX_FLAGS " -AA")
-endif ()
-
 # Clang/C2 in C++98 mode cannot properly handle some of MSVC headers
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
     CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
@@ -110,7 +103,7 @@ if (WIN32 OR CYGWIN)
   else()
     set(_platform WinEmpty)
   endif()
-elseif(COMPILER_HAS_HIDDEN_VISIBILITY AND USE_COMPILER_HIDDEN_VISIBILITY)
+elseif(COMPILER_HAS_HIDDEN_VISIBILITY)
   set(_platform UNIX)
 elseif(COMPILER_HAS_DEPRECATED)
   set(_platform UNIX_DeprecatedOnly)

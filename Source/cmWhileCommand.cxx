@@ -7,8 +7,9 @@
 #include "cmExpandedCommandArgument.h"
 #include "cmMakefile.h"
 #include "cmSystemTools.h"
-#include "cm_auto_ptr.hxx"
 #include "cmake.h"
+
+#include <memory> // IWYU pragma: keep
 
 cmWhileFunctionBlocker::cmWhileFunctionBlocker(cmMakefile* mf)
   : Makefile(mf)
@@ -34,7 +35,8 @@ bool cmWhileFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
     // if this is the endwhile for this while loop then execute
     if (!this->Depth) {
       // Remove the function blocker for this scope or bail.
-      CM_AUTO_PTR<cmFunctionBlocker> fb(mf.RemoveFunctionBlocker(this, lff));
+      std::unique_ptr<cmFunctionBlocker> fb(
+        mf.RemoveFunctionBlocker(this, lff));
       if (!fb.get()) {
         return false;
       }
@@ -60,11 +62,10 @@ bool cmWhileFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
       while (isTrue) {
         if (!errorString.empty()) {
           std::string err = "had incorrect arguments: ";
-          unsigned int i;
-          for (i = 0; i < this->Args.size(); ++i) {
-            err += (this->Args[i].Delim ? "\"" : "");
-            err += this->Args[i].Value;
-            err += (this->Args[i].Delim ? "\"" : "");
+          for (cmListFileArgument const& arg : this->Args) {
+            err += (arg.Delim ? "\"" : "");
+            err += arg.Value;
+            err += (arg.Delim ? "\"" : "");
             err += " ";
           }
           err += "(";
@@ -78,11 +79,11 @@ bool cmWhileFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
         }
 
         // Invoke all the functions that were collected in the block.
-        for (unsigned int c = 0; c < this->Functions.size(); ++c) {
+        for (cmListFileFunction const& fn : this->Functions) {
           cmExecutionStatus status;
-          mf.ExecuteCommand(this->Functions[c], status);
+          mf.ExecuteCommand(fn, status);
           if (status.GetReturnInvoked()) {
-            inStatus.SetReturnInvoked(true);
+            inStatus.SetReturnInvoked();
             return true;
           }
           if (status.GetBreakInvoked()) {

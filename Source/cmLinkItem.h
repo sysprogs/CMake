@@ -3,7 +3,7 @@
 #ifndef cmLinkItem_h
 #define cmLinkItem_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <algorithm>
 #include <map>
@@ -24,17 +24,12 @@ class cmLinkItem : public std::string
 public:
   cmLinkItem()
     : std_string()
-    , Target(CM_NULLPTR)
+    , Target(nullptr)
   {
   }
   cmLinkItem(const std_string& n, cmGeneratorTarget const* t)
     : std_string(n)
     , Target(t)
-  {
-  }
-  cmLinkItem(cmLinkItem const& r)
-    : std_string(r)
-    , Target(r.Target)
   {
   }
   cmGeneratorTarget const* Target;
@@ -54,12 +49,6 @@ public:
     : cmLinkItem(n, t)
     , Backtrace(bt)
     , FromGenex(fromGenex)
-  {
-  }
-  cmLinkImplItem(cmLinkImplItem const& r)
-    : cmLinkItem(r)
-    , Backtrace(r.Backtrace)
-    , FromGenex(r.FromGenex)
   {
   }
   cmListFileBacktrace Backtrace;
@@ -116,7 +105,7 @@ struct cmOptionalLinkInterface : public cmLinkInterface
     , AllDone(false)
     , Exists(false)
     , HadHeadSensitiveCondition(false)
-    , ExplicitLibraries(CM_NULLPTR)
+    , ExplicitLibraries(nullptr)
   {
   }
   bool LibrariesDone;

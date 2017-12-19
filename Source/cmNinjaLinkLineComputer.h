@@ -4,7 +4,7 @@
 #ifndef cmNinjaLinkLineComputer_h
 #define cmNinjaLinkLineComputer_h
 
-#include <cmConfigure.h>
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <string>
 
@@ -16,13 +16,14 @@ class cmStateDirectory;
 
 class cmNinjaLinkLineComputer : public cmLinkLineComputer
 {
+  CM_DISABLE_COPY(cmNinjaLinkLineComputer)
+
 public:
   cmNinjaLinkLineComputer(cmOutputConverter* outputConverter,
-                          cmStateDirectory stateDir,
+                          cmStateDirectory const& stateDir,
                           cmGlobalNinjaGenerator const* gg);
 
-  std::string ConvertToLinkReference(std::string const& input) const
-    CM_OVERRIDE;
+  std::string ConvertToLinkReference(std::string const& input) const override;
 
 private:
   cmGlobalNinjaGenerator const* GG;
