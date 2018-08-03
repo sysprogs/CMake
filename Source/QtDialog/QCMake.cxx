@@ -10,7 +10,7 @@
 #include "cmSystemTools.h"
 
 #ifdef Q_OS_WIN
-#include "qt_windows.h" // For SetErrorMode
+#  include "qt_windows.h" // For SetErrorMode
 #endif
 
 QCMake::QCMake(QObject* p)
@@ -39,15 +39,6 @@ QCMake::QCMake(QObject* p)
 
   std::vector<cmake::GeneratorInfo>::const_iterator it;
   for (it = generators.begin(); it != generators.end(); ++it) {
-    // Skip the generator "KDevelop3", since there is also
-    // "KDevelop3 - Unix Makefiles", which is the full and official name.
-    // The short name is actually only still there since this was the name
-    // in CMake 2.4, to keep "command line argument compatibility", but
-    // this is not necessary in the GUI.
-    if (it->name == "KDevelop3") {
-      continue;
-    }
-
     this->AvailableGenerators.push_back(*it);
   }
 }
@@ -115,6 +106,8 @@ void QCMake::setBinaryDirectory(const QString& _dir)
     if (toolset) {
       this->setToolset(QString::fromLocal8Bit(toolset));
     }
+
+    checkOpenPossible();
   }
 }
 
@@ -183,6 +176,26 @@ void QCMake::generate()
 #endif
 
   emit this->generateDone(err);
+  checkOpenPossible();
+}
+
+void QCMake::open()
+{
+#ifdef Q_OS_WIN
+  UINT lastErrorMode = SetErrorMode(0);
+#endif
+
+  InterruptFlag = 0;
+  cmSystemTools::ResetErrorOccuredFlag();
+
+  auto successful = this->CMakeInstance->Open(
+    this->BinaryDirectory.toLocal8Bit().data(), false);
+
+#ifdef Q_OS_WIN
+  SetErrorMode(lastErrorMode);
+#endif
+
+  emit this->openDone(successful);
 }
 
 void QCMake::setProperties(const QCMakePropertyList& newProps)
@@ -449,4 +462,11 @@ void QCMake::setWarnUninitializedMode(bool value)
 void QCMake::setWarnUnusedMode(bool value)
 {
   this->WarnUnusedMode = value;
+}
+
+void QCMake::checkOpenPossible()
+{
+  auto data = this->BinaryDirectory.toLocal8Bit().data();
+  auto possible = this->CMakeInstance->Open(data, true);
+  emit openPossible(possible);
 }

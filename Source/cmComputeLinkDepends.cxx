@@ -239,8 +239,9 @@ cmComputeLinkDepends::Compute()
 
   // Display the constraint graph.
   if (this->DebugMode) {
-    fprintf(stderr, "---------------------------------------"
-                    "---------------------------------------\n");
+    fprintf(stderr,
+            "---------------------------------------"
+            "---------------------------------------\n");
     fprintf(stderr, "Link dependency analysis for target %s, config %s\n",
             this->Target->GetName().c_str(),
             this->HasConfig ? this->Config.c_str() : "noconfig");
@@ -285,9 +286,9 @@ std::map<std::string, int>::iterator cmComputeLinkDepends::AllocateLinkEntry(
     item, static_cast<int>(this->EntryList.size()));
   std::map<std::string, int>::iterator lei =
     this->LinkEntryIndex.insert(index_entry).first;
-  this->EntryList.push_back(LinkEntry());
+  this->EntryList.emplace_back();
   this->InferredDependSets.push_back(nullptr);
-  this->EntryConstraintGraph.push_back(EdgeList());
+  this->EntryConstraintGraph.emplace_back();
   return lei;
 }
 
@@ -472,8 +473,7 @@ void cmComputeLinkDepends::AddVarLinkEntries(int depender_index,
 
       // If the library is meant for this link type then use it.
       if (llt == GENERAL_LibraryType || llt == this->LinkType) {
-        cmLinkItem item(d, this->FindTargetToLink(depender_index, d));
-        actual_libs.push_back(item);
+        actual_libs.emplace_back(d, this->FindTargetToLink(depender_index, d));
       } else if (this->OldLinkDirMode) {
         cmLinkItem item(d, this->FindTargetToLink(depender_index, d));
         this->CheckWrongConfigItem(item);

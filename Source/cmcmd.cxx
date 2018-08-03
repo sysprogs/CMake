@@ -3,10 +3,12 @@
 #include "cmcmd.h"
 
 #include "cmAlgorithms.h"
+#include "cmDuration.h"
 #include "cmGlobalGenerator.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
-#include "cmQtAutoGenerators.h"
+#include "cmQtAutoGeneratorMocUic.h"
+#include "cmQtAutoGeneratorRcc.h"
 #include "cmStateDirectory.h"
 #include "cmStateSnapshot.h"
 #include "cmSystemTools.h"
@@ -15,17 +17,17 @@
 #include "cmake.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cmDependsFortran.h" // For -E cmake_copy_f90_mod callback.
-#include "cmServer.h"
-#include "cmServerConnection.h"
+#  include "cmDependsFortran.h" // For -E cmake_copy_f90_mod callback.
+#  include "cmServer.h"
+#  include "cmServerConnection.h"
 #endif
 
 #if defined(CMAKE_BUILD_WITH_CMAKE) && defined(_WIN32)
-#include "bindexplib.h"
+#  include "bindexplib.h"
 #endif
 
 #if defined(CMAKE_BUILD_WITH_CMAKE) && defined(_WIN32) && !defined(__CYGWIN__)
-#include "cmVisualStudioWCEPlatformParser.h"
+#  include "cmVisualStudioWCEPlatformParser.h"
 #endif
 
 #include "cmsys/Directory.hxx"
@@ -34,6 +36,7 @@
 #include "cmsys/Terminal.h"
 #include <algorithm>
 #include <iostream>
+#include <iterator>
 #include <memory> // IWYU pragma: keep
 #include <sstream>
 #include <stdio.h>
@@ -101,7 +104,7 @@ void CMakeCommandUsage(const char* program)
     << "  sleep <number>...         - sleep for given number of seconds\n"
     << "  tar [cxt][vf][zjJ] file.tar [file/dir1 file/dir2 ...]\n"
     << "                            - create or extract a tar or zip archive\n"
-    << "  time command [args...]    - run command and return elapsed time\n"
+    << "  time command [args...]    - run command and display elapsed time\n"
     << "  touch file                - touch a file.\n"
     << "  touch_nocreate file       - touch a file but do not create it.\n"
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -268,10 +271,12 @@ static int HandleCppLint(const std::string& runCmd,
               << "\n";
     return 1;
   }
-
+  std::cerr << "Warning: cpplint diagnostics:\n";
   // Output the output from cpplint to stderr
   std::cerr << stdOut;
-  return ret;
+  // always return 0 so the build can continue as cpplint returns non-zero
+  // for any warning
+  return 0;
 }
 
 static int HandleCppCheck(const std::string& runCmd,
@@ -354,7 +359,8 @@ struct CoCompileJob
 int cmcmd::HandleCoCompileCommands(std::vector<std::string>& args)
 {
   std::vector<CoCompileJob> jobs;
-  std::string sourceFile; // store --source=
+  std::string sourceFile;             // store --source=
+  std::vector<std::string> launchers; // store --launcher=
 
   // Default is to run the original command found after -- if the option
   // does not need to do that, it should be specified here, currently only
@@ -371,8 +377,8 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string>& args)
       doing_options = false;
     } else if (doing_options) {
       bool optionFound = false;
-      for (CoCompiler const* cc = cmArrayBegin(CoCompilers);
-           cc != cmArrayEnd(CoCompilers); ++cc) {
+      for (CoCompiler const* cc = cm::cbegin(CoCompilers);
+           cc != cm::cend(CoCompilers); ++cc) {
         size_t optionLen = strlen(cc->Option);
         if (arg.compare(0, optionLen, cc->Option) == 0) {
           optionFound = true;
@@ -385,15 +391,17 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string>& args)
           }
         }
       }
-      if (cmHasLiteralPrefix(arg, "--source=")) {
-        sourceFile = arg.substr(9);
-        optionFound = true;
-      }
-      // if it was not a co-compiler or --source then error
       if (!optionFound) {
-        std::cerr << "__run_co_compile given unknown argument: " << arg
-                  << "\n";
-        return 1;
+        if (cmHasLiteralPrefix(arg, "--source=")) {
+          sourceFile = arg.substr(9);
+        } else if (cmHasLiteralPrefix(arg, "--launcher=")) {
+          cmSystemTools::ExpandListArgument(arg.substr(11), launchers, true);
+        } else {
+          // if it was not a co-compiler or --source/--launcher then error
+          std::cerr << "__run_co_compile given unknown argument: " << arg
+                    << "\n";
+          return 1;
+        }
       }
     } else { // if not doing_options then push to orig_cmd
       orig_cmd.push_back(arg);
@@ -402,8 +410,8 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string>& args)
   if (jobs.empty()) {
     std::cerr << "__run_co_compile missing command to run. "
                  "Looking for one or more of the following:\n";
-    for (CoCompiler const* cc = cmArrayBegin(CoCompilers);
-         cc != cmArrayEnd(CoCompilers); ++cc) {
+    for (CoCompiler const* cc = cm::cbegin(CoCompilers);
+         cc != cm::cend(CoCompilers); ++cc) {
       std::cerr << cc->Option << "\n";
     }
     return 1;
@@ -429,6 +437,11 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string>& args)
   // if there is no original command to run return now
   if (!runOriginalCmd) {
     return 0;
+  }
+
+  // Prepend launcher argument(s), if any
+  if (!launchers.empty()) {
+    orig_cmd.insert(orig_cmd.begin(), launchers.begin(), launchers.end());
   }
 
   // Now run the real compiler command and return its result value
@@ -636,7 +649,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       // If error occurs we want to continue copying next files.
       bool return_value = false;
       for (std::string::size_type cc = 2; cc < args.size(); cc++) {
-        if (!cmSystemTools::MakeDirectory(args[cc].c_str())) {
+        if (!cmSystemTools::MakeDirectory(args[cc])) {
           std::cerr << "Error creating directory \"" << args[cc] << "\".\n";
           return_value = true;
         }
@@ -663,7 +676,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
           // Complain if the file could not be removed, still exists,
           // and the -f option was not given.
           if (!cmSystemTools::RemoveFile(args[cc]) && !force &&
-              cmSystemTools::FileExists(args[cc].c_str())) {
+              cmSystemTools::FileExists(args[cc])) {
             return 1;
           }
         }
@@ -684,8 +697,6 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
     // Touch file
     if (args[1] == "touch_nocreate" && args.size() > 2) {
       for (std::string::size_type cc = 2; cc < args.size(); cc++) {
-        // Complain if the file could not be removed, still exists,
-        // and the -f option was not given.
         if (!cmSystemTools::Touch(args[cc], false)) {
           return 1;
         }
@@ -784,7 +795,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
     // Command to change directory and run a program.
     if (args[1] == "chdir" && args.size() >= 4) {
       std::string const& directory = args[2];
-      if (!cmSystemTools::FileExists(directory.c_str())) {
+      if (!cmSystemTools::FileExists(directory)) {
         cmSystemTools::Error("Directory does not exist for chdir command: ",
                              args[2].c_str());
         return 1;
@@ -793,10 +804,9 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
       std::string command =
         cmWrap('"', cmMakeRange(args).advance(3), '"', " ");
       int retval = 0;
-      int timeout = 0;
       if (cmSystemTools::RunSingleCommand(
             command.c_str(), nullptr, nullptr, &retval, directory.c_str(),
-            cmSystemTools::OUTPUT_PASSTHROUGH, timeout)) {
+            cmSystemTools::OUTPUT_PASSTHROUGH, cmDuration::zero())) {
         return retval;
       }
 
@@ -822,7 +832,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
         count = atoi(args[3].c_str());
       }
       if (count) {
-        cmSystemTools::MakeDirectory(dirName.c_str());
+        cmSystemTools::MakeDirectory(dirName);
         // write the count into the directory
         std::string fName = dirName;
         fName += "/count.txt";
@@ -991,11 +1001,20 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
     }
 
 #ifdef CMAKE_BUILD_WITH_CMAKE
-    if (args[1] == "cmake_autogen" && args.size() >= 4) {
-      cmQtAutoGenerators autogen;
+    if ((args[1] == "cmake_autogen") && (args.size() >= 4)) {
+      cmQtAutoGeneratorMocUic autoGen;
+      std::string const& infoDir = args[2];
       std::string const& config = args[3];
-      bool autogenSuccess = autogen.Run(args[2], config);
-      return autogenSuccess ? 0 : 1;
+      return autoGen.Run(infoDir, config) ? 0 : 1;
+    }
+    if ((args[1] == "cmake_autorcc") && (args.size() >= 3)) {
+      cmQtAutoGeneratorRcc autoGen;
+      std::string const& infoFile = args[2];
+      std::string config;
+      if (args.size() > 3) {
+        config = args[3];
+      };
+      return autoGen.Run(infoFile, config) ? 0 : 1;
     }
 #endif
 
@@ -1024,8 +1043,8 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string>& args)
           } else if (cmHasLiteralPrefix(arg, "--format=")) {
             format = arg.substr(9);
             bool isKnown =
-              std::find(cmArrayBegin(knownFormats), cmArrayEnd(knownFormats),
-                        format) != cmArrayEnd(knownFormats);
+              std::find(cm::cbegin(knownFormats), cm::cend(knownFormats),
+                        format) != cm::cend(knownFormats);
 
             if (!isKnown) {
               cmSystemTools::Error("Unknown -E tar --format= argument: ",
@@ -1224,9 +1243,12 @@ int cmcmd::HashSumFile(std::vector<std::string>& args, cmCryptoHash::Algo algo)
 int cmcmd::SymlinkLibrary(std::vector<std::string>& args)
 {
   int result = 0;
-  std::string const& realName = args[2];
-  std::string const& soName = args[3];
-  std::string const& name = args[4];
+  std::string realName = args[2];
+  std::string soName = args[3];
+  std::string name = args[4];
+  cmSystemTools::ConvertToUnixSlashes(realName);
+  cmSystemTools::ConvertToUnixSlashes(soName);
+  cmSystemTools::ConvertToUnixSlashes(name);
   if (soName != realName) {
     if (!cmcmd::SymlinkInternal(realName, soName)) {
       cmSystemTools::ReportLastSystemError("cmake_symlink_library");
@@ -1258,8 +1280,7 @@ int cmcmd::SymlinkExecutable(std::vector<std::string>& args)
 
 bool cmcmd::SymlinkInternal(std::string const& file, std::string const& link)
 {
-  if (cmSystemTools::FileExists(link.c_str()) ||
-      cmSystemTools::FileIsSymlink(link)) {
+  if (cmSystemTools::FileExists(link) || cmSystemTools::FileIsSymlink(link)) {
     cmSystemTools::RemoveFile(link);
   }
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -1754,8 +1775,9 @@ int cmVSLink::LinkIncremental()
     if (!fout) {
       return -1;
     }
-    fout << this->Type << " /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ "
-                          "24 /* RT_MANIFEST */ \""
+    fout << this->Type
+         << " /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ "
+            "24 /* RT_MANIFEST */ \""
          << absManifestFile << "\"";
   }
 

@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <stdio.h>
+#include <utility>
 
 #include "cmAlgorithms.h"
 #include "cmExecutionStatus.h"
@@ -92,7 +93,7 @@ bool cmMacroHelperCommand::InvokeInitialPass(
   argVs.reserve(expandedArgs.size());
   char argvName[60];
   for (unsigned int j = 0; j < expandedArgs.size(); ++j) {
-    sprintf(argvName, "${ARGV%i}", j);
+    sprintf(argvName, "${ARGV%u}", j);
     argVs.push_back(argvName);
   }
   // Invoke all the functions that were collected in the block.
@@ -131,7 +132,7 @@ bool cmMacroHelperCommand::InvokeInitialPass(
       }
       arg.Delim = k.Delim;
       arg.Line = k.Line;
-      newLFF.Arguments.push_back(arg);
+      newLFF.Arguments.push_back(std::move(arg));
     }
     cmExecutionStatus status;
     if (!this->Makefile->ExecuteCommand(newLFF, status) ||
@@ -160,9 +161,9 @@ bool cmMacroFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
 {
   // record commands until we hit the ENDMACRO
   // at the ENDMACRO call we shift gears and start looking for invocations
-  if (!cmSystemTools::Strucmp(lff.Name.c_str(), "macro")) {
+  if (lff.Name.Lower == "macro") {
     this->Depth++;
-  } else if (!cmSystemTools::Strucmp(lff.Name.c_str(), "endmacro")) {
+  } else if (lff.Name.Lower == "endmacro") {
     // if this is the endmacro for this macro then execute
     if (!this->Depth) {
       mf.AppendProperty("MACROS", this->Args[0].c_str());
@@ -190,7 +191,7 @@ bool cmMacroFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
 bool cmMacroFunctionBlocker::ShouldRemove(const cmListFileFunction& lff,
                                           cmMakefile& mf)
 {
-  if (!cmSystemTools::Strucmp(lff.Name.c_str(), "endmacro")) {
+  if (lff.Name.Lower == "endmacro") {
     std::vector<std::string> expandedArguments;
     mf.ExpandArguments(lff.Arguments, expandedArguments,
                        this->GetStartingContext().FilePath.c_str());

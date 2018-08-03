@@ -20,6 +20,8 @@ macro(__compiler_xl lang)
   # Feature flags.
   set(CMAKE_${lang}_VERBOSE_FLAG "-V")
   set(CMAKE_${lang}_COMPILE_OPTIONS_PIC "-qpic")
+  set(CMAKE_${lang}_RESPONSE_FILE_FLAG "-qoptfile=")
+  set(CMAKE_${lang}_RESPONSE_FILE_LINK_FLAG "-qoptfile=")
 
   string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -g")
   string(APPEND CMAKE_${lang}_FLAGS_RELEASE_INIT " -O")
@@ -27,6 +29,8 @@ macro(__compiler_xl lang)
   string(APPEND CMAKE_${lang}_FLAGS_RELWITHDEBINFO_INIT " -g")
   set(CMAKE_${lang}_CREATE_PREPROCESSED_SOURCE "<CMAKE_${lang}_COMPILER> <DEFINES> <INCLUDES> <FLAGS> -E <SOURCE> > <PREPROCESSED_SOURCE>")
   set(CMAKE_${lang}_CREATE_ASSEMBLY_SOURCE     "<CMAKE_${lang}_COMPILER> <DEFINES> <INCLUDES> <FLAGS> -S <SOURCE> -o <ASSEMBLY_SOURCE>")
+
+  set(CMAKE_DEPFILE_FLAGS_${lang} "-MF <DEPFILE> -qmakedep=gcc")
 
   # CMAKE_XL_CreateExportList is part of the AIX XL compilers but not the linux ones.
   # If we found the tool, we'll use it to create exports, otherwise stick with the regular

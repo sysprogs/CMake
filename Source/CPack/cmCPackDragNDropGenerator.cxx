@@ -4,6 +4,7 @@
 
 #include "cmCPackGenerator.h"
 #include "cmCPackLog.h"
+#include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
 #include "cmSystemTools.h"
 
@@ -20,7 +21,7 @@
 // For the old LocaleStringToLangAndRegionCodes() function, to convert
 // to the old Script Manager RegionCode values needed for the 'LPic' data
 // structure used for generating multi-lingual SLAs.
-#include <CoreServices/CoreServices.h>
+#  include <CoreServices/CoreServices.h>
 #endif
 
 static const char* SLAHeader =
@@ -76,8 +77,8 @@ int cmCPackDragNDropGenerator::InitializeInternal()
   const std::string hdiutil_path =
     cmSystemTools::FindProgram("hdiutil", std::vector<std::string>(), false);
   if (hdiutil_path.empty()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Cannot locate hdiutil command"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Cannot locate hdiutil command" << std::endl);
     return 0;
   }
   this->SetOptionIfNotSet("CPACK_COMMAND_HDIUTIL", hdiutil_path.c_str());
@@ -85,16 +86,16 @@ int cmCPackDragNDropGenerator::InitializeInternal()
   const std::string setfile_path =
     cmSystemTools::FindProgram("SetFile", paths, false);
   if (setfile_path.empty()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Cannot locate SetFile command"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Cannot locate SetFile command" << std::endl);
     return 0;
   }
   this->SetOptionIfNotSet("CPACK_COMMAND_SETFILE", setfile_path.c_str());
 
   const std::string rez_path = cmSystemTools::FindProgram("Rez", paths, false);
   if (rez_path.empty()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Cannot locate Rez command"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Cannot locate Rez command" << std::endl);
     return 0;
   }
   this->SetOptionIfNotSet("CPACK_COMMAND_REZ", rez_path.c_str());
@@ -123,8 +124,8 @@ int cmCPackDragNDropGenerator::InitializeInternal()
       return 0;
     }
     if (!cmSystemTools::FileExists(slaDirectory, false)) {
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "CPACK_DMG_SLA_DIR does not exist"
-                      << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "CPACK_DMG_SLA_DIR does not exist" << std::endl);
       return 0;
     }
 
@@ -139,14 +140,16 @@ int cmCPackDragNDropGenerator::InitializeInternal()
     for (auto const& language : languages) {
       std::string license = slaDirectory + "/" + language + ".license.txt";
       if (!singleLicense && !cmSystemTools::FileExists(license)) {
-        cmCPackLogger(cmCPackLog::LOG_ERROR, "Missing license file "
-                        << language << ".license.txt" << std::endl);
+        cmCPackLogger(cmCPackLog::LOG_ERROR,
+                      "Missing license file " << language << ".license.txt"
+                                              << std::endl);
         return 0;
       }
       std::string menu = slaDirectory + "/" + language + ".menu.txt";
       if (!cmSystemTools::FileExists(menu)) {
-        cmCPackLogger(cmCPackLog::LOG_ERROR, "Missing menu file "
-                        << language << ".menu.txt" << std::endl);
+        cmCPackLogger(cmCPackLog::LOG_ERROR,
+                      "Missing menu file " << language << ".menu.txt"
+                                           << std::endl);
         return 0;
       }
     }
@@ -211,8 +214,9 @@ bool cmCPackDragNDropGenerator::CopyFile(std::ostringstream& source,
 {
   if (!cmSystemTools::CopyFileIfDifferent(source.str().c_str(),
                                           target.str().c_str())) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Error copying "
-                    << source.str() << " to " << target.str() << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Error copying " << source.str() << " to " << target.str()
+                                   << std::endl);
 
     return false;
   }
@@ -242,13 +246,13 @@ bool cmCPackDragNDropGenerator::RunCommand(std::ostringstream& command,
 {
   int exit_code = 1;
 
-  bool result = cmSystemTools::RunSingleCommand(command.str().c_str(), output,
-                                                output, &exit_code, nullptr,
-                                                this->GeneratorVerbose, 0);
+  bool result = cmSystemTools::RunSingleCommand(
+    command.str().c_str(), output, output, &exit_code, nullptr,
+    this->GeneratorVerbose, cmDuration::zero());
 
   if (!result || exit_code) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Error executing: " << command.str()
-                                                             << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Error executing: " << command.str() << std::endl);
 
     return false;
   }
@@ -399,8 +403,8 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
     std::ostringstream dummy_padding;
     dummy_padding << staging.str() << "/.dummy-padding-file";
     if (!this->CreateEmptyFile(dummy_padding, 1048576)) {
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "Error creating dummy padding file."
-                      << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Error creating dummy padding file." << std::endl);
 
       return 0;
     }
@@ -411,6 +415,7 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
   std::string temp_image = this->GetOption("CPACK_TOPLEVEL_DIRECTORY");
   temp_image += "/temp.dmg";
 
+  std::string create_error;
   std::ostringstream temp_image_command;
   temp_image_command << this->GetOption("CPACK_COMMAND_HDIUTIL");
   temp_image_command << " create";
@@ -421,9 +426,11 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
   temp_image_command << " -format " << temp_image_format;
   temp_image_command << " \"" << temp_image << "\"";
 
-  if (!this->RunCommand(temp_image_command)) {
+  if (!this->RunCommand(temp_image_command, &create_error)) {
     cmCPackLogger(cmCPackLog::LOG_ERROR,
-                  "Error generating temporary disk image." << std::endl);
+                  "Error generating temporary disk image." << std::endl
+                                                           << create_error
+                                                           << std::endl);
 
     return 0;
   }
@@ -456,23 +463,25 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
     std::ostringstream dummy_padding;
     dummy_padding << temp_mount << "/.dummy-padding-file";
     if (!cmSystemTools::RemoveFile(dummy_padding.str())) {
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "Error removing dummy padding file."
-                      << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Error removing dummy padding file." << std::endl);
 
       had_error = true;
     }
 
     // Optionally set the custom icon flag for the image ...
     if (!had_error && !cpack_package_icon.empty()) {
+      std::string error;
       std::ostringstream setfile_command;
       setfile_command << this->GetOption("CPACK_COMMAND_SETFILE");
       setfile_command << " -a C";
       setfile_command << " \"" << temp_mount << "\"";
 
-      if (!this->RunCommand(setfile_command)) {
+      if (!this->RunCommand(setfile_command, &error)) {
         cmCPackLogger(cmCPackLog::LOG_ERROR,
                       "Error assigning custom icon to temporary disk image."
-                        << std::endl);
+                        << std::endl
+                        << error << std::endl);
 
         had_error = true;
       }
@@ -559,8 +568,9 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
           CFLocaleCreateCanonicalLanguageIdentifierFromString(
             nullptr, language_cfstring);
         if (!iso_language) {
-          cmCPackLogger(cmCPackLog::LOG_ERROR, languages[i]
-                          << " is not a recognized language" << std::endl);
+          cmCPackLogger(cmCPackLog::LOG_ERROR,
+                        languages[i] << " is not a recognized language"
+                                     << std::endl);
         }
         char iso_language_cstr[65];
         CFStringGetCString(iso_language, iso_language_cstr,
@@ -632,9 +642,10 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
     ofs.Close();
 
     if (have_write_license_error) {
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "Error writing license file to SLA."
-                      << std::endl
-                      << error << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Error writing license file to SLA." << std::endl
+                                                         << error
+                                                         << std::endl);
       return 0;
     }
 
@@ -686,9 +697,9 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
     embed_sla_command << "\"" << temp_image << "\"";
 
     if (!this->RunCommand(embed_sla_command, &error)) {
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "Error adding SLA." << std::endl
-                                                               << error
-                                                               << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Error adding SLA." << std::endl
+                                        << error << std::endl);
       return 0;
     }
 
@@ -717,9 +728,13 @@ int cmCPackDragNDropGenerator::CreateDMG(const std::string& src_dir,
   final_image_command << " zlib-level=9";
   final_image_command << " -o \"" << output_file << "\"";
 
-  if (!this->RunCommand(final_image_command)) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Error compressing disk image."
-                    << std::endl);
+  std::string convert_error;
+
+  if (!this->RunCommand(final_image_command, &convert_error)) {
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Error compressing disk image." << std::endl
+                                                  << convert_error
+                                                  << std::endl);
 
     return 0;
   }

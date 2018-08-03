@@ -41,8 +41,9 @@ std::string GeneratorExpressionContent::ProcessArbitraryContent(
     for (; it != end; ++it) {
       if (node->RequiresLiteralInput()) {
         if ((*it)->GetType() != cmGeneratorExpressionEvaluator::Text) {
-          reportError(context, this->GetOriginalExpression(), "$<" +
-                        identifier + "> expression requires literal input.");
+          reportError(context, this->GetOriginalExpression(),
+                      "$<" + identifier +
+                        "> expression requires literal input.");
           return std::string();
         }
       }
@@ -132,9 +133,8 @@ std::string GeneratorExpressionContent::EvaluateParameters(
     int counter = 1;
     for (; pit != pend; ++pit, ++counter) {
       if (acceptsArbitraryContent && counter == numExpected) {
-        std::string lastParam = this->ProcessArbitraryContent(
-          node, identifier, context, dagChecker, pit);
-        parameters.push_back(lastParam);
+        parameters.push_back(this->ProcessArbitraryContent(
+          node, identifier, context, dagChecker, pit));
         return std::string();
       }
       std::string parameter;
@@ -148,7 +148,7 @@ std::string GeneratorExpressionContent::EvaluateParameters(
           return std::string();
         }
       }
-      parameters.push_back(parameter);
+      parameters.push_back(std::move(parameter));
     }
   }
 
@@ -158,7 +158,8 @@ std::string GeneratorExpressionContent::EvaluateParameters(
       reportError(context, this->GetOriginalExpression(),
                   "$<" + identifier + "> expression requires no parameters.");
     } else if (numExpected == 1) {
-      reportError(context, this->GetOriginalExpression(), "$<" + identifier +
+      reportError(context, this->GetOriginalExpression(),
+                  "$<" + identifier +
                     "> expression requires "
                     "exactly one parameter.");
     } else {
@@ -173,12 +174,14 @@ std::string GeneratorExpressionContent::EvaluateParameters(
 
   if (numExpected == cmGeneratorExpressionNode::OneOrMoreParameters &&
       parameters.empty()) {
-    reportError(context, this->GetOriginalExpression(), "$<" + identifier +
+    reportError(context, this->GetOriginalExpression(),
+                "$<" + identifier +
                   "> expression requires at least one parameter.");
   }
   if (numExpected == cmGeneratorExpressionNode::OneOrZeroParameters &&
       parameters.size() > 1) {
-    reportError(context, this->GetOriginalExpression(), "$<" + identifier +
+    reportError(context, this->GetOriginalExpression(),
+                "$<" + identifier +
                   "> expression requires one or zero parameters.");
   }
   return std::string();

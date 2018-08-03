@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2018, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -211,7 +211,7 @@ ssl_connect_init_proxy(struct connectdata *conn, int sockindex)
      !conn->proxy_ssl[sockindex].use) {
     struct ssl_backend_data *pbdata;
 
-    if(!Curl_ssl->support_https_proxy)
+    if(!(Curl_ssl->supports & SSLSUPP_HTTPS_PROXY))
       return CURLE_NOT_BUILT_IN;
 
     /* The pointers to the ssl backend data, which is opaque here, are swapped
@@ -511,7 +511,7 @@ void Curl_ssl_close_all(struct Curl_easy *data)
 
 #if defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_SCHANNEL) || \
   defined(USE_DARWINSSL) || defined(USE_POLARSSL) || defined(USE_NSS) || \
-  defined(USE_MBEDTLS)
+  defined(USE_MBEDTLS) || defined(USE_CYASSL)
 int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks,
                      int numsocks)
 {
@@ -549,7 +549,7 @@ int Curl_ssl_getsock(struct connectdata *conn,
 void Curl_ssl_close(struct connectdata *conn, int sockindex)
 {
   DEBUGASSERT((sockindex <= 1) && (sockindex >= -1));
-  Curl_ssl->close(conn, sockindex);
+  Curl_ssl->close_one(conn, sockindex);
 }
 
 CURLcode Curl_ssl_shutdown(struct connectdata *conn, int sockindex)
@@ -831,8 +831,12 @@ CURLcode Curl_pin_peer_pubkey(struct Curl_easy *data,
     sha256sumdigest = malloc(CURL_SHA256_DIGEST_LENGTH);
     if(!sha256sumdigest)
       return CURLE_OUT_OF_MEMORY;
-    Curl_ssl->sha256sum(pubkey, pubkeylen,
+    encode = Curl_ssl->sha256sum(pubkey, pubkeylen,
                         sha256sumdigest, CURL_SHA256_DIGEST_LENGTH);
+
+    if(encode != CURLE_OK)
+      return encode;
+
     encode = Curl_base64_encode(data, (char *)sha256sumdigest,
                                 CURL_SHA256_DIGEST_LENGTH, &encoded,
                                 &encodedlen);
@@ -1059,6 +1063,7 @@ bool Curl_none_false_start(void)
   return FALSE;
 }
 
+#ifndef CURL_DISABLE_CRYPTO_AUTH
 CURLcode Curl_none_md5sum(unsigned char *input, size_t inputlen,
                           unsigned char *md5sum, size_t md5len UNUSED_PARAM)
 {
@@ -1073,6 +1078,19 @@ CURLcode Curl_none_md5sum(unsigned char *input, size_t inputlen,
   Curl_MD5_final(MD5pw, md5sum);
   return CURLE_OK;
 }
+#else
+CURLcode Curl_none_md5sum(unsigned char *input UNUSED_PARAM,
+                          size_t inputlen UNUSED_PARAM,
+                          unsigned char *md5sum UNUSED_PARAM,
+                          size_t md5len UNUSED_PARAM)
+{
+  (void)input;
+  (void)inputlen;
+  (void)md5sum;
+  (void)md5len;
+  return CURLE_NOT_BUILT_IN;
+}
+#endif
 
 static int Curl_multissl_init(void)
 {
@@ -1108,18 +1126,12 @@ static void Curl_multissl_close(struct connectdata *conn, int sockindex)
 {
   if(multissl_init(NULL))
     return;
-  Curl_ssl->close(conn, sockindex);
+  Curl_ssl->close_one(conn, sockindex);
 }
 
 static const struct Curl_ssl Curl_ssl_multi = {
   { CURLSSLBACKEND_NONE, "multi" },  /* info */
-
-  0, /* have_ca_path */
-  0, /* have_certinfo */
-  0, /* have_pinnedpubkey */
-  0, /* have_ssl_ctx */
-  0, /* support_https_proxy */
-
+  0, /* supports nothing */
   (size_t)-1, /* something insanely large to be on the safe side */
 
   Curl_multissl_init,                /* init */
@@ -1133,7 +1145,7 @@ static const struct Curl_ssl Curl_ssl_multi = {
   Curl_multissl_connect,             /* connect */
   Curl_multissl_connect_nonblocking, /* connect_nonblocking */
   Curl_multissl_get_internals,       /* get_internals */
-  Curl_multissl_close,               /* close */
+  Curl_multissl_close,               /* close_one */
   Curl_none_close_all,               /* close_all */
   Curl_none_session_free,            /* session_free */
   Curl_none_set_engine,              /* set_engine */
@@ -1246,6 +1258,7 @@ static size_t Curl_multissl_version(char *buffer, size_t size)
 static int multissl_init(const struct Curl_ssl *backend)
 {
   const char *env;
+  char *env_tmp;
   int i;
 
   if(Curl_ssl != &Curl_ssl_multi)
@@ -1259,7 +1272,7 @@ static int multissl_init(const struct Curl_ssl *backend)
   if(!available_backends[0])
     return 1;
 
-  env = getenv("CURL_SSL_BACKEND");
+  env = env_tmp = curl_getenv("CURL_SSL_BACKEND");
 #ifdef CURL_DEFAULT_SSL_BACKEND
   if(!env)
     env = CURL_DEFAULT_SSL_BACKEND;
@@ -1268,6 +1281,7 @@ static int multissl_init(const struct Curl_ssl *backend)
     for(i = 0; available_backends[i]; i++) {
       if(strcasecompare(env, available_backends[i]->info.name)) {
         Curl_ssl = available_backends[i];
+        curl_free(env_tmp);
         return 0;
       }
     }
@@ -1275,6 +1289,7 @@ static int multissl_init(const struct Curl_ssl *backend)
 
   /* Fall back to first available backend */
   Curl_ssl = available_backends[0];
+  curl_free(env_tmp);
   return 0;
 }
 
@@ -1282,6 +1297,9 @@ CURLsslset curl_global_sslset(curl_sslbackend id, const char *name,
                               const curl_ssl_backend ***avail)
 {
   int i;
+
+  if(avail)
+    *avail = (const curl_ssl_backend **)&available_backends;
 
   if(Curl_ssl != &Curl_ssl_multi)
     return id == Curl_ssl->info.id ? CURLSSLSET_OK : CURLSSLSET_TOO_LATE;
@@ -1294,8 +1312,6 @@ CURLsslset curl_global_sslset(curl_sslbackend id, const char *name,
     }
   }
 
-  if(avail)
-    *avail = (const curl_ssl_backend **)&available_backends;
   return CURLSSLSET_UNKNOWN_BACKEND;
 }
 

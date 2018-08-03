@@ -6,6 +6,7 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCryptoHash.h"
+#include "cmDuration.h"
 #include "cmProcessOutput.h"
 #include "cmsys/Process.h"
 #include "cmsys/SystemTools.hxx" // IWYU pragma: export
@@ -59,7 +60,7 @@ public:
    *  Set the function used by GUIs to display error messages
    *  Function gets passed: message as a const char*,
    *  title as a const char*, and a reference to bool that when
-   *  set to false, will disable furthur messages (cancel).
+   *  set to false, will disable further messages (cancel).
    */
   static void SetMessageCallback(MessageCallback f,
                                  void* clientData = nullptr);
@@ -167,7 +168,7 @@ public:
    * to be at the end of the string and it does not support ?
    * []... The optional argument type specifies what kind of files you
    * want to find. 0 means all files, -1 means directories, 1 means
-   * files only. This method returns true if search was succesfull.
+   * files only. This method returns true if search was successful.
    */
   static bool SimpleGlob(const std::string& glob,
                          std::vector<std::string>& files, int type = 0);
@@ -225,11 +226,11 @@ public:
                                int* retVal = nullptr,
                                const char* dir = nullptr,
                                OutputOption outputflag = OUTPUT_MERGE,
-                               double timeout = 0.0);
+                               cmDuration timeout = cmDuration::zero());
   /**
    * In this version of RunSingleCommand, command[0] should be
    * the command to run, and each argument to the command should
-   * be in comand[1]...command[command.size()]
+   * be in command[1]...command[command.size()]
    */
   static bool RunSingleCommand(std::vector<std::string> const& command,
                                std::string* captureStdOut = nullptr,
@@ -237,7 +238,7 @@ public:
                                int* retVal = nullptr,
                                const char* dir = nullptr,
                                OutputOption outputflag = OUTPUT_MERGE,
-                               double timeout = 0.0,
+                               cmDuration timeout = cmDuration::zero(),
                                Encoding encoding = cmProcessOutput::Auto);
 
   static std::string PrintSingleCommand(std::vector<std::string> const&);
@@ -285,6 +286,7 @@ public:
     CXX_FILE_FORMAT,
     FORTRAN_FILE_FORMAT,
     JAVA_FILE_FORMAT,
+    CUDA_FILE_FORMAT,
     HEADER_FILE_FORMAT,
     RESOURCE_FILE_FORMAT,
     DEFINITION_FILE_FORMAT,
@@ -331,7 +333,7 @@ public:
   static FileFormat GetFileFormat(const char* ext);
 
   /** Windows if this is true, the CreateProcess in RunCommand will
-   *  not show new consol windows when running programs.
+   *  not show new console windows when running programs.
    */
   static void SetRunCommandHideConsole(bool v) { s_RunCommandHideConsole = v; }
   static bool GetRunCommandHideConsole() { return s_RunCommandHideConsole; }
@@ -342,7 +344,7 @@ public:
 
   /** a general output handler for cmsysProcess  */
   static int WaitForLine(cmsysProcess* process, std::string& line,
-                         double timeout, std::vector<char>& out,
+                         cmDuration timeout, std::vector<char>& out,
                          std::vector<char>& err);
 
   /** Split a string on its newlines into multiple lines.  Returns
@@ -352,7 +354,7 @@ public:
   static bool GetForceUnixPaths() { return s_ForceUnixPaths; }
 
   // ConvertToOutputPath use s_ForceUnixPaths
-  static std::string ConvertToOutputPath(const char* path);
+  static std::string ConvertToOutputPath(std::string const& path);
   static void ConvertToOutputSlashes(std::string& path);
 
   // ConvertToRunCommandPath does not use s_ForceUnixPaths and should
@@ -368,7 +370,8 @@ public:
       /a/b/c/d to /a/b/c1/d1 -> ../../c1/d1
       from /usr/src to /usr/src/test/blah/foo.cpp -> test/blah/foo.cpp
   */
-  static std::string RelativePath(const char* local, const char* remote);
+  static std::string RelativePath(std::string const& local,
+                                  std::string const& remote);
 
   /** Joins two paths while collapsing x/../ parts
    * For example CollapseCombinedPath("a/b/c", "../../d") results in "a/d"
@@ -498,6 +501,16 @@ public:
   };
   static WindowsFileRetry GetWindowsFileRetry();
 #endif
+
+  /** Get the real path for a given path, removing all symlinks.
+      This variant of GetRealPath also works on Windows but will
+      resolve subst drives too.  */
+  static std::string GetRealPathResolvingWindowsSubst(
+    const std::string& path, std::string* errorMessage = nullptr);
+
+  /** Perform one-time initialization of libuv.  */
+  static void InitializeLibUV();
+
 private:
   static bool s_ForceUnixPaths;
   static bool s_RunCommandHideConsole;

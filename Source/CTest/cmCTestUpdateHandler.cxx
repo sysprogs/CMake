@@ -17,6 +17,7 @@
 #include "cmVersion.h"
 #include "cmXMLWriter.h"
 
+#include <chrono>
 #include <memory> // IWYU pragma: keep
 #include <sstream>
 
@@ -46,7 +47,8 @@ void cmCTestUpdateHandler::Initialize()
 
 int cmCTestUpdateHandler::DetermineType(const char* cmd, const char* type)
 {
-  cmCTestOptionalLog(this->CTest, DEBUG, "Determine update type from command: "
+  cmCTestOptionalLog(this->CTest, DEBUG,
+                     "Determine update type from command: "
                        << cmd << " and type: " << type << std::endl,
                      this->Quiet);
   if (type && *type) {
@@ -129,7 +131,8 @@ int cmCTestUpdateHandler::ProcessHandler()
     return -1;
   }
 
-  cmCTestOptionalLog(this->CTest, HANDLER_OUTPUT, "   Use "
+  cmCTestOptionalLog(this->CTest, HANDLER_OUTPUT,
+                     "   Use "
                        << cmCTestUpdateHandlerUpdateToString(this->UpdateType)
                        << " repository type" << std::endl;
                      , this->Quiet);
@@ -170,14 +173,13 @@ int cmCTestUpdateHandler::ProcessHandler()
   //
   cmGeneratedFileStream os;
   if (!this->StartResultingXML(cmCTest::PartUpdate, "Update", os)) {
-    cmCTestLog(this->CTest, ERROR_MESSAGE, "Cannot open log file"
-                 << std::endl);
+    cmCTestLog(this->CTest, ERROR_MESSAGE,
+               "Cannot open log file" << std::endl);
     return -1;
   }
   std::string start_time = this->CTest->CurrentTime();
-  unsigned int start_time_time =
-    static_cast<unsigned int>(cmSystemTools::GetTime());
-  double elapsed_time_start = cmSystemTools::GetTime();
+  auto start_time_time = std::chrono::system_clock::now();
+  auto elapsed_time_start = std::chrono::steady_clock::now();
 
   bool updated = vc->Update();
   std::string buildname =
@@ -191,7 +193,8 @@ int cmCTestUpdateHandler::ProcessHandler()
                 std::string("ctest-") + cmVersion::GetCMakeVersion());
   xml.Element("Site", this->CTest->GetCTestConfiguration("Site"));
   xml.Element("BuildName", buildname);
-  xml.Element("BuildStamp", this->CTest->GetCurrentTag() + "-" +
+  xml.Element("BuildStamp",
+              this->CTest->GetCurrentTag() + "-" +
                 this->CTest->GetTestModelString());
   xml.Element("StartDateTime", start_time);
   xml.Element("StartTime", start_time_time);
@@ -209,9 +212,9 @@ int cmCTestUpdateHandler::ProcessHandler()
                        this->Quiet);
   }
   if (int numModified = vc->GetPathCount(cmCTestVC::PathModified)) {
-    cmCTestOptionalLog(this->CTest, HANDLER_OUTPUT, "   Found "
-                         << numModified << " locally modified files\n",
-                       this->Quiet);
+    cmCTestOptionalLog(
+      this->CTest, HANDLER_OUTPUT,
+      "   Found " << numModified << " locally modified files\n", this->Quiet);
     localModifications += numModified;
   }
   if (int numConflicting = vc->GetPathCount(cmCTestVC::PathConflicting)) {
@@ -224,11 +227,11 @@ int cmCTestUpdateHandler::ProcessHandler()
   cmCTestOptionalLog(this->CTest, DEBUG, "End" << std::endl, this->Quiet);
   std::string end_time = this->CTest->CurrentTime();
   xml.Element("EndDateTime", end_time);
-  xml.Element("EndTime", static_cast<unsigned int>(cmSystemTools::GetTime()));
-  xml.Element(
-    "ElapsedMinutes",
-    static_cast<int>((cmSystemTools::GetTime() - elapsed_time_start) / 6) /
-      10.0);
+  xml.Element("EndTime", std::chrono::system_clock::now());
+  xml.Element("ElapsedMinutes",
+              std::chrono::duration_cast<std::chrono::minutes>(
+                std::chrono::steady_clock::now() - elapsed_time_start)
+                .count());
 
   xml.StartElement("UpdateReturnStatus");
   if (localModifications) {
@@ -241,8 +244,9 @@ int cmCTestUpdateHandler::ProcessHandler()
   if (!updated) {
     xml.Content("Update command failed:\n");
     xml.Content(vc->GetUpdateCommandLine());
-    cmCTestLog(this->CTest, HANDLER_OUTPUT, "   Update command failed: "
-                 << vc->GetUpdateCommandLine() << "\n");
+    cmCTestLog(this->CTest, HANDLER_OUTPUT,
+               "   Update command failed: " << vc->GetUpdateCommandLine()
+                                            << "\n");
   }
   xml.EndElement(); // UpdateReturnStatus
   xml.EndElement(); // Update
@@ -257,37 +261,37 @@ int cmCTestUpdateHandler::DetectVCS(const char* dir)
                      "Check directory: " << sourceDirectory << std::endl,
                      this->Quiet);
   sourceDirectory += "/.svn";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_SVN;
   }
   sourceDirectory = dir;
   sourceDirectory += "/CVS";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_CVS;
   }
   sourceDirectory = dir;
   sourceDirectory += "/.bzr";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_BZR;
   }
   sourceDirectory = dir;
   sourceDirectory += "/.git";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_GIT;
   }
   sourceDirectory = dir;
   sourceDirectory += "/.hg";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_HG;
   }
   sourceDirectory = dir;
   sourceDirectory += "/.p4";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_P4;
   }
   sourceDirectory = dir;
   sourceDirectory += "/.p4config";
-  if (cmSystemTools::FileExists(sourceDirectory.c_str())) {
+  if (cmSystemTools::FileExists(sourceDirectory)) {
     return cmCTestUpdateHandler::e_P4;
   }
   return cmCTestUpdateHandler::e_UNKNOWN;

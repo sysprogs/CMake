@@ -145,7 +145,7 @@
 #
 # Version 1.3 (8/19/10) (CMake 2.8.3)
 #     Included patch by Simone Rossetto to check if either Python or Perl
-#     are present in the system.  Whichever intepreter that is detected
+#     are present in the system.  Whichever interpreter that is detected
 #     is now used to run the test generator program.  If both interpreters
 #     are detected, the CXXTEST_USE_PYTHON variable is obeyed.
 #
@@ -196,7 +196,7 @@ if(NOT DEFINED CXXTEST_TESTGEN_ARGS)
    set(CXXTEST_TESTGEN_ARGS --error-printer)
 endif()
 
-find_package(PythonInterp QUIET)
+find_package(Python QUIET)
 find_package(Perl QUIET)
 
 find_path(CXXTEST_INCLUDE_DIR cxxtest/TestSuite.h)
@@ -206,17 +206,17 @@ find_program(CXXTEST_PYTHON_TESTGEN_EXECUTABLE
 find_program(CXXTEST_PERL_TESTGEN_EXECUTABLE cxxtestgen.pl
          PATHS ${CXXTEST_INCLUDE_DIR})
 
-if(PYTHONINTERP_FOUND OR PERL_FOUND)
+if(PYTHON_FOUND OR PERL_FOUND)
    include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
-   if(PYTHONINTERP_FOUND AND (CXXTEST_USE_PYTHON OR NOT PERL_FOUND OR NOT DEFINED CXXTEST_USE_PYTHON))
+   if(PYTHON_FOUND AND (CXXTEST_USE_PYTHON OR NOT PERL_FOUND OR NOT DEFINED CXXTEST_USE_PYTHON))
       set(CXXTEST_TESTGEN_EXECUTABLE ${CXXTEST_PYTHON_TESTGEN_EXECUTABLE})
       execute_process(COMMAND ${CXXTEST_PYTHON_TESTGEN_EXECUTABLE} --version
         OUTPUT_VARIABLE _CXXTEST_OUT ERROR_VARIABLE _CXXTEST_OUT RESULT_VARIABLE _CXXTEST_RESULT)
       if(_CXXTEST_RESULT EQUAL 0)
         set(CXXTEST_TESTGEN_INTERPRETER "")
       else()
-        set(CXXTEST_TESTGEN_INTERPRETER ${PYTHON_EXECUTABLE})
+        set(CXXTEST_TESTGEN_INTERPRETER ${Python_EXECUTABLE})
       endif()
       FIND_PACKAGE_HANDLE_STANDARD_ARGS(CxxTest DEFAULT_MSG
           CXXTEST_INCLUDE_DIR CXXTEST_PYTHON_TESTGEN_EXECUTABLE)

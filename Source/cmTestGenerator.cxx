@@ -34,6 +34,16 @@ void cmTestGenerator::Compute(cmLocalGenerator* lg)
   this->LG = lg;
 }
 
+bool cmTestGenerator::TestsForConfig(const std::string& config)
+{
+  return this->GeneratesForConfig(config);
+}
+
+cmTest* cmTestGenerator::GetTest() const
+{
+  return this->Test;
+}
+
 void cmTestGenerator::GenerateScriptConfigs(std::ostream& os, Indent indent)
 {
   // Create the tests.
@@ -101,8 +111,9 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
   os << cmOutputConverter::EscapeForCMake(exe);
   for (std::vector<std::string>::const_iterator ci = command.begin() + 1;
        ci != command.end(); ++ci) {
-    os << " " << cmOutputConverter::EscapeForCMake(
-                   ge.Parse(*ci)->Evaluate(this->LG, config));
+    os << " "
+       << cmOutputConverter::EscapeForCMake(
+            ge.Parse(*ci)->Evaluate(this->LG, config));
   }
 
   // Finish the test command.

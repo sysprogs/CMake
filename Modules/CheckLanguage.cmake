@@ -31,6 +31,8 @@
 #     message(STATUS "No Fortran support")
 #   endif()
 
+include_guard(GLOBAL)
+
 macro(check_language lang)
   if(NOT DEFINED CMAKE_${lang}_COMPILER)
     set(_desc "Looking for a ${lang} compiler")
@@ -43,11 +45,17 @@ file(WRITE \"\${CMAKE_CURRENT_BINARY_DIR}/result.cmake\"
   \"set(CMAKE_${lang}_COMPILER \\\"\${CMAKE_${lang}_COMPILER}\\\")\\n\"
   )
 ")
+    if(CMAKE_GENERATOR_INSTANCE)
+      set(_D_CMAKE_GENERATOR_INSTANCE "-DCMAKE_GENERATOR_INSTANCE:INTERNAL=${CMAKE_GENERATOR_INSTANCE}")
+    else()
+      set(_D_CMAKE_GENERATOR_INSTANCE "")
+    endif()
     execute_process(
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/Check${lang}
       COMMAND ${CMAKE_COMMAND} . -G ${CMAKE_GENERATOR}
                                  -A "${CMAKE_GENERATOR_PLATFORM}"
                                  -T "${CMAKE_GENERATOR_TOOLSET}"
+                                 ${_D_CMAKE_GENERATOR_INSTANCE}
       OUTPUT_VARIABLE output
       ERROR_VARIABLE output
       RESULT_VARIABLE result

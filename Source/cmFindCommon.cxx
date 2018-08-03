@@ -56,7 +56,7 @@ void cmFindCommon::InitializeSearchPathGroups()
 {
   std::vector<PathLabel>* labels;
 
-  // Define the varoius different groups of path types
+  // Define the various different groups of path types
 
   // All search paths
   labels = &this->PathGroupLabelMap[PathGroup::All];
@@ -71,7 +71,7 @@ void cmFindCommon::InitializeSearchPathGroups()
   // Define the search group order
   this->PathGroupOrder.push_back(PathGroup::All);
 
-  // Create the idividual labeld search paths
+  // Create the individual labeled search paths
   this->LabeledPaths.insert(
     std::make_pair(PathLabel::PackageRoot, cmSearchPath(this)));
   this->LabeledPaths.insert(
@@ -86,13 +86,6 @@ void cmFindCommon::InitializeSearchPathGroups()
     std::make_pair(PathLabel::CMakeSystem, cmSearchPath(this)));
   this->LabeledPaths.insert(
     std::make_pair(PathLabel::Guess, cmSearchPath(this)));
-}
-
-void cmFindCommon::SelectDefaultNoPackageRootPath()
-{
-  if (!this->Makefile->IsOn("__UNDOCUMENTED_CMAKE_FIND_PACKAGE_ROOT")) {
-    this->NoPackageRootPath = true;
-  }
 }
 
 void cmFindCommon::SelectDefaultRootPathMode()
@@ -314,7 +307,7 @@ void cmFindCommon::AddPathSuffix(std::string const& arg)
   }
 
   // Store the suffix.
-  this->SearchPathSuffixes.push_back(suffix);
+  this->SearchPathSuffixes.push_back(std::move(suffix));
 }
 
 void AddTrailingSlash(std::string& s)
@@ -329,7 +322,7 @@ void cmFindCommon::ComputeFinalPaths()
   std::set<std::string> ignored;
   this->GetIgnoredPaths(ignored);
 
-  // Combine the seperate path types, filtering out ignores
+  // Combine the separate path types, filtering out ignores
   this->SearchPaths.clear();
   std::vector<PathLabel>& allLabels = this->PathGroupLabelMap[PathGroup::All];
   for (PathLabel const& l : allLabels) {

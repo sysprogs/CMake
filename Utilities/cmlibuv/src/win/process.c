@@ -405,8 +405,15 @@ static WCHAR* search_path(const WCHAR *file,
       /* Next slice starts just after where the previous one ended */
       dir_start = dir_end;
 
+      /* If path is quoted, find quote end */
+      if (*dir_start == L'"' || *dir_start == L'\'') {
+        dir_end = wcschr(dir_start + 1, *dir_start);
+        if (dir_end == NULL) {
+          dir_end = wcschr(dir_start, L'\0');
+        }
+      }
       /* Slice until the next ; or \0 is found */
-      dir_end = wcschr(dir_start, L';');
+      dir_end = wcschr(dir_end, L';');
       if (dir_end == NULL) {
         dir_end = wcschr(dir_start, L'\0');
       }
@@ -947,6 +954,12 @@ int uv_spawn(uv_loop_t* loop,
     return UV_EINVAL;
   }
 
+  if (options->cpumask != NULL) {
+    if (options->cpumask_size < (size_t)uv_cpumask_size()) {
+      return UV_EINVAL;
+    }
+  }
+
   assert(options->file != NULL);
   assert(!(options->flags & ~(UV_PROCESS_DETACHED |
                               UV_PROCESS_SETGID |
@@ -1051,14 +1064,22 @@ int uv_spawn(uv_loop_t* loop,
   startup.hStdOutput = uv__stdio_handle(process->child_stdio_buffer, 1);
   startup.hStdError = uv__stdio_handle(process->child_stdio_buffer, 2);
 
+  process_flags = CREATE_UNICODE_ENVIRONMENT;
+
   if (options->flags & UV_PROCESS_WINDOWS_HIDE) {
+    /* Avoid creating console window if stdio is not inherited. */
+    for (i = 0; i < options->stdio_count; i++) {
+      if (options->stdio[i].flags & UV_INHERIT_FD)
+        break;
+      if (i == options->stdio_count - 1)
+        process_flags |= CREATE_NO_WINDOW;
+    }
+
     /* Use SW_HIDE to avoid any potential process window. */
     startup.wShowWindow = SW_HIDE;
   } else {
     startup.wShowWindow = SW_SHOWDEFAULT;
   }
-
-  process_flags = CREATE_UNICODE_ENVIRONMENT;
 
   if (options->flags & UV_PROCESS_DETACHED) {
     /* Note that we're not setting the CREATE_BREAKAWAY_FROM_JOB flag. That
@@ -1074,6 +1095,12 @@ int uv_spawn(uv_loop_t* loop,
     process_flags |= DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
   }
 
+  if (options->cpumask != NULL) {
+    /* Create the child in a suspended state so we have a chance to set
+       its process affinity before it runs.  */
+    process_flags |= CREATE_SUSPENDED;
+  }
+
   if (!CreateProcessW(application_path,
                      arguments,
                      NULL,
@@ -1087,6 +1114,50 @@ int uv_spawn(uv_loop_t* loop,
     /* CreateProcessW failed. */
     err = GetLastError();
     goto done;
+  }
+
+  if (options->cpumask != NULL) {
+    /* The child is currently suspended.  Set its process affinity
+       or terminate it if we can't.  */
+    int i;
+    int cpumasksize;
+    DWORD_PTR sysmask;
+    DWORD_PTR oldmask;
+    DWORD_PTR newmask;
+
+    cpumasksize = uv_cpumask_size();
+
+    if (!GetProcessAffinityMask(info.hProcess, &oldmask, &sysmask)) {
+      err = GetLastError();
+      TerminateProcess(info.hProcess, 1);
+      goto done;
+    }
+
+    newmask = 0;
+    for (i = 0; i < cpumasksize; i++) {
+      if (options->cpumask[i]) {
+        if (oldmask & (((DWORD_PTR)1) << i)) {
+          newmask |= ((DWORD_PTR)1) << i;
+        } else {
+          err = UV_EINVAL;
+          TerminateProcess(info.hProcess, 1);
+          goto done;
+        }
+      }
+    }
+
+    if (!SetProcessAffinityMask(info.hProcess, newmask)) {
+      err = GetLastError();
+      TerminateProcess(info.hProcess, 1);
+      goto done;
+    }
+
+    /* The process affinity of the child is set.  Let it run.  */
+    if (ResumeThread(info.hThread) == ((DWORD)-1)) {
+      err = GetLastError();
+      TerminateProcess(info.hProcess, 1);
+      goto done;
+    }
   }
 
   /* Spawn succeeded */
@@ -1163,6 +1234,10 @@ int uv_spawn(uv_loop_t* loop,
 
 
 static int uv__kill(HANDLE process_handle, int signum) {
+  if (signum < 0 || signum >= NSIG) {
+    return UV_EINVAL;
+  }
+
   switch (signum) {
     case SIGTERM:
     case SIGKILL:
@@ -1227,8 +1302,15 @@ int uv_process_kill(uv_process_t* process, int signum) {
 
 int uv_kill(int pid, int signum) {
   int err;
-  HANDLE process_handle = OpenProcess(PROCESS_TERMINATE |
-    PROCESS_QUERY_INFORMATION, FALSE, pid);
+  HANDLE process_handle;
+
+  if (pid == 0) {
+    process_handle = GetCurrentProcess();
+  } else {
+    process_handle = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION,
+                                 FALSE,
+                                 pid);
+  }
 
   if (process_handle == NULL) {
     err = GetLastError();

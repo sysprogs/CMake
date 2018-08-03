@@ -146,8 +146,10 @@ The options are:
   Specify the primary input source file to the command.  This is
   treated just like any value given to the ``DEPENDS`` option
   but also suggests to Visual Studio generators where to hang
-  the custom command.  At most one custom command may specify a
-  given source file as its main dependency.
+  the custom command. Each source file may have at most one command
+  specifying it as its main dependency. A compile command (i.e. for a
+  library or an executable) counts as an implicit main dependency which
+  gets silently overwritten by a custom command specification.
 
 ``OUTPUT``
   Specify the output files the command is expected to produce.
@@ -214,10 +216,9 @@ When the command will happen is determined by which
 of the following is specified:
 
 ``PRE_BUILD``
-  Run before any other rules are executed within the target.
-  This is supported only on Visual Studio 8 or later.
-  For all other generators ``PRE_BUILD`` will be treated as
-  ``PRE_LINK``.
+  On :ref:`Visual Studio Generators`, run before any other rules are
+  executed within the target.
+  On other generators, run just before ``PRE_LINK`` commands.
 ``PRE_LINK``
   Run after sources have been compiled but before linking the binary
   or running the librarian or archiver tool of a static library.

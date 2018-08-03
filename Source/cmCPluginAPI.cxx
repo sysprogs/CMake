@@ -17,7 +17,7 @@
 #include <stdlib.h>
 
 #ifdef __QNX__
-#include <malloc.h> /* for malloc/free on QNX */
+#  include <malloc.h> /* for malloc/free on QNX */
 #endif
 
 extern "C" {
@@ -108,12 +108,12 @@ const char* CCONV cmGetProjectName(void* arg)
 const char* CCONV cmGetHomeDirectory(void* arg)
 {
   cmMakefile* mf = static_cast<cmMakefile*>(arg);
-  return mf->GetHomeDirectory();
+  return mf->GetHomeDirectory().c_str();
 }
 const char* CCONV cmGetHomeOutputDirectory(void* arg)
 {
   cmMakefile* mf = static_cast<cmMakefile*>(arg);
-  return mf->GetHomeOutputDirectory();
+  return mf->GetHomeOutputDirectory().c_str();
 }
 const char* CCONV cmGetStartDirectory(void* arg)
 {
@@ -218,8 +218,8 @@ void CCONV cmAddUtilityCommand(void* arg, const char* utilityName,
   }
 
   // Pass the call to the makefile instance.
-  mf->AddUtilityCommand(utilityName, (all ? false : true), nullptr, depends2,
-                        commandLines);
+  mf->AddUtilityCommand(utilityName, cmMakefile::TargetOrigin::Project,
+                        (all ? false : true), nullptr, depends2, commandLines);
 }
 void CCONV cmAddCustomCommand(void* arg, const char* source,
                               const char* command, int numArgs,
@@ -395,9 +395,10 @@ void CCONV cmAddLibrary(void* arg, const char* libname, int shared,
   for (i = 0; i < numSrcs; ++i) {
     srcs2.push_back(srcs[i]);
   }
-  mf->AddLibrary(libname, (shared ? cmStateEnums::SHARED_LIBRARY
-                                  : cmStateEnums::STATIC_LIBRARY),
-                 srcs2);
+  mf->AddLibrary(
+    libname,
+    (shared ? cmStateEnums::SHARED_LIBRARY : cmStateEnums::STATIC_LIBRARY),
+    srcs2);
 }
 
 char CCONV* cmExpandVariablesInString(void* arg, const char* source,
@@ -405,7 +406,8 @@ char CCONV* cmExpandVariablesInString(void* arg, const char* source,
 {
   cmMakefile* mf = static_cast<cmMakefile*>(arg);
   std::string barf = source;
-  std::string result = mf->ExpandVariablesInString(barf, escapeQuotes, atOnly);
+  std::string const& result =
+    mf->ExpandVariablesInString(barf, escapeQuotes, atOnly);
   return strdup(result.c_str());
 }
 
@@ -664,7 +666,7 @@ void CCONV cmSourceFileSetName(void* arg, const char* name, const char* dir,
   // First try and see whether the listed file can be found
   // as is without extensions added on.
   std::string hname = pathname;
-  if (cmSystemTools::FileExists(hname.c_str())) {
+  if (cmSystemTools::FileExists(hname)) {
     sf->SourceName = cmSystemTools::GetFilenamePath(name);
     if (!sf->SourceName.empty()) {
       sf->SourceName += "/";
@@ -691,7 +693,7 @@ void CCONV cmSourceFileSetName(void* arg, const char* name, const char* dir,
     hname = pathname;
     hname += ".";
     hname += *ext;
-    if (cmSystemTools::FileExists(hname.c_str())) {
+    if (cmSystemTools::FileExists(hname)) {
       sf->SourceExtension = *ext;
       sf->FullPath = hname;
       return;
@@ -704,7 +706,7 @@ void CCONV cmSourceFileSetName(void* arg, const char* name, const char* dir,
     hname = pathname;
     hname += ".";
     hname += *ext;
-    if (cmSystemTools::FileExists(hname.c_str())) {
+    if (cmSystemTools::FileExists(hname)) {
       sf->SourceExtension = *ext;
       sf->FullPath = hname;
       return;

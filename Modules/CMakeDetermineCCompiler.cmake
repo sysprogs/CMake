@@ -166,8 +166,8 @@ if (CMAKE_CROSSCOMPILING  AND NOT _CMAKE_TOOLCHAIN_PREFIX)
 
 endif ()
 
-include(CMakeFindBinUtils)
 set(_CMAKE_PROCESSING_LANGUAGE "C")
+include(CMakeFindBinUtils)
 include(Compiler/${CMAKE_C_COMPILER_ID}-FindBinUtils OPTIONAL)
 unset(_CMAKE_PROCESSING_LANGUAGE)
 
@@ -183,9 +183,9 @@ if(MSVC_C_ARCHITECTURE_ID)
     "set(MSVC_C_ARCHITECTURE_ID ${MSVC_C_ARCHITECTURE_ID})")
 endif()
 
-if(CMAKE_C_XCODE_CURRENT_ARCH)
-  set(SET_CMAKE_XCODE_CURRENT_ARCH
-    "set(CMAKE_XCODE_CURRENT_ARCH ${CMAKE_C_XCODE_CURRENT_ARCH})")
+if(CMAKE_C_XCODE_ARCHS)
+  set(SET_CMAKE_XCODE_ARCHS
+    "set(CMAKE_XCODE_ARCHS \"${CMAKE_C_XCODE_ARCHS}\")")
 endif()
 
 # configure variables set in this file for fast reload later on

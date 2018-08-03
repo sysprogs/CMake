@@ -27,9 +27,10 @@ static const char* cmDocumentationName[][2] = { { nullptr,
                                                 { nullptr, nullptr } };
 
 static const char* cmDocumentationUsage[][2] = {
-  { nullptr, "  cmake-gui [options]\n"
-             "  cmake-gui [options] <path-to-source>\n"
-             "  cmake-gui [options] <path-to-existing-build>" },
+  { nullptr,
+    "  cmake-gui [options]\n"
+    "  cmake-gui [options] <path-to-source>\n"
+    "  cmake-gui [options] <path-to-existing-build>" },
   { nullptr, nullptr }
 };
 
@@ -55,6 +56,7 @@ int main(int argc, char** argv)
   int argc2 = encoding_args.argc();
   char const* const* argv2 = encoding_args.argv();
 
+  cmSystemTools::InitializeLibUV();
   cmSystemTools::FindCMakeResources(argv2[0]);
   // check docs first so that X is not need to get docs
   // do docs, if args were given
@@ -191,10 +193,10 @@ int main(int argc, char** argv)
 }
 
 #if defined(Q_OS_MAC)
-#include "cm_sys_stat.h"
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
+#  include "cm_sys_stat.h"
+#  include <errno.h>
+#  include <string.h>
+#  include <unistd.h>
 static bool cmOSXInstall(std::string const& dir, std::string const& tool)
 {
   if (tool.empty()) {

@@ -17,7 +17,7 @@
 #   i.e. GNU/Intel/Clang/MSVC, etc.
 # ``LANGUAGE``
 #   language for which the result will be used,
-#   i.e. C/CXX/Fortan/ASM
+#   i.e. C/CXX/Fortran/ASM
 # ``MODE``
 #   ``EXIST``
 #     only check for existence of the given package
@@ -64,6 +64,8 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES Darwin  AND  "${COMPILER_ID}" MATCHES GNU)
   set(CMAKE_${LANGUAGE}_SYSROOT_FLAG "")
   set(CMAKE_${LANGUAGE}_OSX_DEPLOYMENT_TARGET_FLAG "")
 endif()
+
+include(CMakeSystemSpecificInitialize)
 
 # Also load the system specific file, which sets up e.g. the search paths.
 # This makes the FIND_XXX() calls work much better

@@ -8,6 +8,7 @@
 
 #include "cmCPackComponentGroup.h"
 #include "cmCPackLog.h"
+#include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
 #include "cmSystemTools.h"
 
@@ -66,8 +67,8 @@ int cmCPackProductBuildGenerator::PackageFiles()
       this->GetOption("CPACK_PRODUCTBUILD_RESOURCES_DIR");
 
     if (!cmSystemTools::CopyADirectory(userResDir, resDir)) {
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem copying the resource files"
-                      << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Problem copying the resource files" << std::endl);
       return 0;
     }
   }
@@ -120,16 +121,16 @@ int cmCPackProductBuildGenerator::InitializeInternal()
   std::string program =
     cmSystemTools::FindProgram("pkgbuild", no_paths, false);
   if (program.empty()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Cannot find pkgbuild executable"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Cannot find pkgbuild executable" << std::endl);
     return 0;
   }
   this->SetOptionIfNotSet("CPACK_COMMAND_PKGBUILD", program.c_str());
 
   program = cmSystemTools::FindProgram("productbuild", no_paths, false);
   if (program.empty()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Cannot find productbuild executable"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Cannot find productbuild executable" << std::endl);
     return 0;
   }
   this->SetOptionIfNotSet("CPACK_COMMAND_PRODUCTBUILD", program.c_str());
@@ -145,9 +146,9 @@ bool cmCPackProductBuildGenerator::RunProductBuild(const std::string& command)
   cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Execute: " << command << std::endl);
   std::string output, error_output;
   int retVal = 1;
-  bool res = cmSystemTools::RunSingleCommand(command.c_str(), &output,
-                                             &error_output, &retVal, nullptr,
-                                             this->GeneratorVerbose, 0);
+  bool res = cmSystemTools::RunSingleCommand(
+    command.c_str(), &output, &error_output, &retVal, nullptr,
+    this->GeneratorVerbose, cmDuration::zero());
   cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Done running command" << std::endl);
   if (!res || retVal) {
     cmGeneratedFileStream ofs(tmpFile.c_str());
@@ -171,8 +172,9 @@ bool cmCPackProductBuildGenerator::GenerateComponentPackage(
   packageFile += '/';
   packageFile += packageFileName;
 
-  cmCPackLogger(cmCPackLog::LOG_OUTPUT, "-   Building component package: "
-                  << packageFile << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_OUTPUT,
+                "-   Building component package: " << packageFile
+                                                   << std::endl);
 
   const char* comp_name = component ? component->Name.c_str() : nullptr;
 

@@ -17,7 +17,7 @@ if("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" STREQUAL "A
   find_program(CMAKE_IAR_ARCHIVE iarchive.exe HINTS ${__iar_hints}
       DOC "The IAR archiver")
 
-  # find auxillary tools
+  # find auxiliary tools
   find_program(CMAKE_IAR_ELFTOOL ielftool.exe HINTS ${__iar_hints}
       DOC "The IAR ELF Tool")
     find_program(CMAKE_IAR_ELFDUMP ielfdumparm.exe HINTS ${__iar_hints}

@@ -5,8 +5,10 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include "cmDuration.h"
 #include "cmProcessOutput.h"
 #include "cmsys/String.hxx"
+#include <chrono>
 #include <map>
 #include <set>
 #include <sstream>
@@ -137,12 +139,12 @@ public:
    */
   int TestDirectory(bool memcheck);
 
-  /** what is the configuraiton type, e.g. Debug, Release etc. */
+  /** what is the configuration type, e.g. Debug, Release etc. */
   std::string const& GetConfigType();
-  double GetTimeOut() { return this->TimeOut; }
-  void SetTimeOut(double t) { this->TimeOut = t; }
+  cmDuration GetTimeOut() { return this->TimeOut; }
+  void SetTimeOut(cmDuration t) { this->TimeOut = t; }
 
-  double GetGlobalTimeout() { return this->GlobalTimeout; }
+  cmDuration GetGlobalTimeout() { return this->GlobalTimeout; }
 
   /** how many test to run at the same time */
   int GetParallelLevel() { return this->ParallelLevel; }
@@ -200,9 +202,11 @@ public:
   /**
    * Return the time remaining that the script is allowed to run in
    * seconds if the user has set the variable CTEST_TIME_LIMIT. If that has
-   * not been set it returns 1e7 seconds
+   * not been set it returns a very large duration.
    */
-  double GetRemainingTimeAllowed();
+  cmDuration GetRemainingTimeAllowed();
+
+  static cmDuration MaxDuration();
 
   /**
    * Open file in the output directory and set the stream
@@ -220,7 +224,10 @@ public:
   bool ShouldCompressTestOutput();
   bool CompressString(std::string& str);
 
-  std::string GetStopTime() { return this->StopTime; }
+  std::chrono::system_clock::time_point GetStopTime()
+  {
+    return this->StopTime;
+  }
   void SetStopTime(std::string const& time);
 
   /** Used for parallel ctest job scheduling */
@@ -248,7 +255,8 @@ public:
    */
   bool RunCommand(std::vector<std::string> const& args, std::string* stdOut,
                   std::string* stdErr, int* retVal = nullptr,
-                  const char* dir = nullptr, double timeout = 0.0,
+                  const char* dir = nullptr,
+                  cmDuration timeout = cmDuration::zero(),
                   Encoding encoding = cmProcessOutput::Auto);
 
   /**
@@ -268,7 +276,7 @@ public:
    * and retVal is return value or exception.
    */
   int RunMakeCommand(const char* command, std::string& output, int* retVal,
-                     const char* dir, int timeout, std::ostream& ofs,
+                     const char* dir, cmDuration timeout, std::ostream& ofs,
                      Encoding encoding = cmProcessOutput::Auto);
 
   /** Return the current tag */
@@ -287,9 +295,10 @@ public:
 
   enum
   {
-    EXPERIMENTAL,
-    NIGHTLY,
-    CONTINUOUS
+    UNKNOWN = -1,
+    EXPERIMENTAL = 0,
+    NIGHTLY = 1,
+    CONTINUOUS = 2,
   };
 
   /** provide some more detailed info on the return code for ctest */
@@ -315,7 +324,7 @@ public:
    * environment variables are restored to their previous values.
    */
   int RunTest(std::vector<const char*> args, std::string* output, int* retVal,
-              std::ostream* logfile, double testTimeOut,
+              std::ostream* logfile, cmDuration testTimeOut,
               std::vector<std::string>* environment,
               Encoding encoding = cmProcessOutput::Auto);
 
@@ -339,7 +348,7 @@ public:
                                               const std::string& cmake_var,
                                               bool suppress = false);
 
-  /** Make string safe to be send as an URL */
+  /** Make string safe to be sent as a URL */
   static std::string MakeURLSafe(const std::string&);
 
   /** Decode a URL to the original string.  */
@@ -420,9 +429,6 @@ public:
   void SetFailover(bool failover) { this->Failover = failover; }
   bool GetFailover() { return this->Failover; }
 
-  void SetBatchJobs(bool batch = true) { this->BatchJobs = batch; }
-  bool GetBatchJobs() { return this->BatchJobs; }
-
   bool GetVerbose() { return this->Verbose; }
   bool GetExtraVerbose() { return this->ExtraVerbose; }
 
@@ -453,13 +459,14 @@ public:
   void GenerateSubprojectsOutput(cmXMLWriter& xml);
   std::vector<std::string> GetLabelsForSubprojects();
 
+  void SetRunCurrentScript(bool value);
+
 private:
   int RepeatTests;
   bool RepeatUntilFail;
   std::string ConfigType;
   std::string ScheduleType;
-  std::string StopTime;
-  bool NextDayStopTime;
+  std::chrono::system_clock::time_point StopTime;
   bool Verbose;
   bool ExtraVerbose;
   bool ProduceXML;
@@ -468,15 +475,12 @@ private:
   bool UseHTTP10;
   bool PrintLabels;
   bool Failover;
-  bool BatchJobs;
 
   bool ForceNewCTestProcess;
 
   bool RunConfigurationScript;
 
   int GenerateNotesFile(const char* files);
-
-  void DetermineNextDayStop();
 
   // these are helper classes
   typedef std::map<std::string, cmCTestGenericHandler*> t_TestingHandlers;
@@ -487,7 +491,6 @@ private:
   /** Map of configuration properties */
   typedef std::map<std::string, std::string> CTestConfigurationMap;
 
-  std::string CTestConfigFile;
   // TODO: The ctest configuration should be a hierarchy of
   // configuration option sources: command-line, script, ini file.
   // Then the ini file can get re-loaded whenever it changes without
@@ -504,11 +507,9 @@ private:
   int TestModel;
   std::string SpecificTrack;
 
-  double TimeOut;
+  cmDuration TimeOut;
 
-  double GlobalTimeout;
-
-  int LastStopTimeout;
+  cmDuration GlobalTimeout;
 
   int MaxTestNameWidth;
 
@@ -560,7 +561,7 @@ private:
   bool HandleCommandLineArguments(size_t& i, std::vector<std::string>& args,
                                   std::string& errormsg);
 
-  /** hande the -S -SP and -SR arguments */
+  /** handle the -S -SP and -SR arguments */
   void HandleScriptArguments(size_t& i, std::vector<std::string>& args,
                              bool& SRArgumentSpecified);
 

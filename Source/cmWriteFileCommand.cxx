@@ -33,7 +33,7 @@ bool cmWriteFileCommand::InitialPass(std::vector<std::string> const& args,
     }
   }
 
-  if (!this->Makefile->CanIWriteThisFile(fileName.c_str())) {
+  if (!this->Makefile->CanIWriteThisFile(fileName)) {
     std::string e =
       "attempted to write a file: " + fileName + " into a source directory.";
     this->SetError(e);
@@ -42,7 +42,7 @@ bool cmWriteFileCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   std::string dir = cmSystemTools::GetFilenamePath(fileName);
-  cmSystemTools::MakeDirectory(dir.c_str());
+  cmSystemTools::MakeDirectory(dir);
 
   mode_t mode = 0;
 
@@ -54,7 +54,7 @@ bool cmWriteFileCommand::InitialPass(std::vector<std::string> const& args,
 #else
                                   mode | S_IWUSR | S_IWGRP
 #endif
-                                  );
+    );
   }
   // If GetPermissions fails, pretend like it is ok. File open will fail if
   // the file is not writable

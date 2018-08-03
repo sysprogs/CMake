@@ -149,7 +149,8 @@ std::vector<std::string> cmCommonTargetGenerator::GetLinkedTargetDirectories()
     cmComputeLinkInformation::ItemVector const& items = cli->GetItems();
     for (auto const& item : items) {
       cmGeneratorTarget const* linkee = item.Target;
-      if (linkee && !linkee->IsImported()
+      if (linkee &&
+          !linkee->IsImported()
           // We can ignore the INTERFACE_LIBRARY items because
           // Target->GetLinkInformation already processed their
           // link interface and they don't have any output themselves.
@@ -159,7 +160,7 @@ std::vector<std::string> cmCommonTargetGenerator::GetLinkedTargetDirectories()
         std::string di = lg->GetCurrentBinaryDirectory();
         di += "/";
         di += lg->GetTargetDirectory(linkee);
-        dirs.push_back(di);
+        dirs.push_back(std::move(di));
       }
     }
   }

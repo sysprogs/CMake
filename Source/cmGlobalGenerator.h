@@ -14,8 +14,8 @@
 #include <vector>
 
 #include "cmCustomCommandLines.h"
+#include "cmDuration.h"
 #include "cmExportSetMap.h"
-#include "cmQtAutoGenDigest.h"
 #include "cmStateSnapshot.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
@@ -23,7 +23,7 @@
 #include "cm_codecvt.hxx"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cmFileLockPool.h"
+#  include "cmFileLockPool.h"
 #endif
 
 class cmExportBuildFileGenerator;
@@ -33,6 +33,7 @@ class cmLinkLineComputer;
 class cmLocalGenerator;
 class cmMakefile;
 class cmOutputConverter;
+class cmQtAutoGenInitializer;
 class cmSourceFile;
 class cmStateDirectory;
 class cmake;
@@ -69,6 +70,9 @@ public:
 
   /** Tell the generator about the target system.  */
   virtual bool SetSystemName(std::string const&, cmMakefile*) { return true; }
+
+  /** Set the generator-specific instance.  Returns true if supported.  */
+  virtual bool SetGeneratorInstance(std::string const& i, cmMakefile* mf);
 
   /** Set the generator-specific platform name.  Returns true if platform
       is supported and false otherwise.  */
@@ -143,9 +147,10 @@ public:
    * Try running cmake and building a file. This is used for dynamically
    * loaded commands, not as part of the usual build process.
    */
-  int TryCompile(const std::string& srcdir, const std::string& bindir,
-                 const std::string& projectName, const std::string& targetName,
-                 bool fast, std::string& output, cmMakefile* mf);
+  int TryCompile(int jobs, const std::string& srcdir,
+                 const std::string& bindir, const std::string& projectName,
+                 const std::string& targetName, bool fast, std::string& output,
+                 cmMakefile* mf);
 
   /**
    * Build a file given the following information. This is a more direct call
@@ -153,21 +158,30 @@ public:
    * empty then all is assumed. clean indicates if a "make clean" should be
    * done first.
    */
-  int Build(const std::string& srcdir, const std::string& bindir,
-            const std::string& projectName, const std::string& targetName,
-            std::string& output, const std::string& makeProgram,
-            const std::string& config, bool clean, bool fast, bool verbose,
-            double timeout, cmSystemTools::OutputOption outputflag =
-                              cmSystemTools::OUTPUT_NONE,
-            std::vector<std::string> const& nativeOptions =
-              std::vector<std::string>());
+  int Build(
+    int jobs, const std::string& srcdir, const std::string& bindir,
+    const std::string& projectName, const std::string& targetName,
+    std::string& output, const std::string& makeProgram,
+    const std::string& config, bool clean, bool fast, bool verbose,
+    cmDuration timeout,
+    cmSystemTools::OutputOption outputflag = cmSystemTools::OUTPUT_NONE,
+    std::vector<std::string> const& nativeOptions =
+      std::vector<std::string>());
+
+  /**
+   * Open a generated IDE project given the following information.
+   */
+  virtual bool Open(const std::string& bindir, const std::string& projectName,
+                    bool dryRun);
 
   virtual void GenerateBuildCommand(
     std::vector<std::string>& makeCommand, const std::string& makeProgram,
     const std::string& projectName, const std::string& projectDir,
     const std::string& targetName, const std::string& config, bool fast,
-    bool verbose,
+    int jobs, bool verbose,
     std::vector<std::string> const& makeOptions = std::vector<std::string>());
+
+  virtual void PrintBuildCommandAdvice(std::ostream& os, int jobs) const;
 
   /** Generate a "cmake --build" call for a given target and config.  */
   std::string GenerateCMakeBuildCommand(const std::string& target,
@@ -224,7 +238,7 @@ public:
 
   void EnableInstallTarget();
 
-  int TryCompileTimeout;
+  cmDuration TryCompileTimeout;
 
   bool GetForceUnixPaths() const { return this->ForceUnixPaths; }
   bool GetToolSupportsColor() const { return this->ToolSupportsColor; }
@@ -349,6 +363,10 @@ public:
 
   virtual bool IsIPOSupported() const { return false; }
 
+  /** Return whether the generator can import external visual studio project
+      using INCLUDE_EXTERNAL_MSPROJECT */
+  virtual bool IsIncludeExternalMSProjectSupported() const { return false; }
+
   /** Return whether the generator should use EFFECTIVE_PLATFORM_NAME. This is
       relevant for mixed macOS and iOS builds. */
   virtual bool UseEffectivePlatformName(cmMakefile*) const { return false; }
@@ -424,7 +442,8 @@ protected:
   virtual bool CheckALLOW_DUPLICATE_CUSTOM_TARGETS() const;
 
   // Qt auto generators
-  cmQtAutoGenDigestUPV CreateQtAutoGeneratorsTargets();
+  std::vector<std::unique_ptr<cmQtAutoGenInitializer>>
+  CreateQtAutoGenInitializers();
 
   std::string SelectMakeProgram(const std::string& makeProgram,
                                 const std::string& makeDefault = "") const;
@@ -533,6 +552,8 @@ private:
 
   virtual void ForceLinkerLanguages();
 
+  bool CheckTargetsForMissingSources() const;
+
   void CreateLocalGenerators();
 
   void CheckCompilerIdCompatibility(cmMakefile* mf,
@@ -556,6 +577,9 @@ private:
   void CreateGeneratorTargets(TargetTypes targetTypes);
 
   void ClearGeneratorMembers();
+
+  bool CheckCMP0037(std::string const& targetName,
+                    std::string const& reason) const;
 
   void IndexMakefile(cmMakefile* mf);
 

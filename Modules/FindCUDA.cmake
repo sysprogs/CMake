@@ -18,35 +18,36 @@
 #
 # Tools for building CUDA C files: libraries and build dependencies.
 #
-# This script locates the NVIDIA CUDA C tools.  It should work on linux,
-# windows, and mac and should be reasonably up to date with CUDA C
+# This script locates the NVIDIA CUDA C tools.  It should work on Linux,
+# Windows, and macOS and should be reasonably up to date with CUDA C
 # releases.
 #
-# This script makes use of the standard find_package arguments of
-# <VERSION>, REQUIRED and QUIET.  CUDA_FOUND will report if an
+# This script makes use of the standard :command:`find_package` arguments of
+# ``<VERSION>``, ``REQUIRED`` and ``QUIET``.  ``CUDA_FOUND`` will report if an
 # acceptable version of CUDA was found.
 #
-# The script will prompt the user to specify CUDA_TOOLKIT_ROOT_DIR if
+# The script will prompt the user to specify ``CUDA_TOOLKIT_ROOT_DIR`` if
 # the prefix cannot be determined by the location of nvcc in the system
-# path and REQUIRED is specified to find_package().  To use a different
-# installed version of the toolkit set the environment variable
-# CUDA_BIN_PATH before running cmake (e.g.
-# CUDA_BIN_PATH=/usr/local/cuda1.0 instead of the default
-# /usr/local/cuda) or set CUDA_TOOLKIT_ROOT_DIR after configuring.  If
-# you change the value of CUDA_TOOLKIT_ROOT_DIR, various components that
+# path and ``REQUIRED`` is specified to :command:`find_package`.  To use
+# a different installed version of the toolkit set the environment variable
+# ``CUDA_BIN_PATH`` before running cmake (e.g.
+# ``CUDA_BIN_PATH=/usr/local/cuda1.0`` instead of the default
+# ``/usr/local/cuda``) or set ``CUDA_TOOLKIT_ROOT_DIR`` after configuring.  If
+# you change the value of ``CUDA_TOOLKIT_ROOT_DIR``, various components that
 # depend on the path will be relocated.
 #
-# It might be necessary to set CUDA_TOOLKIT_ROOT_DIR manually on certain
-# platforms, or to use a cuda runtime not installed in the default
-# location.  In newer versions of the toolkit the cuda library is
-# included with the graphics driver- be sure that the driver version
-# matches what is needed by the cuda runtime version.
+# It might be necessary to set ``CUDA_TOOLKIT_ROOT_DIR`` manually on certain
+# platforms, or to use a CUDA runtime not installed in the default
+# location.  In newer versions of the toolkit the CUDA library is
+# included with the graphics driver -- be sure that the driver version
+# matches what is needed by the CUDA runtime version.
 #
 # The following variables affect the behavior of the macros in the
 # script (in alphebetical order).  Note that any of these flags can be
 # changed multiple times in the same directory before calling
-# CUDA_ADD_EXECUTABLE, CUDA_ADD_LIBRARY, CUDA_COMPILE, CUDA_COMPILE_PTX,
-# CUDA_COMPILE_FATBIN, CUDA_COMPILE_CUBIN or CUDA_WRAP_SRCS::
+# ``CUDA_ADD_EXECUTABLE``, ``CUDA_ADD_LIBRARY``, ``CUDA_COMPILE``,
+# ``CUDA_COMPILE_PTX``, ``CUDA_COMPILE_FATBIN``, ``CUDA_COMPILE_CUBIN``
+# or ``CUDA_WRAP_SRCS``::
 #
 #   CUDA_64_BIT_DEVICE_CODE (Default matches host bit size)
 #   -- Set to ON to compile for 64 bit device code, OFF for 32 bit device code.
@@ -97,11 +98,12 @@
 #   CUDA_HOST_COMPILATION_CPP (Default ON)
 #   -- Set to OFF for C compilation of host code.
 #
-#   CUDA_HOST_COMPILER (Default CMAKE_C_COMPILER, $(VCInstallDir)/bin for VS)
+#   CUDA_HOST_COMPILER (Default CMAKE_C_COMPILER)
 #   -- Set the host compiler to be used by nvcc.  Ignored if -ccbin or
 #      --compiler-bindir is already present in the CUDA_NVCC_FLAGS or
-#      CUDA_NVCC_FLAGS_<CONFIG> variables.  For Visual Studio targets
-#      $(VCInstallDir)/bin is a special value that expands out to the path when
+#      CUDA_NVCC_FLAGS_<CONFIG> variables.  For Visual Studio targets,
+#      the host compiler is constructed with one or more visual studio macros
+#      such as $(VCInstallDir), that expands out to the path when
 #      the command is run from within VS.
 #
 #   CUDA_NVCC_FLAGS
@@ -173,7 +175,7 @@
 #   -- Same as CUDA_ADD_EXECUTABLE except that a library is created.
 #
 #   CUDA_BUILD_CLEAN_TARGET()
-#   -- Creates a convience target that deletes all the dependency files
+#   -- Creates a convenience target that deletes all the dependency files
 #      generated.  You should make clean after running this target to ensure the
 #      dependency files get regenerated.
 #
@@ -523,10 +525,16 @@ set(CUDA_GENERATED_OUTPUT_DIR "" CACHE PATH "Directory to put all the output fil
 option(CUDA_HOST_COMPILATION_CPP "Generated file extension" ON)
 
 # Extra user settable flags
-set(CUDA_NVCC_FLAGS "" CACHE STRING "Semi-colon delimit multiple arguments.")
+cmake_initialize_per_config_variable(CUDA_NVCC_FLAGS "Semi-colon delimit multiple arguments.")
 
 if(CMAKE_GENERATOR MATCHES "Visual Studio")
-  set(CUDA_HOST_COMPILER "$(VCInstallDir)bin" CACHE FILEPATH "Host side compiler used by NVCC")
+  set(_CUDA_MSVC_HOST_COMPILER "$(VCInstallDir)Tools/MSVC/$(VCToolsVersion)/bin/Host$(Platform)/$(PlatformTarget)")
+  if(MSVC_VERSION LESS 1910)
+   set(_CUDA_MSVC_HOST_COMPILER "$(VCInstallDir)bin")
+  endif()
+
+  set(CUDA_HOST_COMPILER "${_CUDA_MSVC_HOST_COMPILER}" CACHE FILEPATH "Host side compiler used by NVCC")
+
 else()
   if(APPLE
       AND "${CMAKE_C_COMPILER_ID}" MATCHES "Clang"
@@ -549,6 +557,11 @@ else()
       set(c_compiler_realpath "")
     endif()
     set(CUDA_HOST_COMPILER "${c_compiler_realpath}" CACHE FILEPATH "Host side compiler used by NVCC")
+  elseif(MSVC AND "${CMAKE_C_COMPILER}" MATCHES "clcache|sccache")
+    # NVCC does not think it will work if it is passed clcache.exe or sccache.exe
+    # as the host compiler, which means that builds with CC=cl.exe won't work.
+    # Best to just feed it whatever the actual cl.exe is as the host compiler.
+    set(CUDA_HOST_COMPILER "cl.exe" CACHE FILEPATH "Host side compiler used by NVCC")
   else()
     set(CUDA_HOST_COMPILER "${CMAKE_C_COMPILER}"
       CACHE FILEPATH "Host side compiler used by NVCC")
@@ -556,7 +569,7 @@ else()
 endif()
 
 # Propagate the host flags to the host compiler via -Xcompiler
-option(CUDA_PROPAGATE_HOST_FLAGS "Propage C/CXX_FLAGS and friends to the host compiler via -Xcompile" ON)
+option(CUDA_PROPAGATE_HOST_FLAGS "Propagate C/CXX_FLAGS and friends to the host compiler via -Xcompile" ON)
 
 # Enable CUDA_SEPARABLE_COMPILATION
 option(CUDA_SEPARABLE_COMPILATION "Compile CUDA objects with separable compilation enabled.  Requires CUDA 5.0+" OFF)
@@ -577,19 +590,17 @@ mark_as_advanced(
   CUDA_SEPARABLE_COMPILATION
   )
 
-# Makefile and similar generators don't define CMAKE_CONFIGURATION_TYPES, so we
-# need to add another entry for the CMAKE_BUILD_TYPE.  We also need to add the
-# standerd set of 4 build types (Debug, MinSizeRel, Release, and RelWithDebInfo)
-# for completeness.  We need run this loop in order to accomodate the addition
-# of extra configuration types.  Duplicate entries will be removed by
-# REMOVE_DUPLICATES.
+# Single config generators like Makefiles or Ninja don't usually have
+# CMAKE_CONFIGURATION_TYPES defined (but note that it can be defined if set by
+# projects or developers). Even CMAKE_BUILD_TYPE might not be defined for
+# single config generators (and should not be defined for multi-config
+# generators). To ensure we get a complete superset of all possible
+# configurations, we combine CMAKE_CONFIGURATION_TYPES, CMAKE_BUILD_TYPE and
+# all of the standard configurations, then weed out duplicates with
+# list(REMOVE_DUPLICATES). Looping over the unique set then ensures we have
+# each configuration-specific set of nvcc flags defined and marked as advanced.
 set(CUDA_configuration_types ${CMAKE_CONFIGURATION_TYPES} ${CMAKE_BUILD_TYPE} Debug MinSizeRel Release RelWithDebInfo)
 list(REMOVE_DUPLICATES CUDA_configuration_types)
-foreach(config ${CUDA_configuration_types})
-    string(TOUPPER ${config} config_upper)
-    set(CUDA_NVCC_FLAGS_${config_upper} "" CACHE STRING "Semi-colon delimit multiple arguments.")
-    mark_as_advanced(CUDA_NVCC_FLAGS_${config_upper})
-endforeach()
 
 ###############################################################################
 ###############################################################################
@@ -665,8 +676,7 @@ if(NOT CUDA_TOOLKIT_ROOT_DIR AND NOT CMAKE_CROSSCOMPILING)
   find_path(CUDA_TOOLKIT_ROOT_DIR
     NAMES nvcc nvcc.exe
     PATHS /opt/cuda/bin
-          /usr/local/bin
-          /usr/local/cuda/bin
+    PATH_SUFFIXES cuda/bin
     DOC "Toolkit location."
     )
 
@@ -728,16 +738,20 @@ endif()
 
 
 # CUDA_NVCC_EXECUTABLE
-cuda_find_host_program(CUDA_NVCC_EXECUTABLE
-  NAMES nvcc
-  PATHS "${CUDA_TOOLKIT_ROOT_DIR}"
-  ENV CUDA_PATH
-  ENV CUDA_BIN_PATH
-  PATH_SUFFIXES bin bin64
-  NO_DEFAULT_PATH
-  )
-# Search default search paths, after we search our own set of paths.
-cuda_find_host_program(CUDA_NVCC_EXECUTABLE nvcc)
+if(DEFINED ENV{CUDA_NVCC_EXECUTABLE})
+  set(CUDA_NVCC_EXECUTABLE "$ENV{CUDA_NVCC_EXECUTABLE}" CACHE FILEPATH "The CUDA compiler")
+else()
+  cuda_find_host_program(CUDA_NVCC_EXECUTABLE
+    NAMES nvcc
+    PATHS "${CUDA_TOOLKIT_ROOT_DIR}"
+    ENV CUDA_PATH
+    ENV CUDA_BIN_PATH
+    PATH_SUFFIXES bin bin64
+    NO_DEFAULT_PATH
+    )
+  # Search default search paths, after we search our own set of paths.
+  cuda_find_host_program(CUDA_NVCC_EXECUTABLE nvcc)
+endif()
 mark_as_advanced(CUDA_NVCC_EXECUTABLE)
 
 if(CUDA_NVCC_EXECUTABLE AND NOT CUDA_VERSION)
@@ -977,7 +991,7 @@ if(NOT CUDA_VERSION VERSION_LESS "9.0")
   find_cuda_helper_libs(npps)
   set(CUDA_npp_LIBRARY "${CUDA_nppc_LIBRARY};${CUDA_nppial_LIBRARY};${CUDA_nppicc_LIBRARY};${CUDA_nppicom_LIBRARY};${CUDA_nppidei_LIBRARY};${CUDA_nppif_LIBRARY};${CUDA_nppig_LIBRARY};${CUDA_nppim_LIBRARY};${CUDA_nppist_LIBRARY};${CUDA_nppisu_LIBRARY};${CUDA_nppitc_LIBRARY};${CUDA_npps_LIBRARY}")
 elseif(CUDA_VERSION VERSION_GREATER "5.0")
-  # In CUDA 5.5 NPP was splitted onto 3 separate libraries.
+  # In CUDA 5.5 NPP was split into 3 separate libraries.
   find_cuda_helper_libs(nppc)
   find_cuda_helper_libs(nppi)
   find_cuda_helper_libs(npps)
@@ -1315,11 +1329,11 @@ macro(CUDA_WRAP_SRCS cuda_target format generated_files)
   endif()
 
   # This needs to be passed in at this stage, because VS needs to fill out the
-  # value of VCInstallDir from within VS.  Note that CCBIN is only used if
+  # various macros from within VS.  Note that CCBIN is only used if
   # -ccbin or --compiler-bindir isn't used and CUDA_HOST_COMPILER matches
-  # $(VCInstallDir)/bin.
+  # _CUDA_MSVC_HOST_COMPILER
   if(CMAKE_GENERATOR MATCHES "Visual Studio")
-    set(ccbin_flags -D "\"CCBIN:PATH=$(VCInstallDir)bin\"" )
+    set(ccbin_flags -D "\"CCBIN:PATH=${_CUDA_MSVC_HOST_COMPILER}\"" )
   else()
     set(ccbin_flags)
   endif()
@@ -1438,7 +1452,7 @@ macro(CUDA_WRAP_SRCS cuda_target format generated_files)
   if( "${_cuda_host_flags}" MATCHES "-std=c\\+\\+11")
     # Add the c++11 flag to nvcc if it isn't already present.  Note that we only look at
     # the main flag instead of the configuration specific flags.
-    if( NOT "${CUDA_NVCC_FLAGS}" MATCHES "-std;c\\+\\+11" )
+    if( NOT "${CUDA_NVCC_FLAGS}" MATCHES "-std=c\\+\\+11" )
       list(APPEND nvcc_flags --std c++11)
     endif()
     string(REGEX REPLACE "[-]+std=c\\+\\+11" "" _cuda_host_flags "${_cuda_host_flags}")
@@ -1559,7 +1573,7 @@ macro(CUDA_WRAP_SRCS cuda_target format generated_files)
       # Bring in the dependencies.  Creates a variable CUDA_NVCC_DEPEND #######
       cuda_include_nvcc_dependencies(${cmake_dependency_file})
 
-      # Convience string for output ###########################################
+      # Convenience string for output #########################################
       if(CUDA_BUILD_EMULATION)
         set(cuda_build_type "Emulation")
       else()
@@ -1970,9 +1984,9 @@ endmacro()
 ###############################################################################
 ###############################################################################
 macro(CUDA_BUILD_CLEAN_TARGET)
-  # Call this after you add all your CUDA targets, and you will get a convience
-  # target.  You should also make clean after running this target to get the
-  # build system to generate all the code again.
+  # Call this after you add all your CUDA targets, and you will get a
+  # convenience target.  You should also make clean after running this target
+  # to get the build system to generate all the code again.
 
   set(cuda_clean_target_name clean_cuda_depends)
   if (CMAKE_GENERATOR MATCHES "Visual Studio")

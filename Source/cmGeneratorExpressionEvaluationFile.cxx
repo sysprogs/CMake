@@ -13,6 +13,7 @@
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmSourceFile.h"
+#include "cmSourceFileLocationKind.h"
 #include "cmSystemTools.h"
 #include "cmake.h"
 
@@ -102,8 +103,15 @@ void cmGeneratorExpressionEvaluationFile::CreateOutputFile(
   for (std::string const& le : enabledLanguages) {
     std::string name = this->OutputFileExpr->Evaluate(
       lg, config, false, nullptr, nullptr, nullptr, le);
-    cmSourceFile* sf = lg->GetMakefile()->GetOrCreateSource(name);
+    cmSourceFile* sf = lg->GetMakefile()->GetOrCreateSource(
+      name, false, cmSourceFileLocationKind::Known);
+    // Tell TraceDependencies that the file is not expected to exist
+    // on disk yet.  We generate it after that runs.
     sf->SetProperty("GENERATED", "1");
+
+    // Tell the build system generators that there is no build rule
+    // to generate the file.
+    sf->SetProperty("__CMAKE_GENERATED_BY_CMAKE", "1");
 
     gg->SetFilenameTargetDepends(
       sf, this->OutputFileExpr->GetSourceSensitiveTargets());
@@ -153,7 +161,7 @@ void cmGeneratorExpressionEvaluationFile::Generate(cmLocalGenerator* lg)
   lg->GetMakefile()->GetConfigurations(allConfigs);
 
   if (allConfigs.empty()) {
-    allConfigs.push_back("");
+    allConfigs.emplace_back();
   }
 
   std::vector<std::string> enabledLanguages;

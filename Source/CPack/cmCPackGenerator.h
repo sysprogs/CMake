@@ -12,6 +12,7 @@
 
 #include "cmCPackComponentGroup.h"
 #include "cmSystemTools.h"
+#include "cm_sys_stat.h"
 
 class cmCPackLog;
 class cmInstalledFile;
@@ -33,6 +34,16 @@ public:
     this->GeneratorVerbose =
       val ? cmSystemTools::OUTPUT_MERGE : cmSystemTools::OUTPUT_NONE;
   }
+
+  /**
+   * Put underlying cmake scripts in trace mode.
+   */
+  void SetTrace(bool val) { this->Trace = val; }
+
+  /**
+   * Put underlying cmake scripts in expanded trace mode.
+   */
+  void SetTraceExpand(bool val) { this->TraceExpand = val; }
 
   /**
    * Returns true if the generator may work on this system.
@@ -168,9 +179,11 @@ protected:
   virtual int InstallProjectViaInstallScript(
     bool setDestDir, const std::string& tempInstallDirectory);
   virtual int InstallProjectViaInstalledDirectories(
-    bool setDestDir, const std::string& tempInstallDirectory);
+    bool setDestDir, const std::string& tempInstallDirectory,
+    const mode_t* default_dir_mode);
   virtual int InstallProjectViaInstallCMakeProjects(
-    bool setDestDir, const std::string& tempInstallDirectory);
+    bool setDestDir, const std::string& tempInstallDirectory,
+    const mode_t* default_dir_mode);
 
   /**
    * The various level of support of
@@ -292,6 +305,8 @@ protected:
   ComponentPackageMethod componentPackageMethod;
 
   cmCPackLog* Logger;
+  bool Trace;
+  bool TraceExpand;
 
 private:
   cmMakefile* MakefileMap;

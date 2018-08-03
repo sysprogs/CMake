@@ -9,7 +9,7 @@
 class cmExecutionStatus;
 
 #if defined(__APPLE__)
-#include <CoreFoundation/CoreFoundation.h>
+#  include <CoreFoundation/CoreFoundation.h>
 #endif
 
 struct cmFindProgramHelper
@@ -22,7 +22,7 @@ struct cmFindProgramHelper
     this->Extensions.push_back(".exe");
 #endif
     // Consider original name with no extensions.
-    this->Extensions.push_back("");
+    this->Extensions.emplace_back();
   }
 
   // List of valid extensions.

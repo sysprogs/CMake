@@ -32,7 +32,7 @@
 #
 #
 # In an effort to remove some clutter and clear up some issues for
-# people who are not necessarily Tcl/Tk gurus/developpers, some
+# people who are not necessarily Tcl/Tk gurus/developers, some
 # variables were moved or removed.  Changes compared to CMake 2.4 are:
 #
 # ::
@@ -101,6 +101,7 @@ find_library(TCL_STUB_LIBRARY
   NAMES
   tclstub
   tclstub${TK_LIBRARY_VERSION} tclstub${TCL_TCLSH_VERSION} tclstub${TK_WISH_VERSION}
+  tclstub87 tclstub8.7
   tclstub86 tclstub8.6
   tclstub85 tclstub8.5
   tclstub84 tclstub8.4
@@ -114,6 +115,7 @@ find_library(TK_STUB_LIBRARY
   NAMES
   tkstub
   tkstub${TCL_LIBRARY_VERSION} tkstub${TCL_TCLSH_VERSION} tkstub${TK_WISH_VERSION}
+  tkstub87 tkstub8.7
   tkstub86 tkstub8.6
   tkstub85 tkstub8.5
   tkstub84 tkstub8.4

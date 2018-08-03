@@ -3,10 +3,11 @@
 #include "cmCTestConfigureHandler.h"
 
 #include "cmCTest.h"
+#include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
-#include "cmSystemTools.h"
 #include "cmXMLWriter.h"
 
+#include <chrono>
 #include <ostream>
 #include <string>
 
@@ -43,20 +44,19 @@ int cmCTestConfigureHandler::ProcessHandler()
     return -1;
   }
 
-  double elapsed_time_start = cmSystemTools::GetTime();
+  auto elapsed_time_start = std::chrono::steady_clock::now();
   std::string output;
   int retVal = 0;
   int res = 0;
   if (!this->CTest->GetShowOnly()) {
     cmGeneratedFileStream os;
     if (!this->StartResultingXML(cmCTest::PartConfigure, "Configure", os)) {
-      cmCTestLog(this->CTest, ERROR_MESSAGE, "Cannot open configure file"
-                   << std::endl);
+      cmCTestLog(this->CTest, ERROR_MESSAGE,
+                 "Cannot open configure file" << std::endl);
       return 1;
     }
     std::string start_time = this->CTest->CurrentTime();
-    unsigned int start_time_time =
-      static_cast<unsigned int>(cmSystemTools::GetTime());
+    auto start_time_time = std::chrono::system_clock::now();
 
     cmGeneratedFileStream ofs;
     this->StartLogFile("Configure", ofs);
@@ -64,7 +64,8 @@ int cmCTestConfigureHandler::ProcessHandler()
                        "Configure with command: " << cCommand << std::endl,
                        this->Quiet);
     res = this->CTest->RunMakeCommand(cCommand.c_str(), output, &retVal,
-                                      buildDirectory.c_str(), 0, ofs);
+                                      buildDirectory.c_str(),
+                                      cmDuration::zero(), ofs);
 
     if (ofs) {
       ofs.close();
@@ -82,12 +83,11 @@ int cmCTestConfigureHandler::ProcessHandler()
       xml.Element("Log", output);
       xml.Element("ConfigureStatus", retVal);
       xml.Element("EndDateTime", this->CTest->CurrentTime());
-      xml.Element("EndConfigureTime",
-                  static_cast<unsigned int>(cmSystemTools::GetTime()));
-      xml.Element(
-        "ElapsedMinutes",
-        static_cast<int>((cmSystemTools::GetTime() - elapsed_time_start) / 6) /
-          10.0);
+      xml.Element("EndConfigureTime", std::chrono::system_clock::now());
+      xml.Element("ElapsedMinutes",
+                  std::chrono::duration_cast<std::chrono::minutes>(
+                    std::chrono::steady_clock::now() - elapsed_time_start)
+                    .count());
       xml.EndElement(); // Configure
       this->CTest->EndXML(xml);
     }

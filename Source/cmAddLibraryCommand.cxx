@@ -7,7 +7,6 @@
 #include "cmGeneratorExpression.h"
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
-#include "cmPolicies.h"
 #include "cmState.h"
 #include "cmStateTypes.h"
 #include "cmSystemTools.h"
@@ -175,35 +174,8 @@ bool cmAddLibraryCommand::InitialPass(std::vector<std::string> const& args,
   if (nameOk && !importTarget && !isAlias) {
     nameOk = libName.find(':') == std::string::npos;
   }
-  if (!nameOk) {
-    cmake::MessageType messageType = cmake::AUTHOR_WARNING;
-    std::ostringstream e;
-    bool issueMessage = false;
-    switch (this->Makefile->GetPolicyStatus(cmPolicies::CMP0037)) {
-      case cmPolicies::WARN:
-        if (type != cmStateEnums::INTERFACE_LIBRARY) {
-          e << cmPolicies::GetPolicyWarning(cmPolicies::CMP0037) << "\n";
-          issueMessage = true;
-        }
-      case cmPolicies::OLD:
-        break;
-      case cmPolicies::NEW:
-      case cmPolicies::REQUIRED_IF_USED:
-      case cmPolicies::REQUIRED_ALWAYS:
-        issueMessage = true;
-        messageType = cmake::FATAL_ERROR;
-    }
-    if (issueMessage) {
-      e << "The target name \"" << libName
-        << "\" is reserved or not valid for certain "
-           "CMake features, such as generator expressions, and may result "
-           "in undefined behavior.";
-      this->Makefile->IssueMessage(messageType, e.str());
-
-      if (messageType == cmake::FATAL_ERROR) {
-        return false;
-      }
-    }
+  if (!nameOk && !this->Makefile->CheckCMP0037(libName, type)) {
+    return false;
   }
 
   if (isAlias) {
@@ -226,7 +198,7 @@ bool cmAddLibraryCommand::InitialPass(std::vector<std::string> const& args,
       return false;
     }
 
-    const char* aliasedName = s->c_str();
+    std::string const& aliasedName = *s;
     if (this->Makefile->IsAlias(aliasedName)) {
       std::ostringstream e;
       e << "cannot create ALIAS target \"" << libName << "\" because target \""
@@ -239,8 +211,9 @@ bool cmAddLibraryCommand::InitialPass(std::vector<std::string> const& args,
     if (!aliasedTarget) {
       std::ostringstream e;
       e << "cannot create ALIAS target \"" << libName << "\" because target \""
-        << aliasedName << "\" does not already "
-                          "exist.";
+        << aliasedName
+        << "\" does not already "
+           "exist.";
       this->SetError(e.str());
       return false;
     }
@@ -256,10 +229,11 @@ bool cmAddLibraryCommand::InitialPass(std::vector<std::string> const& args,
       this->SetError(e.str());
       return false;
     }
-    if (aliasedTarget->IsImported()) {
+    if (aliasedTarget->IsImported() &&
+        !aliasedTarget->IsImportedGloballyVisible()) {
       std::ostringstream e;
       e << "cannot create ALIAS target \"" << libName << "\" because target \""
-        << aliasedName << "\" is IMPORTED.";
+        << aliasedName << "\" is imported but not globally visible.";
       this->SetError(e.str());
       return false;
     }
@@ -360,14 +334,6 @@ bool cmAddLibraryCommand::InitialPass(std::vector<std::string> const& args,
 
     this->Makefile->AddLibrary(libName, type, srclists, excludeFromAll);
     return true;
-  }
-
-  if (s == args.end()) {
-    std::string msg = "You have called ADD_LIBRARY for library ";
-    msg += args[0];
-    msg += " without any source files. This typically indicates a problem ";
-    msg += "with your CMakeLists.txt file";
-    cmSystemTools::Message(msg.c_str(), "Warning");
   }
 
   srclists.insert(srclists.end(), s, args.end());

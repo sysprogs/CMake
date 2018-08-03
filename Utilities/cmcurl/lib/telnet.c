@@ -1203,8 +1203,7 @@ CURLcode telrcv(struct connectdata *conn,
           CURL_SB_ACCUM(tn, c);
           tn->telrcv_state = CURL_TS_SB;
         }
-        else
-        {
+        else {
           CURL_SB_ACCUM(tn, CURL_IAC);
           CURL_SB_ACCUM(tn, CURL_SE);
           tn->subpointer -= 2;
@@ -1460,7 +1459,8 @@ static CURLcode telnet_do(struct connectdata *conn, bool *done)
           if(n == 0)                        /* no bytes */
             break;
 
-          readfile_read = (DWORD)n; /* fall thru with number of bytes read */
+          /* fall through with number of bytes read */
+          readfile_read = (DWORD)n;
         }
         else {
           /* read from stdin */
@@ -1560,8 +1560,8 @@ static CURLcode telnet_do(struct connectdata *conn, bool *done)
     }
 
     if(data->set.timeout) {
-      now = Curl_tvnow();
-      if(Curl_tvdiff(now, conn->created) >= data->set.timeout) {
+      now = Curl_now();
+      if(Curl_timediff(now, conn->created) >= data->set.timeout) {
         failf(data, "Time-out");
         result = CURLE_OPERATION_TIMEDOUT;
         keepon = FALSE;
@@ -1678,8 +1678,8 @@ static CURLcode telnet_do(struct connectdata *conn, bool *done)
     } /* poll switch statement */
 
     if(data->set.timeout) {
-      now = Curl_tvnow();
-      if(Curl_tvdiff(now, conn->created) >= data->set.timeout) {
+      now = Curl_now();
+      if(Curl_timediff(now, conn->created) >= data->set.timeout) {
         failf(data, "Time-out");
         result = CURLE_OPERATION_TIMEDOUT;
         keepon = FALSE;

@@ -57,6 +57,11 @@ add_custom_target(check-part1 ALL
     -Dtest_strequal_angle_r_comma=$<STREQUAL:$<ANGLE-R>,$<COMMA>>
     -Dtest_strequal_both_empty=$<STREQUAL:,>
     -Dtest_strequal_one_empty=$<STREQUAL:something,>
+    -Dtest_inlist_true=$<IN_LIST:a,a$<SEMICOLON>b>
+    -Dtest_inlist_false=$<IN_LIST:c,a$<SEMICOLON>b>
+    -Dtest_inlist_empty_1=$<IN_LIST:a,>
+    -Dtest_inlist_empty_2=$<IN_LIST:,a>
+    -Dtest_inlist_empty_3=$<IN_LIST:,>
     -Dtest_angle_r=$<ANGLE-R>
     -Dtest_comma=$<COMMA>
     -Dtest_semicolon=$<SEMICOLON>
@@ -258,8 +263,51 @@ add_custom_target(check-part4 ALL
   VERBATIM
   )
 
-add_executable(srcgenex srcgenex.c)
-set_property(SOURCE srcgenex.c PROPERTY COMPILE_FLAGS "-DNAME=$<TARGET_PROPERTY:NAME>")
+#-----------------------------------------------------------------------------
+# Cover source file properties with generator expressions.
+## generate various source files
+foreach (item IN ITEMS flags flags_COMPILE_LANGUAGE
+                       options options_COMPILE_LANGUAGE
+                       defs defs_COMPILE_LANGUAGE)
+  set(TARGET_NAME srcgenex_${item})
+  configure_file(srcgenex.c.in ${TARGET_NAME}.c @ONLY)
+endforeach()
+add_executable(srcgenex_flags "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_flags.c")
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_flags.c"
+             PROPERTY COMPILE_FLAGS "-DNAME=$<TARGET_PROPERTY:NAME>")
+add_executable(srcgenex_flags_COMPILE_LANGUAGE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_flags_COMPILE_LANGUAGE.c")
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_flags_COMPILE_LANGUAGE.c"
+             PROPERTY COMPILE_FLAGS "$<$<COMPILE_LANGUAGE:C>:-DNAME=$<TARGET_PROPERTY:NAME>>")
+
+add_executable(srcgenex_options "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_options.c")
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_options.c"
+             PROPERTY COMPILE_OPTIONS -DUNUSED -DNAME=$<TARGET_PROPERTY:NAME>)
+add_executable(srcgenex_options_COMPILE_LANGUAGE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_options_COMPILE_LANGUAGE.c")
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_options_COMPILE_LANGUAGE.c"
+             PROPERTY COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:C>:-DNAME=$<TARGET_PROPERTY:NAME>>)
+
+add_executable(srcgenex_defs "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_defs.c")
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_defs.c"
+             PROPERTY COMPILE_DEFINITIONS UNUSED NAME=$<TARGET_PROPERTY:NAME>)
+add_executable(srcgenex_defs_COMPILE_LANGUAGE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_defs_COMPILE_LANGUAGE.c")
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_defs_COMPILE_LANGUAGE.c"
+               PROPERTY COMPILE_DEFINITIONS $<$<COMPILE_LANGUAGE:C>:NAME=$<TARGET_PROPERTY:NAME>>)
+
+foreach (item IN ITEMS basic COMPILE_LANGUAGE)
+  set(TARGET_NAME srcgenex_includes_${item})
+  configure_file(srcgenex_includes.h.in "sf_includes_${item}/${TARGET_NAME}.h" @ONLY)
+  configure_file(srcgenex_includes.c.in ${TARGET_NAME}.c @ONLY)
+endforeach()
+add_executable(srcgenex_includes_basic "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_includes_basic.c")
+# first include directory is useless but ensure list aspect is tested
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_includes_basic.c"
+             PROPERTY INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/sf_includes_basic")
+if (CMAKE_GENERATOR MATCHES "Makefiles|Ninja|Watcom WMake")
+  add_executable(srcgenex_includes_COMPILE_LANGUAGE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_includes_COMPILE_LANGUAGE.c")
+  # first include directory is useless but ensure list aspect is tested
+  set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/srcgenex_includes_COMPILE_LANGUAGE.c"
+               PROPERTY INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}" $<$<COMPILE_LANGUAGE:C>:${CMAKE_CURRENT_BINARY_DIR}/sf_includes_COMPILE_LANGUAGE>)
+endif()
 
 #-----------------------------------------------------------------------------
 # Cover test properties with generator expressions.

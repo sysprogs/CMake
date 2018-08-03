@@ -29,12 +29,6 @@ function(OSG_FIND_PATH module header)
             ${${module_uc}_DIR}
             ${OSG_DIR}
        PATH_SUFFIXES include
-       PATHS
-            /sw # Fink
-            /opt/local # DarwinPorts
-            /opt/csw # Blastwave
-            /opt
-            /usr/freeware
    )
 endfunction()
 
@@ -55,12 +49,6 @@ function(OSG_FIND_LIBRARY module library)
             ${${module_uc}_DIR}
             ${OSG_DIR}
        PATH_SUFFIXES lib
-       PATHS
-            /sw # Fink
-            /opt/local # DarwinPorts
-            /opt/csw # Blastwave
-            /opt
-            /usr/freeware
    )
 
    find_library(${module_uc}_LIBRARY_DEBUG
@@ -73,12 +61,6 @@ function(OSG_FIND_LIBRARY module library)
             ${${module_uc}_DIR}
             ${OSG_DIR}
        PATH_SUFFIXES lib
-       PATHS
-            /sw # Fink
-            /opt/local # DarwinPorts
-            /opt/csw # Blastwave
-            /opt
-            /usr/freeware
     )
 
    if(NOT ${module_uc}_LIBRARY_DEBUG)

@@ -4,9 +4,11 @@
 
 #include "cmCTest.h"
 #include "cmCTestGenericHandler.h"
+#include "cmDuration.h"
 #include "cmMakefile.h"
 #include "cmSystemTools.h"
 
+#include <chrono>
 #include <sstream>
 #include <stdlib.h>
 #include <vector>
@@ -36,14 +38,14 @@ cmCTestGenericHandler* cmCTestTestCommand::InitializeHandler()
   const char* ctestTimeout =
     this->Makefile->GetDefinition("CTEST_TEST_TIMEOUT");
 
-  double timeout;
+  cmDuration timeout;
   if (ctestTimeout) {
-    timeout = atof(ctestTimeout);
+    timeout = cmDuration(atof(ctestTimeout));
   } else {
     timeout = this->CTest->GetTimeOut();
-    if (timeout <= 0) {
+    if (timeout <= cmDuration::zero()) {
       // By default use timeout of 10 minutes
-      timeout = 600;
+      timeout = std::chrono::minutes(10);
     }
   }
   this->CTest->SetTimeOut(timeout);
@@ -110,14 +112,16 @@ cmCTestGenericHandler* cmCTestTestCommand::InitializeHandler()
     if (!cmSystemTools::StringToULong(this->Values[ctt_TEST_LOAD],
                                       &testLoad)) {
       testLoad = 0;
-      cmCTestLog(this->CTest, WARNING, "Invalid value for 'TEST_LOAD' : "
+      cmCTestLog(this->CTest, WARNING,
+                 "Invalid value for 'TEST_LOAD' : "
                    << this->Values[ctt_TEST_LOAD] << std::endl);
     }
   } else if (ctestTestLoad && *ctestTestLoad) {
     if (!cmSystemTools::StringToULong(ctestTestLoad, &testLoad)) {
       testLoad = 0;
-      cmCTestLog(this->CTest, WARNING, "Invalid value for 'CTEST_TEST_LOAD' : "
-                   << ctestTestLoad << std::endl);
+      cmCTestLog(this->CTest, WARNING,
+                 "Invalid value for 'CTEST_TEST_LOAD' : " << ctestTestLoad
+                                                          << std::endl);
     }
   } else {
     testLoad = this->CTest->GetTestLoad();

@@ -2,7 +2,11 @@
 # file Copyright.txt or https://cmake.org/licensing for details.
 
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
+set(CMAKE_USER_MAKE_RULES_OVERRIDE_C ${CMAKE_CURRENT_SOURCE_DIR}/Source/Modules/OverrideC.cmake)
+set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_SOURCE_DIR}/Source/Modules/OverrideCXX.cmake)
 project(CMake)
+unset(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX)
+unset(CMAKE_USER_MAKE_RULES_OVERRIDE_C)
 
 # Make sure we can find internal find_package modules only used for
 # building CMake and not for shipping externally
@@ -60,11 +64,20 @@ if(NOT DEFINED CMAKE_CXX_STANDARD AND NOT CMake_NO_CXX_STANDARD)
   if (CMAKE_CXX_COMPILER_ID STREQUAL SunPro AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.14)
     set(CMAKE_CXX_STANDARD 98)
   else()
-    include(${CMake_SOURCE_DIR}/Source/Checks/cm_cxx14_cstdio.cmake)
-    if(NOT CMake_CXX14_CSTDIO_BROKEN)
-      set(CMAKE_CXX_STANDARD 14)
+    if(NOT CMAKE_VERSION VERSION_LESS 3.8)
+      include(${CMake_SOURCE_DIR}/Source/Checks/cm_cxx17_check.cmake)
     else()
-      set(CMAKE_CXX_STANDARD 11)
+      set(CMake_CXX17_BROKEN 1)
+    endif()
+    if(NOT CMake_CXX17_BROKEN)
+      set(CMAKE_CXX_STANDARD 17)
+    else()
+      include(${CMake_SOURCE_DIR}/Source/Checks/cm_cxx14_check.cmake)
+      if(NOT CMake_CXX14_BROKEN)
+        set(CMAKE_CXX_STANDARD 14)
+      else()
+        set(CMAKE_CXX_STANDARD 11)
+      endif()
     endif()
   endif()
 endif()
@@ -251,7 +264,12 @@ if(CMake_RUN_CLANG_TIDY)
   endif()
   set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 
-  # provide definitions for targets that require a rebuild once .clang-tidy changes
+  # Create a preprocessor definition that depends on .clang-tidy content so
+  # the compile command will change when .clang-tidy changes.  This ensures
+  # that a subsequent build re-runs clang-tidy on all sources even if they
+  # do not otherwise need to be recompiled.  Nothing actually uses this
+  # definition.  We add it to targets on which we run clang-tidy just to
+  # get the build dependency on the .clang-tidy file.
   file(SHA1 ${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy clang_tidy_sha1)
   set(CLANG_TIDY_DEFINITIONS "CLANG_TIDY_SHA1=${clang_tidy_sha1}")
   unset(clang_tidy_sha1)
@@ -267,7 +285,7 @@ if(CMake_RUN_IWYU)
     message(FATAL_ERROR "CMake_RUN_IWYU is ON but include-what-you-use is not found!")
   endif()
   set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE
-    "${IWYU_COMMAND};-Xiwyu;--mapping_file=${CMake_SOURCE_DIR}/Utilities/IWYU/mapping.imp")
+    "${IWYU_COMMAND};-Xiwyu;--mapping_file=${CMake_SOURCE_DIR}/Utilities/IWYU/mapping.imp;-w;-DCMAKE_IWYU")
 endif()
 
 
@@ -292,6 +310,8 @@ endmacro()
 # Simply to improve readability of the main script.
 #-----------------------------------------------------------------------
 macro (CMAKE_BUILD_UTILITIES)
+  find_package(Threads)
+
   #---------------------------------------------------------------------
   # Create the kwsys library for CMake.
   set(KWSYS_NAMESPACE cmsys)
@@ -526,7 +546,7 @@ macro (CMAKE_BUILD_UTILITIES)
   #---------------------------------------------------------------------
   # Build libuv library.
   if(CMAKE_USE_SYSTEM_LIBUV)
-    find_package(LibUV 1.0.0)
+    find_package(LibUV 1.10.0)
     if(NOT LIBUV_FOUND)
       message(FATAL_ERROR
         "CMAKE_USE_SYSTEM_LIBUV is ON but a libuv is not found!")
@@ -553,22 +573,24 @@ macro (CMAKE_BUILD_UTILITIES)
   #---------------------------------------------------------------------
   # Use curses?
   if (UNIX)
-    # there is a bug in the Syllable libraries which makes linking ccmake fail, Alex
-    if(NOT CMAKE_SYSTEM_NAME MATCHES syllable)
-      set(CURSES_NEED_NCURSES TRUE)
-      find_package(Curses QUIET)
-      if (CURSES_LIBRARY)
-        option(BUILD_CursesDialog "Build the CMake Curses Dialog ccmake" ON)
-      else ()
-        message("Curses libraries were not found. Curses GUI for CMake will not be built.")
-        set(BUILD_CursesDialog 0)
-      endif ()
-    else()
-      set(BUILD_CursesDialog 0)
+    if(NOT DEFINED BUILD_CursesDialog)
+      include(${CMake_SOURCE_DIR}/Source/Checks/Curses.cmake)
+      option(BUILD_CursesDialog "Build the CMake Curses Dialog ccmake" "${CMakeCheckCurses_COMPILED}")
     endif()
   else ()
     set(BUILD_CursesDialog 0)
   endif ()
+  if(BUILD_CursesDialog)
+    set(CURSES_NEED_NCURSES TRUE)
+    find_package(Curses)
+    if(NOT CURSES_FOUND)
+      message(WARNING
+        "'ccmake' will not be built because Curses was not found.\n"
+        "Turn off BUILD_CursesDialog to suppress this message."
+        )
+      set(BUILD_CursesDialog 0)
+    endif()
+  endif()
   if(BUILD_CursesDialog)
     if(NOT CMAKE_USE_SYSTEM_FORM)
       add_subdirectory(Source/CursesDialog/form)

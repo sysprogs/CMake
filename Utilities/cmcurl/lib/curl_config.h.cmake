@@ -389,8 +389,8 @@
 /* if zlib is available */
 #cmakedefine HAVE_LIBZ 1
 
-/* Define to 1 if you have the <limits.h> header file. */
-#cmakedefine HAVE_LIMITS_H 1
+/* if brotli is available */
+#cmakedefine HAVE_BROTLI 1
 
 /* if your compiler supports LL */
 #cmakedefine HAVE_LL 1
@@ -998,3 +998,6 @@
    typedef int ssize_t;
 # endif
 #endif
+
+/* Define to 1 if you have the mach_absolute_time function. */
+#cmakedefine HAVE_MACH_ABSOLUTE_TIME 1

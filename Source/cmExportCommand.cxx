@@ -20,8 +20,8 @@
 class cmExecutionStatus;
 
 #if defined(__HAIKU__)
-#include <FindDirectory.h>
-#include <StorageDefs.h>
+#  include <FindDirectory.h>
+#  include <StorageDefs.h>
 #endif
 
 cmExportCommand::cmExportCommand()
@@ -92,8 +92,8 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   // Get the file to write.
-  if (cmSystemTools::FileIsFullPath(fname.c_str())) {
-    if (!this->Makefile->CanIWriteThisFile(fname.c_str())) {
+  if (cmSystemTools::FileIsFullPath(fname)) {
+    if (!this->Makefile->CanIWriteThisFile(fname)) {
       std::ostringstream e;
       e << "FILE option given filename \"" << fname
         << "\" which is in the source tree.\n";
@@ -146,17 +146,6 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
       }
 
       if (cmTarget* target = gg->FindTarget(currentTarget)) {
-        if (target->GetType() == cmStateEnums::OBJECT_LIBRARY) {
-          std::string reason;
-          if (!this->Makefile->GetGlobalGenerator()
-                 ->HasKnownObjectFileLocation(&reason)) {
-            std::ostringstream e;
-            e << "given OBJECT library \"" << currentTarget
-              << "\" which may not be exported" << reason << ".";
-            this->SetError(e.str());
-            return false;
-          }
-        }
         if (target->GetType() == cmStateEnums::UTILITY) {
           this->SetError("given custom target \"" + currentTarget +
                          "\" which may not be exported.");
@@ -205,7 +194,7 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
   std::vector<std::string> configurationTypes;
   this->Makefile->GetConfigurations(configurationTypes);
   if (configurationTypes.empty()) {
-    configurationTypes.push_back("");
+    configurationTypes.emplace_back();
   }
   for (std::string const& ct : configurationTypes) {
     ebfg->AddConfiguration(ct);
@@ -277,7 +266,7 @@ bool cmExportCommand::HandlePackage(std::vector<std::string> const& args)
 }
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
-#include <windows.h>
+#  include <windows.h>
 
 void cmExportCommand::ReportRegistryError(std::string const& msg,
                                           std::string const& key, long err)
@@ -328,7 +317,7 @@ void cmExportCommand::StorePackageRegistryDir(std::string const& package,
                                               const char* content,
                                               const char* hash)
 {
-#if defined(__HAIKU__)
+#  if defined(__HAIKU__)
   char dir[B_PATH_NAME_LENGTH];
   if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, dir, sizeof(dir)) !=
       B_OK) {
@@ -337,7 +326,7 @@ void cmExportCommand::StorePackageRegistryDir(std::string const& package,
   std::string fname = dir;
   fname += "/cmake/packages/";
   fname += package;
-#else
+#  else
   std::string fname;
   if (!cmSystemTools::GetEnv("HOME", fname)) {
     return;
@@ -345,11 +334,11 @@ void cmExportCommand::StorePackageRegistryDir(std::string const& package,
   cmSystemTools::ConvertToUnixSlashes(fname);
   fname += "/.cmake/packages/";
   fname += package;
-#endif
-  cmSystemTools::MakeDirectory(fname.c_str());
+#  endif
+  cmSystemTools::MakeDirectory(fname);
   fname += "/";
   fname += hash;
-  if (!cmSystemTools::FileExists(fname.c_str())) {
+  if (!cmSystemTools::FileExists(fname)) {
     cmGeneratedFileStream entry(fname.c_str(), true);
     if (entry) {
       entry << content << "\n";

@@ -133,9 +133,9 @@ External Project Definition
         is determined by inspecting the actual content rather than using logic
         based on the file extension.
 
-      ``URL_HASH ALGO=<value>``
-        Hash of the archive file to be downloaded. The ``<value>`` should be of
-        the form ``algo=hashValue`` where ``algo`` can be any of the hashing
+      ``URL_HASH <algo>=<hashValue>``
+        Hash of the archive file to be downloaded. The argument should be of
+        the form ``<algo>=<hashValue>`` where ``algo`` can be any of the hashing
         algorithms supported by the :command:`file()` command. Specifying this
         option is strongly recommended for URL downloads, as it ensures the
         integrity of the downloaded content. It is also used as a check for a
@@ -192,6 +192,28 @@ External Project Definition
         is enabled. If this option is not specified, the value of the
         ``CMAKE_TLS_CAINFO`` variable will be used instead (see
         :command:`file(DOWNLOAD)`)
+
+      ``NETRC <level>``
+        Specify whether the .netrc file is to be used for operation. If this
+        option is not specified, the value of the ``CMAKE_NETRC`` variable
+        will be used instead (see :command:`file(DOWNLOAD)`)
+        Valid levels are:
+
+        ``IGNORED``
+          The .netrc file is ignored.
+          This is the default.
+        ``OPTIONAL``
+          The .netrc file is optional, and information in the URL is preferred.
+          The file will be scanned to find which ever information is not specified
+          in the URL.
+        ``REQUIRED``
+          The .netrc file is required, and information in the URL is ignored.
+
+      ``NETRC_FILE <file>``
+        Specify an alternative .netrc file to the one in your home directory
+        if the ``NETRC`` level is ``OPTIONAL`` or ``REQUIRED``. If this option
+        is not specified, the value of the ``CMAKE_NETRC_FILE`` variable will
+        be used instead (see :command:`file(DOWNLOAD)`)
 
     *Git*
       NOTE: A git version of 1.6.5 or later is required if this download method
@@ -357,6 +379,11 @@ External Project Definition
     ``CMAKE_GENERATOR_TOOLSET <toolset>``
       Pass a generator-specific toolset name to the CMake command (see
       :variable:`CMAKE_GENERATOR_TOOLSET`). It is an error to provide this
+      option without the ``CMAKE_GENERATOR`` option.
+
+    ``CMAKE_GENERATOR_INSTANCE <instance>``
+      Pass a generator-specific instance selection to the CMake command (see
+      :variable:`CMAKE_GENERATOR_INSTANCE`). It is an error to provide this
       option without the ``CMAKE_GENERATOR`` option.
 
     ``CMAKE_ARGS <arg>...``
@@ -687,8 +714,9 @@ control needed to implement such step-level capabilities.
   The command line, comment, working directory and byproducts of every
   standard and custom step are processed to replace the tokens
   ``<SOURCE_DIR>``, ``<SOURCE_SUBDIR>``, ``<BINARY_DIR>``, ``<INSTALL_DIR>``
-  and ``<TMP_DIR>`` with their corresponding property values defined in the
-  original call to :command:`ExternalProject_Add`.
+  ``<TMP_DIR>``, ``<DOWNLOAD_DIR>`` and ``<DOWNLOADED_FILE>`` with their
+  corresponding property values defined in the original call to
+  :command:`ExternalProject_Add`.
 
 .. command:: ExternalProject_Add_StepTargets
 
@@ -1048,7 +1076,7 @@ foreach(config IN LISTS git_config)
   list(APPEND git_clone_options --config \${config})
 endforeach()
 
-# try the clone 3 times incase there is an odd git clone issue
+# try the clone 3 times in case there is an odd git clone issue
 set(error_code 1)
 set(number_of_tries 0)
 while(error_code AND number_of_tries LESS 3)
@@ -1346,7 +1374,7 @@ endif()
 
 endfunction(_ep_write_gitupdate_script)
 
-function(_ep_write_downloadfile_script script_filename REMOTE LOCAL timeout no_progress hash tls_verify tls_cainfo userpwd http_headers)
+function(_ep_write_downloadfile_script script_filename REMOTE LOCAL timeout no_progress hash tls_verify tls_cainfo userpwd http_headers netrc netrc_file)
   if(timeout)
     set(TIMEOUT_ARGS TIMEOUT ${timeout})
     set(TIMEOUT_MSG "${timeout} seconds")
@@ -1371,6 +1399,8 @@ function(_ep_write_downloadfile_script script_filename REMOTE LOCAL timeout no_p
 
   set(TLS_VERIFY_CODE "")
   set(TLS_CAINFO_CODE "")
+  set(NETRC_CODE "")
+  set(NETRC_FILE_CODE "")
 
   # check for curl globals in the project
   if(DEFINED CMAKE_TLS_VERIFY)
@@ -1378,6 +1408,12 @@ function(_ep_write_downloadfile_script script_filename REMOTE LOCAL timeout no_p
   endif()
   if(DEFINED CMAKE_TLS_CAINFO)
     set(TLS_CAINFO_CODE "set(CMAKE_TLS_CAINFO \"${CMAKE_TLS_CAINFO}\")")
+  endif()
+  if(DEFINED CMAKE_NETRC)
+    set(NETRC_CODE "set(CMAKE_NETRC \"${CMAKE_NETRC}\")")
+  endif()
+  if(DEFINED CMAKE_NETRC_FILE)
+    set(NETRC_FILE_CODE "set(CMAKE_NETRC_FILE \"${CMAKE_NETRC_FILE}\")")
   endif()
 
   # now check for curl locals so that the local values
@@ -1392,6 +1428,16 @@ function(_ep_write_downloadfile_script script_filename REMOTE LOCAL timeout no_p
   string(LENGTH "${tls_cainfo}" tls_cainfo_len)
   if(tls_cainfo_len GREATER 0)
     set(TLS_CAINFO_CODE "set(CMAKE_TLS_CAINFO \"${tls_cainfo}\")")
+  endif()
+  # check for netrc argument
+  string(LENGTH "${netrc}" netrc_len)
+  if(netrc_len GREATER 0)
+    set(NETRC_CODE "set(CMAKE_NETRC \"${netrc}\")")
+  endif()
+  # check for netrc_file argument
+  string(LENGTH "${netrc_file}" netrc_file_len)
+  if(netrc_file_len GREATER 0)
+    set(NETRC_FILE_CODE "set(CMAKE_NETRC_FILE \"${netrc_file}\")")
   endif()
 
   if(userpwd STREQUAL ":")
@@ -1620,7 +1666,7 @@ macro(_ep_replace_location_tags target_name)
   set(vars ${ARGN})
   foreach(var ${vars})
     if(${var})
-      foreach(dir SOURCE_DIR SOURCE_SUBDIR BINARY_DIR INSTALL_DIR TMP_DIR DOWNLOADED_FILE)
+      foreach(dir SOURCE_DIR SOURCE_SUBDIR BINARY_DIR INSTALL_DIR TMP_DIR DOWNLOAD_DIR DOWNLOADED_FILE)
         get_property(val TARGET ${target_name} PROPERTY _EP_${dir})
         string(REPLACE "<${dir}>" "${val}" ${var} "${${var}}")
       endforeach()
@@ -1640,7 +1686,7 @@ function(_ep_command_line_to_initial_cache var args force)
   foreach(line ${args})
     if("${line}" MATCHES "^-D(.*)")
       set(line "${CMAKE_MATCH_1}")
-      if(setArg)
+      if(NOT "${setArg}" STREQUAL "")
         # This is required to build up lists in variables, or complete an entry
         string(APPEND setArg "${accumulator}\" CACHE ${type} \"Initial cache\" ${forceArg})")
         string(APPEND script_initial_cache "\n${setArg}")
@@ -1661,7 +1707,7 @@ function(_ep_command_line_to_initial_cache var args force)
     endif()
   endforeach()
   # Catch the final line of the args
-  if(setArg)
+  if(NOT "${setArg}" STREQUAL "")
     string(APPEND setArg "${accumulator}\" CACHE ${type} \"Initial cache\" ${forceArg})")
     string(APPEND script_initial_cache "\n${setArg}")
   endif()
@@ -1744,7 +1790,8 @@ function(_ep_get_build_command name step cmd_var)
         set(cmd "${CMAKE_COMMAND}")
       endif()
       set(args --build ".")
-      if(CMAKE_CONFIGURATION_TYPES)
+      get_property(_isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+      if(_isMultiConfig)
         if (CMAKE_CFG_INTDIR AND
             NOT CMAKE_CFG_INTDIR STREQUAL "." AND
             NOT CMAKE_CFG_INTDIR MATCHES "\\$")
@@ -1769,7 +1816,7 @@ function(_ep_get_build_command name step cmd_var)
       if("x${step}x" STREQUAL "xTESTx")
         string(REGEX REPLACE "^(.*/)cmake([^/]*)$" "\\1ctest\\2" cmd "${cmd}")
         set(args "")
-        if(CMAKE_CONFIGURATION_TYPES)
+        if(_isMultiConfig)
           list(APPEND args -C ${config})
         endif()
       endif()
@@ -1909,7 +1956,8 @@ endfunction()
 #
 function(_ep_get_configuration_subdir_suffix suffix_var)
   set(suffix "")
-  if(CMAKE_CONFIGURATION_TYPES)
+  get_property(_isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if(_isMultiConfig)
     set(suffix "/${CMAKE_CFG_INTDIR}")
   endif()
   set(${suffix_var} "${suffix}" PARENT_SCOPE)
@@ -2039,7 +2087,8 @@ function(ExternalProject_Add_Step name step)
     set_property(SOURCE ${stamp_file} PROPERTY SYMBOLIC 1)
     set(touch)
     # Remove any existing stamp in case the option changed in an existing tree.
-    if(CMAKE_CONFIGURATION_TYPES)
+    get_property(_isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_isMultiConfig)
       foreach(cfg ${CMAKE_CONFIGURATION_TYPES})
         string(REPLACE "/${CMAKE_CFG_INTDIR}" "/${cfg}" stamp_file_config "${stamp_file}")
         file(REMOVE ${stamp_file_config})
@@ -2436,11 +2485,13 @@ function(_ep_add_download_command name)
         get_property(no_progress TARGET ${name} PROPERTY _EP_DOWNLOAD_NO_PROGRESS)
         get_property(tls_verify TARGET ${name} PROPERTY _EP_TLS_VERIFY)
         get_property(tls_cainfo TARGET ${name} PROPERTY _EP_TLS_CAINFO)
+        get_property(netrc TARGET ${name} PROPERTY _EP_NETRC)
+        get_property(netrc_file TARGET ${name} PROPERTY _EP_NETRC_FILE)
         get_property(http_username TARGET ${name} PROPERTY _EP_HTTP_USERNAME)
         get_property(http_password TARGET ${name} PROPERTY _EP_HTTP_PASSWORD)
         get_property(http_headers TARGET ${name} PROPERTY _EP_HTTP_HEADER)
         set(download_script "${stamp_dir}/download-${name}.cmake")
-        _ep_write_downloadfile_script("${download_script}" "${url}" "${file}" "${timeout}" "${no_progress}" "${hash}" "${tls_verify}" "${tls_cainfo}" "${http_username}:${http_password}" "${http_headers}")
+        _ep_write_downloadfile_script("${download_script}" "${url}" "${file}" "${timeout}" "${no_progress}" "${hash}" "${tls_verify}" "${tls_cainfo}" "${http_username}:${http_password}" "${http_headers}" "${netrc}" "${netrc_file}")
         set(cmd ${CMAKE_COMMAND} -P "${download_script}"
           COMMAND)
         if (no_extract)
@@ -2699,12 +2750,22 @@ function(_ep_extract_configure_command var name)
     get_property(cmake_cache_args TARGET ${name} PROPERTY _EP_CMAKE_CACHE_ARGS)
     get_property(cmake_cache_default_args TARGET ${name} PROPERTY _EP_CMAKE_CACHE_DEFAULT_ARGS)
 
-    if(cmake_cache_args OR cmake_cache_default_args)
+    set(has_cmake_cache_args 0)
+    if(NOT "${cmake_cache_args}" STREQUAL "")
+      set(has_cmake_cache_args 1)
+    endif()
+
+    set(has_cmake_cache_default_args 0)
+    if(NOT "${cmake_cache_default_args}" STREQUAL "")
+      set(has_cmake_cache_default_args 1)
+    endif()
+
+    if(has_cmake_cache_args OR has_cmake_cache_default_args)
       set(_ep_cache_args_script "<TMP_DIR>/${name}-cache-$<CONFIG>.cmake")
-      if(cmake_cache_args)
+      if(has_cmake_cache_args)
         _ep_command_line_to_initial_cache(script_initial_cache_force "${cmake_cache_args}" 1)
       endif()
-      if(cmake_cache_default_args)
+      if(has_cmake_cache_default_args)
         _ep_command_line_to_initial_cache(script_initial_cache_default "${cmake_cache_default_args}" 0)
       endif()
       _ep_write_initial_cache(${name} "${_ep_cache_args_script}" "${script_initial_cache_force}${script_initial_cache_default}")
@@ -2712,6 +2773,7 @@ function(_ep_extract_configure_command var name)
     endif()
 
     get_target_property(cmake_generator ${name} _EP_CMAKE_GENERATOR)
+    get_target_property(cmake_generator_instance ${name} _EP_CMAKE_GENERATOR_INSTANCE)
     get_target_property(cmake_generator_platform ${name} _EP_CMAKE_GENERATOR_PLATFORM)
     get_target_property(cmake_generator_toolset ${name} _EP_CMAKE_GENERATOR_TOOLSET)
     if(cmake_generator)
@@ -2721,6 +2783,9 @@ function(_ep_extract_configure_command var name)
       endif()
       if(cmake_generator_toolset)
         list(APPEND cmd "-T${cmake_generator_toolset}")
+      endif()
+      if(cmake_generator_instance)
+        list(APPEND cmd "-DCMAKE_GENERATOR_INSTANCE:INTERNAL=${cmake_generator_instance}")
       endif()
     else()
       if(CMAKE_EXTRA_GENERATOR)
@@ -2739,6 +2804,12 @@ function(_ep_extract_configure_command var name)
       endif()
       if(CMAKE_GENERATOR_TOOLSET)
         list(APPEND cmd "-T${CMAKE_GENERATOR_TOOLSET}")
+      endif()
+      if(cmake_generator_instance)
+        message(FATAL_ERROR "Option CMAKE_GENERATOR_INSTANCE not allowed without CMAKE_GENERATOR.")
+      endif()
+      if(CMAKE_GENERATOR_INSTANCE)
+        list(APPEND cmd "-DCMAKE_GENERATOR_INSTANCE:INTERNAL=${CMAKE_GENERATOR_INSTANCE}")
       endif()
     endif()
 

@@ -58,12 +58,6 @@ find_path(OPENTHREADS_INCLUDE_DIR OpenThreads/Thread
         ENV OSG_ROOT
         ${OPENTHREADS_DIR}
         ${OSG_DIR}
-    PATHS
-        /sw # Fink
-        /opt/local # DarwinPorts
-        /opt/csw # Blastwave
-        /opt
-        /usr/freeware
     PATH_SUFFIXES include
 )
 
@@ -80,12 +74,6 @@ find_library(OPENTHREADS_LIBRARY
         ENV OSG_ROOT
         ${OPENTHREADS_DIR}
         ${OSG_DIR}
-    PATHS
-        /sw
-        /opt/local
-        /opt/csw
-        /opt
-        /usr/freeware
     PATH_SUFFIXES lib
 )
 
@@ -102,12 +90,6 @@ find_library(OPENTHREADS_LIBRARY_DEBUG
         ENV OSG_ROOT
         ${OPENTHREADS_DIR}
         ${OSG_DIR}
-    PATHS
-        /sw
-        /opt/local
-        /opt/csw
-        /opt
-        /usr/freeware
     PATH_SUFFIXES lib
 )
 

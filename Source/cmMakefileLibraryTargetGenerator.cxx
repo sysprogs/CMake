@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <memory> // IWYU pragma: keep
 #include <sstream>
+#include <stddef.h>
 #include <vector>
 
 #include "cmGeneratedFileStream.h"
@@ -88,9 +89,6 @@ void cmMakefileLibraryTargetGenerator::WriteRuleFiles()
       cmSystemTools::Error("Unknown Library Type");
       break;
   }
-
-  // Write the requires target.
-  this->WriteTargetRequiresRules();
 
   // Write clean target
   this->WriteTargetCleanRules();
@@ -528,30 +526,30 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     outpath = this->Makefile->GetCurrentBinaryDirectory();
     outpath += cmake::GetCMakeFilesDirectory();
     outpath += "/CMakeRelink.dir";
-    cmSystemTools::MakeDirectory(outpath.c_str());
+    cmSystemTools::MakeDirectory(outpath);
     outpath += "/";
     if (!targetNameImport.empty()) {
       outpathImp = outpath;
     }
   } else {
     outpath = this->GeneratorTarget->GetDirectory(this->ConfigName);
-    cmSystemTools::MakeDirectory(outpath.c_str());
+    cmSystemTools::MakeDirectory(outpath);
     outpath += "/";
     if (!targetNameImport.empty()) {
       outpathImp = this->GeneratorTarget->GetDirectory(
         this->ConfigName, cmStateEnums::ImportLibraryArtifact);
-      cmSystemTools::MakeDirectory(outpathImp.c_str());
+      cmSystemTools::MakeDirectory(outpathImp);
       outpathImp += "/";
     }
   }
 
   std::string compilePdbOutputPath =
     this->GeneratorTarget->GetCompilePDBDirectory(this->ConfigName);
-  cmSystemTools::MakeDirectory(compilePdbOutputPath.c_str());
+  cmSystemTools::MakeDirectory(compilePdbOutputPath);
 
   std::string pdbOutputPath =
     this->GeneratorTarget->GetPDBDirectory(this->ConfigName);
-  cmSystemTools::MakeDirectory(pdbOutputPath.c_str());
+  cmSystemTools::MakeDirectory(pdbOutputPath);
   pdbOutputPath += "/";
 
   std::string targetFullPath = outpath + targetName;
@@ -644,8 +642,8 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
       this->LocalGenerator->GetCurrentBinaryDirectory(),
       targetFullPathImport));
     std::string implib;
-    if (this->GeneratorTarget->GetImplibGNUtoMS(targetFullPathImport,
-                                                implib)) {
+    if (this->GeneratorTarget->GetImplibGNUtoMS(
+          this->ConfigName, targetFullPathImport, implib)) {
       libCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
         this->LocalGenerator->GetCurrentBinaryDirectory(), implib));
     }
@@ -735,10 +733,14 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     // Archiving rules never use a response file.
     useResponseFileForObjects = false;
 
-    // Limit the length of individual object lists to less than the
-    // 32K command line length limit on Windows.  We could make this a
-    // platform file variable but this should work everywhere.
-    archiveCommandLimit = 30000;
+    // Limit the length of individual object lists to less than half of
+    // the command line length limit (leaving half for other flags).
+    // This may result in several calls to the archiver.
+    if (size_t limit = cmSystemTools::CalculateCommandLineLengthLimit()) {
+      archiveCommandLimit = limit / 2;
+    } else {
+      archiveCommandLimit = 8000;
+    }
   }
 
   // Expand the rule variables.
@@ -900,7 +902,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
           std::string cmd = launcher + acc;
           rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator,
                                                        cmd, vars);
-          real_link_commands.push_back(cmd);
+          real_link_commands.push_back(std::move(cmd));
         }
       }
       // Append to the archive with the other object sets.
@@ -910,7 +912,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
           std::string cmd = launcher + aac;
           rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator,
                                                        cmd, vars);
-          real_link_commands.push_back(cmd);
+          real_link_commands.push_back(std::move(cmd));
         }
       }
       // Finish the archive.
@@ -921,7 +923,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
                                                      vars);
         // If there is no ranlib the command will be ":".  Skip it.
         if (!cmd.empty() && cmd[0] != ':') {
-          real_link_commands.push_back(cmd);
+          real_link_commands.push_back(std::move(cmd));
         }
       }
     } else {
@@ -934,7 +936,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
           cmSystemTools::GetCMakeCommand(), cmLocalGenerator::SHELL);
         cmakeCommand += " -E __run_co_compile --lwyu=";
         cmakeCommand += targetOutPathReal;
-        real_link_commands.push_back(cmakeCommand);
+        real_link_commands.push_back(std::move(cmakeCommand));
       }
 
       // Expand placeholders.
@@ -975,7 +977,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     symlink += targetOutPathSO;
     symlink += " ";
     symlink += targetOutPath;
-    commands1.push_back(symlink);
+    commands1.push_back(std::move(symlink));
     this->LocalGenerator->CreateCDCommand(
       commands1, this->Makefile->GetCurrentBinaryDirectory(),
       this->LocalGenerator->GetBinaryDirectory());

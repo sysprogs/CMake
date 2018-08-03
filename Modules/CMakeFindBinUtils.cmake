@@ -19,17 +19,29 @@
 
 # on UNIX, cygwin and mingw
 
+if(CMAKE_LINKER)
+  # we only get here if CMAKE_LINKER was specified using -D or a pre-made CMakeCache.txt
+  # (e.g. via ctest) or set in CMAKE_TOOLCHAIN_FILE
+  # find the linker in the PATH if necessary
+  get_filename_component(_CMAKE_USER_LINKER_PATH "${CMAKE_LINKER}" PATH)
+  if(NOT _CMAKE_USER_LINKER_PATH)
+    find_program(CMAKE_LINKER_WITH_PATH NAMES ${CMAKE_LINKER} HINTS ${_CMAKE_TOOLCHAIN_LOCATION})
+    if(CMAKE_LINKER_WITH_PATH)
+      set(CMAKE_LINKER ${CMAKE_LINKER_WITH_PATH})
+      get_property(_CMAKE_LINKER_CACHED CACHE CMAKE_LINKER PROPERTY TYPE)
+      if(_CMAKE_LINKER_CACHED)
+        set(CMAKE_LINKER "${CMAKE_LINKER}" CACHE STRING "Default Linker" FORCE)
+      endif()
+      unset(_CMAKE_LINKER_CACHED)
+    endif()
+    unset(CMAKE_LINKER_WITH_PATH CACHE)
+  endif()
+endif()
+
 # if it's the MS C/CXX compiler, search for link
-if("x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC"
-   OR "x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC"
-   OR "x${CMAKE_Fortran_SIMULATE_ID}" STREQUAL "xMSVC"
-   OR "x${CMAKE_C_COMPILER_ID}" STREQUAL "xMSVC"
-   OR "x${CMAKE_CXX_COMPILER_ID}" STREQUAL "xMSVC"
-   OR "x${CMAKE_CUDA_SIMULATE_ID}" STREQUAL "xMSVC"
-   OR (CMAKE_HOST_WIN32 AND (
-        "x${CMAKE_C_COMPILER_ID}" STREQUAL "xPGI"
-         OR "x${CMAKE_Fortran_COMPILER_ID}" STREQUAL "xPGI"
-   ))
+if("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_SIMULATE_ID}" STREQUAL "xMSVC"
+   OR "x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" STREQUAL "xMSVC"
+   OR (CMAKE_HOST_WIN32 AND "x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" STREQUAL "xPGI")
    OR (CMAKE_GENERATOR MATCHES "Visual Studio"
        AND NOT CMAKE_VS_PLATFORM_NAME STREQUAL "Tegra-Android"))
 

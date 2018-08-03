@@ -26,7 +26,7 @@
 #
 #
 # In an effort to remove some clutter and clear up some issues for
-# people who are not necessarily Tcl/Tk gurus/developpers, some
+# people who are not necessarily Tcl/Tk gurus/developers, some
 # variables were moved or removed.  Changes compared to CMake 2.4 are:
 #
 # ::
@@ -82,11 +82,18 @@ set(TCLTK_POSSIBLE_LIB_PATHS
   "${TK_LIBRARY_PATH}"
   "${TCL_TCLSH_PATH_PARENT}/lib"
   "${TK_WISH_PATH_PARENT}/lib"
-  /usr/local/lib/tcl/tcl8.5
-  /usr/local/lib/tcl/tk8.5
-  /usr/local/lib/tcl/tcl8.4
-  /usr/local/lib/tcl/tk8.4
-  )
+)
+
+set(TCLTK_POSSIBLE_LIB_PATH_SUFFIXES
+  lib/tcl/tcl8.7
+  lib/tcl/tk8.7
+  lib/tcl/tcl8.6
+  lib/tcl/tk8.6
+  lib/tcl/tcl8.5
+  lib/tcl/tk8.5
+  lib/tcl/tcl8.4
+  lib/tcl/tk8.4
+)
 
 if(WIN32)
   get_filename_component(
@@ -111,26 +118,30 @@ find_library(TCL_LIBRARY
   NAMES
   tcl
   tcl${TCL_LIBRARY_VERSION} tcl${TCL_TCLSH_VERSION} tcl${TK_WISH_VERSION}
-  tcl86 tcl8.6
+  tcl87 tcl8.7 tcl87t tcl8.7t
+  tcl86 tcl8.6 tcl86t tcl8.6t
   tcl85 tcl8.5
   tcl84 tcl8.4
   tcl83 tcl8.3
   tcl82 tcl8.2
   tcl80 tcl8.0
   PATHS ${TCLTK_POSSIBLE_LIB_PATHS}
+  PATH_SUFFIXES ${TCLTK_POSSIBLE_LIB_PATH_SUFFIXES}
   )
 
 find_library(TK_LIBRARY
   NAMES
   tk
   tk${TK_LIBRARY_VERSION} tk${TCL_TCLSH_VERSION} tk${TK_WISH_VERSION}
-  tk86 tk8.6
+  tk87 tk8.7 tk87t tk8.7t
+  tk86 tk8.6 tk86t tk8.6t
   tk85 tk8.5
   tk84 tk8.4
   tk83 tk8.3
   tk82 tk8.2
   tk80 tk8.0
   PATHS ${TCLTK_POSSIBLE_LIB_PATHS}
+  PATH_SUFFIXES ${TCLTK_POSSIBLE_LIB_PATH_SUFFIXES}
   )
 
 CMAKE_FIND_FRAMEWORKS(Tcl)
@@ -164,20 +175,22 @@ set(TCLTK_POSSIBLE_INCLUDE_PATHS
   ${TK_FRAMEWORK_INCLUDES}
   "${TCL_TCLSH_PATH_PARENT}/include"
   "${TK_WISH_PATH_PARENT}/include"
-  /usr/include/tcl${TK_LIBRARY_VERSION}
-  /usr/include/tcl${TCL_LIBRARY_VERSION}
-  /usr/include/tcl8.6
-  /usr/include/tcl8.5
-  /usr/include/tcl8.4
-  /usr/include/tcl8.3
-  /usr/include/tcl8.2
-  /usr/include/tcl8.0
-  /usr/local/include/tcl8.6
-  /usr/local/include/tk8.6
-  /usr/local/include/tcl8.5
-  /usr/local/include/tk8.5
-  /usr/local/include/tcl8.4
-  /usr/local/include/tk8.4
+  )
+
+set(TCLTK_POSSIBLE_INCLUDE_PATH_SUFFIXES
+  include/tcl${TK_LIBRARY_VERSION}
+  include/tcl${TCL_LIBRARY_VERSION}
+  include/tcl8.7
+  include/tk8.7
+  include/tcl8.6
+  include/tk8.6
+  include/tcl8.5
+  include/tk8.5
+  include/tcl8.4
+  include/tk8.4
+  include/tcl8.3
+  include/tcl8.2
+  include/tcl8.0
   )
 
 if(WIN32)
@@ -198,11 +211,13 @@ endif()
 find_path(TCL_INCLUDE_PATH
   NAMES tcl.h
   HINTS ${TCLTK_POSSIBLE_INCLUDE_PATHS}
+  PATH_SUFFIXES ${TCLTK_POSSIBLE_INCLUDE_PATH_SUFFIXES}
   )
 
 find_path(TK_INCLUDE_PATH
   NAMES tk.h
   HINTS ${TCLTK_POSSIBLE_INCLUDE_PATHS}
+  PATH_SUFFIXES ${TCLTK_POSSIBLE_INCLUDE_PATH_SUFFIXES}
   )
 
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)

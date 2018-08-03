@@ -132,7 +132,8 @@ public:
                             const std::string& projectName,
                             const std::string& projectDir,
                             const std::string& targetName,
-                            const std::string& config, bool fast, bool verbose,
+                            const std::string& config, bool fast, int jobs,
+                            bool verbose,
                             std::vector<std::string> const& makeOptions =
                               std::vector<std::string>()) override;
 
@@ -173,9 +174,6 @@ protected:
 
   void AppendGlobalTargetDepends(std::vector<std::string>& depends,
                                  cmGeneratorTarget* target);
-
-  // does this generator need a requires step for any of its targets
-  bool NeedRequiresStep(cmGeneratorTarget const*);
 
   // Target name hooks for superclass.
   const char* GetAllTargetName() const override { return "all"; }

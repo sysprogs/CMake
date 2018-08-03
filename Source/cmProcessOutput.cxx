@@ -4,7 +4,7 @@
 #include "cmProcessOutput.h"
 
 #if defined(_WIN32)
-#include <windows.h>
+#  include <windows.h>
 unsigned int cmProcessOutput::defaultCodepage =
   KWSYS_ENCODING_DEFAULT_CODEPAGE;
 #endif
@@ -13,7 +13,7 @@ cmProcessOutput::Encoding cmProcessOutput::FindEncoding(
   std::string const& name)
 {
   Encoding encoding = Auto;
-  if (name == "UTF8") {
+  if ((name == "UTF8") || (name == "UTF-8")) {
     encoding = UTF8;
   } else if (name == "NONE") {
     encoding = None;

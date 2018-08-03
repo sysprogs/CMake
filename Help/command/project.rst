@@ -1,7 +1,7 @@
 project
 -------
 
-Set a name, version, and enable languages for the entire project.
+Sets project details such as name, version, etc. and enables languages.
 
 .. code-block:: cmake
 
@@ -9,6 +9,7 @@ Set a name, version, and enable languages for the entire project.
  project(<PROJECT-NAME>
          [VERSION <major>[.<minor>[.<patch>[.<tweak>]]]]
          [DESCRIPTION <project-description-string>]
+         [HOMEPAGE_URL <url-string>]
          [LANGUAGES <language-name>...])
 
 Sets the name of the project and stores the name in the
@@ -41,15 +42,28 @@ in variables
 Variables corresponding to unspecified versions are set to the empty string
 (if policy :policy:`CMP0048` is set to ``NEW``).
 
-If optional ``DESCRIPTION`` is given, then additional :variable:`PROJECT_DESCRIPTION`
-variable will be set to its argument. The argument must be a string with short
-description of the project (only a few words).
+If the optional ``DESCRIPTION`` is given, then :variable:`PROJECT_DESCRIPTION`
+and :variable:`<PROJECT-NAME>_DESCRIPTION` will be set to its argument.
+The description is expected to be a relatively short string, usually no more
+than a few words.
+
+The optional ``HOMEPAGE_URL`` sets the analogous variables
+:variable:`PROJECT_HOMEPAGE_URL` and :variable:`<PROJECT-NAME>_HOMEPAGE_URL`.
+When this option is given, the URL provided should be the canonical home for
+the project.
+
+Note that the description and homepage URL may be used as defaults for
+things like packaging meta-data, documentation, etc.
 
 Optionally you can specify which languages your project supports.
-Example languages are ``C``, ``CXX`` (i.e.  C++), ``Fortran``, etc.
+Example languages include ``C``, ``CXX`` (i.e.  C++), ``CUDA``,
+``Fortran``, and ``ASM``.
 By default ``C`` and ``CXX`` are enabled if no language options are
 given.  Specify language ``NONE``, or use the ``LANGUAGES`` keyword
 and list no languages, to skip enabling any languages.
+
+If enabling ``ASM``, list it last so that CMake can check whether
+compilers for other languages like ``C`` work for assembly too.
 
 If a variable exists called :variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE`,
 the file pointed to by that variable will be included as the last step of the
@@ -59,7 +73,12 @@ The top-level ``CMakeLists.txt`` file for a project must contain a
 literal, direct call to the :command:`project` command; loading one
 through the :command:`include` command is not sufficient.  If no such
 call exists CMake will implicitly add one to the top that enables the
-default languages (``C`` and ``CXX``).
+default languages (``C`` and ``CXX``).  The name of the project set in
+the top level ``CMakeLists.txt`` file is available from the
+:variable:`CMAKE_PROJECT_NAME` variable, its description from
+:variable:`CMAKE_PROJECT_DESCRIPTION`, its homepage URL from
+:variable:`CMAKE_PROJECT_HOMEPAGE_URL` and its version from
+:variable:`CMAKE_PROJECT_VERSION`.
 
 .. note::
   Call the :command:`cmake_minimum_required` command at the beginning

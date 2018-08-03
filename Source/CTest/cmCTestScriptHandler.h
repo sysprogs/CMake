@@ -6,7 +6,9 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include "cmCTestGenericHandler.h"
+#include "cmDuration.h"
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -93,9 +95,9 @@ public:
   /**
    * Return the time remaianing that the script is allowed to run in
    * seconds if the user has set the variable CTEST_TIME_LIMIT. If that has
-   * not been set it returns 1e7 seconds
+   * not been set it returns a very large value.
    */
-  double GetRemainingTimeAllowed();
+  cmDuration GetRemainingTimeAllowed();
 
   cmCTestScriptHandler();
   ~cmCTestScriptHandler() override;
@@ -104,6 +106,9 @@ public:
 
   void CreateCMake();
   cmake* GetCMake() { return this->CMake; }
+
+  void SetRunCurrentScript(bool value);
+
 private:
   // reads in a script
   int ReadInScript(const std::string& total_script_arg);
@@ -134,6 +139,8 @@ private:
   std::vector<std::string> ConfigurationScripts;
   std::vector<bool> ScriptProcessScope;
 
+  bool ShouldRunCurrentScript;
+
   bool Backup;
   bool EmptyBinDir;
   bool EmptyBinDirOnce;
@@ -156,7 +163,7 @@ private:
   double ContinuousDuration;
 
   // what time in seconds did this script start running
-  double ScriptStartTime;
+  std::chrono::steady_clock::time_point ScriptStartTime;
 
   cmMakefile* Makefile;
   cmGlobalGenerator* GlobalGenerator;

@@ -36,6 +36,7 @@ public:
   cmTargetInternalPointer& operator=(cmTargetInternalPointer const& r);
   cmTargetInternals* operator->() const { return this->Pointer; }
   cmTargetInternals* Get() const { return this->Pointer; }
+
 private:
   cmTargetInternals* Pointer;
 };
@@ -137,7 +138,7 @@ public:
   /**
    * Clear the dependency information recorded for this target, if any.
    */
-  void ClearDependencyInformation(cmMakefile& mf, const std::string& target);
+  void ClearDependencyInformation(cmMakefile& mf);
 
   void AddLinkLibrary(cmMakefile& mf, const std::string& lib,
                       cmTargetLinkLibraryType llt);
@@ -179,6 +180,12 @@ public:
    */
   bool GetHaveInstallRule() const { return this->HaveInstallRule; }
   void SetHaveInstallRule(bool h) { this->HaveInstallRule = h; }
+
+  /**
+   * Get/Set whether this target was auto-created by a generator.
+   */
+  bool GetIsGeneratorProvided() const { return this->IsGeneratorProvided; }
+  void SetIsGeneratorProvided(bool igp) { this->IsGeneratorProvided = igp; }
 
   /** Add a utility on which this project depends. A utility is an executable
    * name as would be specified to the ADD_EXECUTABLE or UTILITY_SOURCE
@@ -284,6 +291,7 @@ private:
                             std::string const& value) const;
 
 private:
+  bool IsGeneratorProvided;
   cmPropertyMap Properties;
   std::set<std::string> SystemIncludeDirectories;
   std::set<std::string> LinkDirectoriesEmmitted;
@@ -303,7 +311,6 @@ private:
   cmTargetInternalPointer Internal;
   cmStateEnums::TargetType TargetTypeValue;
   bool HaveInstallRule;
-  bool RecordDependencies;
   bool DLLPlatform;
   bool IsAndroid;
   bool IsImportedTarget;

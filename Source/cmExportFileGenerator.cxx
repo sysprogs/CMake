@@ -11,6 +11,8 @@
 #include "cmMakefile.h"
 #include "cmOutputConverter.h"
 #include "cmPolicies.h"
+#include "cmProperty.h"
+#include "cmPropertyMap.h"
 #include "cmStateTypes.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
@@ -183,7 +185,7 @@ bool cmExportFileGenerator::PopulateInterfaceLinkLibrariesProperty(
   return false;
 }
 
-static bool isSubDirectory(const char* a, const char* b)
+static bool isSubDirectory(std::string const& a, std::string const& b)
 {
   return (cmSystemTools::ComparePath(a, b) ||
           cmSystemTools::IsSubDirectory(a, b));
@@ -195,13 +197,15 @@ static bool checkInterfaceDirs(const std::string& prepro,
 {
   const char* installDir =
     target->Makefile->GetSafeDefinition("CMAKE_INSTALL_PREFIX");
-  const char* topSourceDir = target->GetLocalGenerator()->GetSourceDirectory();
-  const char* topBinaryDir = target->GetLocalGenerator()->GetBinaryDirectory();
+  std::string const& topSourceDir =
+    target->GetLocalGenerator()->GetSourceDirectory();
+  std::string const& topBinaryDir =
+    target->GetLocalGenerator()->GetBinaryDirectory();
 
   std::vector<std::string> parts;
   cmGeneratorExpression::Split(prepro, parts);
 
-  const bool inSourceBuild = strcmp(topSourceDir, topBinaryDir) == 0;
+  const bool inSourceBuild = topSourceDir == topBinaryDir;
 
   bool hadFatalError = false;
 
@@ -231,10 +235,10 @@ static bool checkInterfaceDirs(const std::string& prepro,
         hadFatalError = true;
       }
     }
-    if (cmHasLiteralPrefix(li.c_str(), "${_IMPORT_PREFIX}")) {
+    if (cmHasLiteralPrefix(li, "${_IMPORT_PREFIX}")) {
       continue;
     }
-    if (!cmSystemTools::FileIsFullPath(li.c_str())) {
+    if (!cmSystemTools::FileIsFullPath(li)) {
       /* clang-format off */
       e << "Target \"" << target->GetName() << "\" " << prop <<
            " property contains relative path:\n"
@@ -242,9 +246,9 @@ static bool checkInterfaceDirs(const std::string& prepro,
       /* clang-format on */
       target->GetLocalGenerator()->IssueMessage(messageType, e.str());
     }
-    bool inBinary = isSubDirectory(li.c_str(), topBinaryDir);
-    bool inSource = isSubDirectory(li.c_str(), topSourceDir);
-    if (isSubDirectory(li.c_str(), installDir)) {
+    bool inBinary = isSubDirectory(li, topBinaryDir);
+    bool inSource = isSubDirectory(li, topSourceDir);
+    if (isSubDirectory(li, installDir)) {
       // The include directory is inside the install tree.  If the
       // install tree is not inside the source tree or build tree then
       // fall through to the checks below that the include directory is not
@@ -262,10 +266,12 @@ static bool checkInterfaceDirs(const std::string& prepro,
               s << "Directory:\n    \"" << li
                 << "\"\nin "
                    "INTERFACE_INCLUDE_DIRECTORIES of target \""
-                << target->GetName() << "\" is a subdirectory of the install "
-                                        "directory:\n    \""
-                << installDir << "\"\nhowever it is also "
-                                 "a subdirectory of the "
+                << target->GetName()
+                << "\" is a subdirectory of the install "
+                   "directory:\n    \""
+                << installDir
+                << "\"\nhowever it is also "
+                   "a subdirectory of the "
                 << (inBinary ? "build" : "source") << " tree:\n    \""
                 << (inBinary ? topBinaryDir : topSourceDir) << "\""
                 << std::endl;
@@ -317,7 +323,7 @@ static void prefixItems(std::string& exportDirs)
   for (std::string const& e : entries) {
     exportDirs += sep;
     sep = ";";
-    if (!cmSystemTools::FileIsFullPath(e.c_str()) &&
+    if (!cmSystemTools::FileIsFullPath(e) &&
         e.find("${_IMPORT_PREFIX}") == std::string::npos) {
       exportDirs += "${_IMPORT_PREFIX}/";
     }
@@ -591,7 +597,7 @@ void cmExportFileGenerator::ResolveTargetsInGeneratorExpression(
     std::string::size_type commaPos = input.find(',', nameStartPos);
     std::string::size_type nextOpenPos = input.find("$<", nameStartPos);
     if (commaPos == std::string::npos    // Implied 'this' target
-        || closePos == std::string::npos // Imcomplete expression.
+        || closePos == std::string::npos // Incomplete expression.
         || closePos < commaPos           // Implied 'this' target
         || nextOpenPos < commaPos)       // Non-literal
     {
@@ -773,6 +779,25 @@ void cmExportFileGenerator::SetImportDetailProperties(
       properties[prop] = m.str();
     }
   }
+
+  // Add information if this target is a managed target
+  if (target->GetManagedType(config) !=
+      cmGeneratorTarget::ManagedType::Native) {
+    std::string prop = "IMPORTED_COMMON_LANGUAGE_RUNTIME";
+    prop += suffix;
+    std::string propval;
+    if (auto* p = target->GetProperty("COMMON_LANGUAGE_RUNTIME")) {
+      propval = p;
+    } else if (target->HasLanguage("CSharp", config)) {
+      // C# projects do not have the /clr flag, so we set the property
+      // here to mark the target as (only) managed (i.e. no .lib file
+      // to link to). Otherwise the  COMMON_LANGUAGE_RUNTIME target
+      // property would have to be set manually for C# targets to make
+      // exporting/importing work.
+      propval = "CSharp";
+    }
+    properties[prop] = propval;
+  }
 }
 
 template <typename T>
@@ -899,8 +924,10 @@ void cmExportFileGenerator::GenerateExpectedTargetsCode(
         "\n\n";
   /* clang-format on */
 }
+
 void cmExportFileGenerator::GenerateImportTargetCode(
-  std::ostream& os, const cmGeneratorTarget* target)
+  std::ostream& os, cmGeneratorTarget const* target,
+  cmStateEnums::TargetType targetType)
 {
   // Construct the imported target name.
   std::string targetName = this->Namespace;
@@ -909,7 +936,7 @@ void cmExportFileGenerator::GenerateImportTargetCode(
 
   // Create the imported target.
   os << "# Create imported target " << targetName << "\n";
-  switch (target->GetType()) {
+  switch (targetType) {
     case cmStateEnums::EXECUTABLE:
       os << "add_executable(" << targetName << " IMPORTED)\n";
       break;
@@ -1092,4 +1119,42 @@ void cmExportFileGenerator::GenerateImportedFileChecksCode(
   }
 
   os << ")\n\n";
+}
+
+bool cmExportFileGenerator::PopulateExportProperties(
+  cmGeneratorTarget* gte, ImportPropertyMap& properties,
+  std::string& errorMessage)
+{
+  auto& targetProperties = gte->Target->GetProperties();
+  const auto& exportProperties = targetProperties.find("EXPORT_PROPERTIES");
+  if (exportProperties != targetProperties.end()) {
+    std::vector<std::string> propsToExport;
+    cmSystemTools::ExpandListArgument(exportProperties->second.GetValue(),
+                                      propsToExport);
+    for (auto& prop : propsToExport) {
+      /* Black list reserved properties */
+      if (cmSystemTools::StringStartsWith(prop, "IMPORTED_") ||
+          cmSystemTools::StringStartsWith(prop, "INTERFACE_")) {
+        std::ostringstream e;
+        e << "Target \"" << gte->Target->GetName() << "\" contains property \""
+          << prop << "\" in EXPORT_PROPERTIES but IMPORTED_* and INTERFACE_* "
+          << "properties are reserved.";
+        errorMessage = e.str();
+        return false;
+      }
+      auto propertyValue = targetProperties.GetPropertyValue(prop);
+      std::string evaluatedValue = cmGeneratorExpression::Preprocess(
+        propertyValue, cmGeneratorExpression::StripAllGeneratorExpressions);
+      if (evaluatedValue != propertyValue) {
+        std::ostringstream e;
+        e << "Target \"" << gte->Target->GetName() << "\" contains property \""
+          << prop << "\" in EXPORT_PROPERTIES but this property contains a "
+          << "generator expression. This is not allowed.";
+        errorMessage = e.str();
+        return false;
+      }
+      properties[prop] = propertyValue;
+    }
+  }
+  return true;
 }

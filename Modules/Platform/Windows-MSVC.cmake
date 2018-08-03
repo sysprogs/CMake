@@ -48,7 +48,11 @@ else()
 endif()
 
 if(NOT MSVC_VERSION)
-  if(CMAKE_C_SIMULATE_VERSION)
+  if("x${CMAKE_C_COMPILER_ID}" STREQUAL "xMSVC")
+    set(_compiler_version ${CMAKE_C_COMPILER_VERSION})
+  elseif("x${CMAKE_CXX_COMPILER_ID}" STREQUAL "xMSVC")
+    set(_compiler_version ${CMAKE_CXX_COMPILER_VERSION})
+  elseif(CMAKE_C_SIMULATE_VERSION)
     set(_compiler_version ${CMAKE_C_SIMULATE_VERSION})
   elseif(CMAKE_CXX_SIMULATE_VERSION)
     set(_compiler_version ${CMAKE_CXX_SIMULATE_VERSION})
@@ -65,6 +69,31 @@ if(NOT MSVC_VERSION)
     math(EXPR MSVC_VERSION "${CMAKE_MATCH_1}*100 + ${CMAKE_MATCH_2}")
   else()
     message(FATAL_ERROR "MSVC compiler version not detected properly: ${_compiler_version}")
+  endif()
+
+  if(MSVC_VERSION GREATER_EQUAL 1910)
+    # VS 2017 or greater
+    set(MSVC_TOOLSET_VERSION 141)
+  elseif(MSVC_VERSION EQUAL 1900)
+    # VS 2015
+    set(MSVC_TOOLSET_VERSION 140)
+  elseif(MSVC_VERSION EQUAL 1800)
+    # VS 2013
+    set(MSVC_TOOLSET_VERSION 120)
+  elseif(MSVC_VERSION EQUAL 1700)
+    # VS 2012
+    set(MSVC_TOOLSET_VERSION 110)
+  elseif(MSVC_VERSION EQUAL 1600)
+    # VS 2010
+    set(MSVC_TOOLSET_VERSION 100)
+  elseif(MSVC_VERSION EQUAL 1500)
+    # VS 2008
+    set(MSVC_TOOLSET_VERSION 90)
+  elseif(MSVC_VERSION EQUAL 1400)
+    # VS 2005
+    set(MSVC_TOOLSET_VERSION 80)
+  else()
+    # We don't support MSVC_TOOLSET_VERSION for earlier compiler.
   endif()
 
   set(MSVC10)
@@ -288,6 +317,34 @@ macro(__windows_compiler_msvc lang)
   set(CMAKE_${lang}_USE_RESPONSE_FILE_FOR_OBJECTS 1)
   set(CMAKE_${lang}_LINK_EXECUTABLE
     "${_CMAKE_VS_LINK_EXE}<CMAKE_LINKER> ${CMAKE_CL_NOLOGO} <OBJECTS> ${CMAKE_START_TEMP_FILE} /out:<TARGET> /implib:<TARGET_IMPLIB> /pdb:<TARGET_PDB> /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR>${_PLATFORM_LINK_FLAGS} <CMAKE_${lang}_LINK_FLAGS> <LINK_FLAGS> <LINK_LIBRARIES>${CMAKE_END_TEMP_FILE}")
+
+  if("x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xMSVC")
+    set(_CMAKE_${lang}_IPO_SUPPORTED_BY_CMAKE YES)
+    set(_CMAKE_${lang}_IPO_MAY_BE_SUPPORTED_BY_COMPILER YES)
+
+    set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "/GL")
+    set(CMAKE_${lang}_LINK_OPTIONS_IPO "/INCREMENTAL:NO" "/LTCG")
+    string(REPLACE "<LINK_FLAGS> " "/LTCG <LINK_FLAGS> "
+      CMAKE_${lang}_CREATE_STATIC_LIBRARY_IPO "${CMAKE_${lang}_CREATE_STATIC_LIBRARY}")
+  elseif("x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xClang" OR
+         "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xFlang")
+    set(_CMAKE_${lang}_IPO_SUPPORTED_BY_CMAKE YES)
+    set(_CMAKE_${lang}_IPO_MAY_BE_SUPPORTED_BY_COMPILER YES)
+
+    # '-flto=thin' available since Clang 3.9 and Xcode 8
+    # * http://clang.llvm.org/docs/ThinLTO.html#clang-llvm
+    # * https://trac.macports.org/wiki/XcodeVersionInfo
+    set(_CMAKE_LTO_THIN TRUE)
+    if(CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.9)
+      set(_CMAKE_LTO_THIN FALSE)
+    endif()
+
+    if(_CMAKE_LTO_THIN)
+      set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "-flto=thin")
+    else()
+      set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "-flto")
+    endif()
+  endif()
 
   if("x${lang}" STREQUAL "xC" OR
       "x${lang}" STREQUAL "xCXX")

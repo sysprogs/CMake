@@ -5,6 +5,7 @@
 #include "cmCPackComponentGroup.h"
 #include "cmCPackGenerator.h"
 #include "cmCPackLog.h"
+#include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
 #include "cmSystemTools.h"
 
@@ -19,9 +20,9 @@
 
 /* NSIS uses different command line syntax on Windows and others */
 #ifdef _WIN32
-#define NSIS_OPT "/"
+#  define NSIS_OPT "/"
 #else
-#define NSIS_OPT "-"
+#  define NSIS_OPT "-"
 #endif
 
 cmCPackNSISGenerator::cmCPackNSISGenerator(bool nsis64)
@@ -61,8 +62,7 @@ int cmCPackNSISGenerator::PackageFiles()
   std::ostringstream str;
   for (std::string const& file : files) {
     std::string outputDir = "$INSTDIR";
-    std::string fileN =
-      cmSystemTools::RelativePath(toplevel.c_str(), file.c_str());
+    std::string fileN = cmSystemTools::RelativePath(toplevel, file);
     if (!this->Components.empty()) {
       const std::string::size_type pos = fileN.find('/');
 
@@ -81,16 +81,15 @@ int cmCPackNSISGenerator::PackageFiles()
 
     str << "  Delete \"" << outputDir << "\\" << fileN << "\"" << std::endl;
   }
-  cmCPackLogger(cmCPackLog::LOG_DEBUG, "Uninstall Files: " << str.str()
-                                                           << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                "Uninstall Files: " << str.str() << std::endl);
   this->SetOptionIfNotSet("CPACK_NSIS_DELETE_FILES", str.str().c_str());
   std::vector<std::string> dirs;
   this->GetListOfSubdirectories(toplevel.c_str(), dirs);
   std::ostringstream dstr;
   for (std::string const& dir : dirs) {
     std::string componentName;
-    std::string fileN =
-      cmSystemTools::RelativePath(toplevel.c_str(), dir.c_str());
+    std::string fileN = cmSystemTools::RelativePath(toplevel, dir);
     if (fileN.empty()) {
       continue;
     }
@@ -115,15 +114,16 @@ int cmCPackNSISGenerator::PackageFiles()
     dstr << "  RMDir \"" << componentOutputDir << "\\" << fileN << "\""
          << std::endl;
     if (!componentName.empty()) {
-      this->Components[componentName].Directories.push_back(fileN);
+      this->Components[componentName].Directories.push_back(std::move(fileN));
     }
   }
-  cmCPackLogger(cmCPackLog::LOG_DEBUG, "Uninstall Dirs: " << dstr.str()
-                                                          << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                "Uninstall Dirs: " << dstr.str() << std::endl);
   this->SetOptionIfNotSet("CPACK_NSIS_DELETE_DIRECTORIES", dstr.str().c_str());
 
-  cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Configure file: "
-                  << nsisInFileName << " to " << nsisFileName << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_VERBOSE,
+                "Configure file: " << nsisInFileName << " to " << nsisFileName
+                                   << std::endl);
   if (this->IsSet("CPACK_NSIS_MUI_ICON") ||
       this->IsSet("CPACK_NSIS_MUI_UNIICON")) {
     std::string installerIconCode;
@@ -301,18 +301,19 @@ int cmCPackNSISGenerator::PackageFiles()
   cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Execute: " << nsisCmd << std::endl);
   std::string output;
   int retVal = 1;
-  bool res =
-    cmSystemTools::RunSingleCommand(nsisCmd.c_str(), &output, &output, &retVal,
-                                    nullptr, this->GeneratorVerbose, 0);
+  bool res = cmSystemTools::RunSingleCommand(
+    nsisCmd.c_str(), &output, &output, &retVal, nullptr,
+    this->GeneratorVerbose, cmDuration::zero());
   if (!res || retVal) {
     cmGeneratedFileStream ofs(tmpFile.c_str());
     ofs << "# Run command: " << nsisCmd << std::endl
         << "# Output:" << std::endl
         << output << std::endl;
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem running NSIS command: "
-                    << nsisCmd << std::endl
-                    << "Please check " << tmpFile << " for errors"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Problem running NSIS command: " << nsisCmd << std::endl
+                                                   << "Please check "
+                                                   << tmpFile << " for errors"
+                                                   << std::endl);
     return 0;
   }
   return 1;
@@ -330,28 +331,31 @@ int cmCPackNSISGenerator::InitializeInternal()
     this->SetOption("CPACK_INCLUDE_TOPLEVEL_DIRECTORY", nullptr);
   }
 
-  cmCPackLogger(cmCPackLog::LOG_DEBUG, "cmCPackNSISGenerator::Initialize()"
-                  << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                "cmCPackNSISGenerator::Initialize()" << std::endl);
   std::vector<std::string> path;
   std::string nsisPath;
   bool gotRegValue = false;
 
 #ifdef _WIN32
   if (Nsis64) {
-    if (!gotRegValue && cmsys::SystemTools::ReadRegistryValue(
-                          "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS\\Unicode",
-                          nsisPath, cmsys::SystemTools::KeyWOW64_64)) {
+    if (!gotRegValue &&
+        cmsys::SystemTools::ReadRegistryValue(
+          "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS\\Unicode", nsisPath,
+          cmsys::SystemTools::KeyWOW64_64)) {
       gotRegValue = true;
     }
-    if (!gotRegValue && cmsys::SystemTools::ReadRegistryValue(
-                          "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS", nsisPath,
-                          cmsys::SystemTools::KeyWOW64_64)) {
+    if (!gotRegValue &&
+        cmsys::SystemTools::ReadRegistryValue(
+          "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS", nsisPath,
+          cmsys::SystemTools::KeyWOW64_64)) {
       gotRegValue = true;
     }
   }
-  if (!gotRegValue && cmsys::SystemTools::ReadRegistryValue(
-                        "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS\\Unicode",
-                        nsisPath, cmsys::SystemTools::KeyWOW64_32)) {
+  if (!gotRegValue &&
+      cmsys::SystemTools::ReadRegistryValue(
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS\\Unicode", nsisPath,
+        cmsys::SystemTools::KeyWOW64_32)) {
     gotRegValue = true;
   }
   if (!gotRegValue &&
@@ -359,13 +363,15 @@ int cmCPackNSISGenerator::InitializeInternal()
         "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS\\Unicode", nsisPath)) {
     gotRegValue = true;
   }
-  if (!gotRegValue && cmsys::SystemTools::ReadRegistryValue(
-                        "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS", nsisPath,
-                        cmsys::SystemTools::KeyWOW64_32)) {
+  if (!gotRegValue &&
+      cmsys::SystemTools::ReadRegistryValue(
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS", nsisPath,
+        cmsys::SystemTools::KeyWOW64_32)) {
     gotRegValue = true;
   }
-  if (!gotRegValue && cmsys::SystemTools::ReadRegistryValue(
-                        "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS", nsisPath)) {
+  if (!gotRegValue &&
+      cmsys::SystemTools::ReadRegistryValue(
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS", nsisPath)) {
     gotRegValue = true;
   }
 
@@ -396,13 +402,13 @@ int cmCPackNSISGenerator::InitializeInternal()
   }
 
   std::string nsisCmd = "\"" + nsisPath + "\" " NSIS_OPT "VERSION";
-  cmCPackLogger(cmCPackLog::LOG_VERBOSE, "Test NSIS version: " << nsisCmd
-                                                               << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_VERBOSE,
+                "Test NSIS version: " << nsisCmd << std::endl);
   std::string output;
   int retVal = 1;
-  bool resS =
-    cmSystemTools::RunSingleCommand(nsisCmd.c_str(), &output, &output, &retVal,
-                                    nullptr, this->GeneratorVerbose, 0);
+  bool resS = cmSystemTools::RunSingleCommand(
+    nsisCmd.c_str(), &output, &output, &retVal, nullptr,
+    this->GeneratorVerbose, cmDuration::zero());
   cmsys::RegularExpression versionRex("v([0-9]+.[0-9]+)");
   cmsys::RegularExpression versionRexCVS("v(.*)\\.cvs");
   if (!resS || retVal ||
@@ -414,17 +420,18 @@ int cmCPackNSISGenerator::InitializeInternal()
     ofs << "# Run command: " << nsisCmd << std::endl
         << "# Output:" << std::endl
         << output << std::endl;
-    cmCPackLogger(
-      cmCPackLog::LOG_ERROR, "Problem checking NSIS version with command: "
-        << nsisCmd << std::endl
-        << "Please check " << tmpFile << " for errors" << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Problem checking NSIS version with command: "
+                    << nsisCmd << std::endl
+                    << "Please check " << tmpFile << " for errors"
+                    << std::endl);
     return 0;
   }
   if (versionRex.find(output)) {
     double nsisVersion = atof(versionRex.match(1).c_str());
     double minNSISVersion = 2.09;
-    cmCPackLogger(cmCPackLog::LOG_DEBUG, "NSIS Version: " << nsisVersion
-                                                          << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                  "NSIS Version: " << nsisVersion << std::endl);
     if (nsisVersion < minNSISVersion) {
       cmCPackLogger(cmCPackLog::LOG_ERROR,
                     "CPack requires NSIS Version 2.09 or greater.  "
@@ -435,8 +442,8 @@ int cmCPackNSISGenerator::InitializeInternal()
   }
   if (versionRexCVS.find(output)) {
     // No version check for NSIS cvs build
-    cmCPackLogger(cmCPackLog::LOG_DEBUG, "NSIS Version: CVS "
-                    << versionRexCVS.match(1) << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                  "NSIS Version: CVS " << versionRexCVS.match(1) << std::endl);
   }
   this->SetOptionIfNotSet("CPACK_INSTALLER_PROGRAM", nsisPath.c_str());
   this->SetOptionIfNotSet("CPACK_NSIS_EXECUTABLES_DIRECTORY", "bin");
@@ -448,8 +455,9 @@ int cmCPackNSISGenerator::InitializeInternal()
     this->GetOption("CPACK_NSIS_EXECUTABLES_DIRECTORY");
   std::vector<std::string> cpackPackageDesktopLinksVector;
   if (cpackPackageDeskTopLinks) {
-    cmCPackLogger(cmCPackLog::LOG_DEBUG, "CPACK_CREATE_DESKTOP_LINKS: "
-                    << cpackPackageDeskTopLinks << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                  "CPACK_CREATE_DESKTOP_LINKS: " << cpackPackageDeskTopLinks
+                                                 << std::endl);
 
     cmSystemTools::ExpandListArgument(cpackPackageDeskTopLinks,
                                       cpackPackageDesktopLinksVector);
@@ -458,7 +466,8 @@ int cmCPackNSISGenerator::InitializeInternal()
                     "CPACK_CREATE_DESKTOP_LINKS: " << cpdl << std::endl);
     }
   } else {
-    cmCPackLogger(cmCPackLog::LOG_DEBUG, "CPACK_CREATE_DESKTOP_LINKS: "
+    cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                  "CPACK_CREATE_DESKTOP_LINKS: "
                     << "not set" << std::endl);
   }
 
@@ -466,8 +475,9 @@ int cmCPackNSISGenerator::InitializeInternal()
   std::ostringstream deleteStr;
 
   if (cpackPackageExecutables) {
-    cmCPackLogger(cmCPackLog::LOG_DEBUG, "The cpackPackageExecutables: "
-                    << cpackPackageExecutables << "." << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                  "The cpackPackageExecutables: " << cpackPackageExecutables
+                                                  << "." << std::endl);
     std::vector<std::string> cpackPackageExecutablesVector;
     cmSystemTools::ExpandListArgument(cpackPackageExecutables,
                                       cpackPackageExecutablesVector);
@@ -668,8 +678,8 @@ std::string cmCPackNSISGenerator::CreateComponentDescription(
       uploadDirectory = this->GetOption("CPACK_PACKAGE_DIRECTORY");
       uploadDirectory += "/CPackUploads";
     }
-    if (!cmSystemTools::FileExists(uploadDirectory.c_str())) {
-      if (!cmSystemTools::MakeDirectory(uploadDirectory.c_str())) {
+    if (!cmSystemTools::FileExists(uploadDirectory)) {
+      if (!cmSystemTools::MakeDirectory(uploadDirectory)) {
         cmCPackLogger(cmCPackLog::LOG_ERROR,
                       "Unable to create NSIS upload directory "
                         << uploadDirectory << std::endl);
@@ -682,10 +692,11 @@ std::string cmCPackNSISGenerator::CreateComponentDescription(
     cmCPackLogger(cmCPackLog::LOG_OUTPUT,
                   "-   Building downloaded component archive: " << archiveFile
                                                                 << std::endl);
-    if (cmSystemTools::FileExists(archiveFile.c_str(), true)) {
+    if (cmSystemTools::FileExists(archiveFile, true)) {
       if (!cmSystemTools::RemoveFile(archiveFile)) {
-        cmCPackLogger(cmCPackLog::LOG_ERROR, "Unable to remove archive file "
-                        << archiveFile << std::endl);
+        cmCPackLogger(cmCPackLog::LOG_ERROR,
+                      "Unable to remove archive file " << archiveFile
+                                                       << std::endl);
         return "";
       }
     }
@@ -695,8 +706,8 @@ std::string cmCPackNSISGenerator::CreateComponentDescription(
       this->ReadListFile("CPackZIP.cmake");
 
       if (!this->IsSet("ZIP_EXECUTABLE")) {
-        cmCPackLogger(cmCPackLog::LOG_ERROR, "Unable to find ZIP program"
-                        << std::endl);
+        cmCPackLogger(cmCPackLog::LOG_ERROR,
+                      "Unable to find ZIP program" << std::endl);
         return "";
       }
     }
@@ -737,9 +748,9 @@ std::string cmCPackNSISGenerator::CreateComponentDescription(
                                       zipListFileName.c_str());
     std::string output;
     int retVal = -1;
-    int res = cmSystemTools::RunSingleCommand(cmd.c_str(), &output, &output,
-                                              &retVal, dirName.c_str(),
-                                              cmSystemTools::OUTPUT_NONE, 0);
+    int res = cmSystemTools::RunSingleCommand(
+      cmd.c_str(), &output, &output, &retVal, dirName.c_str(),
+      cmSystemTools::OUTPUT_NONE, cmDuration::zero());
     if (!res || retVal) {
       std::string tmpFile = this->GetOption("CPACK_TOPLEVEL_DIRECTORY");
       tmpFile += "/CompressZip.log";
@@ -747,10 +758,11 @@ std::string cmCPackNSISGenerator::CreateComponentDescription(
       ofs << "# Run command: " << cmd << std::endl
           << "# Output:" << std::endl
           << output << std::endl;
-      cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem running zip command: "
-                      << cmd << std::endl
-                      << "Please check " << tmpFile << " for errors"
-                      << std::endl);
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Problem running zip command: " << cmd << std::endl
+                                                    << "Please check "
+                                                    << tmpFile << " for errors"
+                                                    << std::endl);
       return "";
     }
 

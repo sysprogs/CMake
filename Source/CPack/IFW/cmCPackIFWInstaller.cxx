@@ -24,7 +24,8 @@ void cmCPackIFWInstaller::printSkippedOptionWarning(
   const std::string& optionName, const std::string& optionValue)
 {
   cmCPackIFWLogger(
-    WARNING, "Option "
+    WARNING,
+    "Option "
       << optionName << " is set to \"" << optionValue
       << "\" but will be skipped because the specified file does not exist."
       << std::endl);
@@ -93,6 +94,15 @@ void cmCPackIFWInstaller::ConfigureFromOptions()
     }
   }
 
+  // RemoveTargetDir
+  if (this->IsSetToOff("CPACK_IFW_PACKAGE_REMOVE_TARGET_DIR")) {
+    this->RemoveTargetDir = "false";
+  } else if (this->IsOn("CPACK_IFW_PACKAGE_REMOVE_TARGET_DIR")) {
+    this->RemoveTargetDir = "true";
+  } else {
+    this->RemoveTargetDir.clear();
+  }
+
   // Logo
   if (const char* option = this->GetOption("CPACK_IFW_PACKAGE_LOGO")) {
     if (cmSystemTools::FileExists(option)) {
@@ -137,7 +147,8 @@ void cmCPackIFWInstaller::ConfigureFromOptions()
     if (this->WizardStyle != "Modern" && this->WizardStyle != "Aero" &&
         this->WizardStyle != "Mac" && this->WizardStyle != "Classic") {
       cmCPackIFWLogger(
-        WARNING, "Option CPACK_IFW_PACKAGE_WIZARD_STYLE has unknown value \""
+        WARNING,
+        "Option CPACK_IFW_PACKAGE_WIZARD_STYLE has unknown value \""
           << option << "\". Expected values are: Modern, Aero, Mac, Classic."
           << std::endl);
     }
@@ -422,6 +433,10 @@ void cmCPackIFWInstaller::GenerateInstallerFile()
     xout.Element("MaintenanceToolIniFile", this->MaintenanceToolIniFile);
   }
 
+  if (!this->RemoveTargetDir.empty()) {
+    xout.Element("RemoveTargetDir", this->RemoveTargetDir);
+  }
+
   // Different allows
   if (this->IsVersionLess("2.0")) {
     // CPack IFW default policy
@@ -454,9 +469,10 @@ void cmCPackIFWInstaller::GenerateInstallerFile()
         std::string name = cmSystemTools::GetFilenameName(this->Resources[i]);
         std::string path = this->Directory + "/resources/" + name;
         cmsys::SystemTools::CopyFileIfDifferent(this->Resources[i], path);
-        resources.push_back(name);
+        resources.push_back(std::move(name));
       } else {
-        cmCPackIFWLogger(WARNING, "Can't copy resources from \""
+        cmCPackIFWLogger(WARNING,
+                         "Can't copy resources from \""
                            << this->Resources[i]
                            << "\". Resource will be skipped." << std::endl);
       }

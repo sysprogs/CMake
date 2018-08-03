@@ -8,9 +8,10 @@ Synopsis
 
 .. parsed-literal::
 
- cmake [<options>] (<path-to-source> | <path-to-existing-build>)
- cmake [(-D <var>=<value>)...] -P <cmake-script-file>
+ cmake [<options>] {<path-to-source> | <path-to-existing-build>}
+ cmake [{-D <var>=<value>}...] -P <cmake-script-file>
  cmake --build <dir> [<options>...] [-- <build-tool-options>...]
+ cmake --open <dir>
  cmake -E <command> [<options>...]
  cmake --find-package <options>...
 
@@ -50,6 +51,10 @@ Options
 
 ``--build <dir>``
  See `Build Tool Mode`_.
+
+``--open <dir>``
+ Open the generated project in the associated application.  This is
+ only supported by some generators.
 
 ``-N``
  View mode only.
@@ -153,6 +158,13 @@ following options:
 
 ``--build <dir>``
   Project binary directory to be built.  This is required and must be first.
+
+``-j [<jobs>], --parallel [<jobs>]``
+  The maximum number of concurrent processes to use when building.
+  If ``<jobs>`` is omitted the native build tool's default number is used.
+
+  The :envvar:`CMAKE_BUILD_PARALLEL_LEVEL` environment variable, if set,
+  specifies a default parallel level when this option is not given.
 
 ``--target <tgt>``
   Build ``<tgt>`` instead of default targets.  May only be specified once.
@@ -332,7 +344,7 @@ Available commands are:
     ``paxr`` (restricted pax, default), and ``zip``.
 
 ``time <command> [<args>...]``
-  Run command and return elapsed time.
+  Run command and display elapsed time.
 
 ``touch <file>``
   Touch a file.

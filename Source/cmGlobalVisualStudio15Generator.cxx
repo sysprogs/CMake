@@ -111,6 +111,93 @@ void cmGlobalVisualStudio15Generator::WriteSLNHeader(std::ostream& fout)
   }
 }
 
+bool cmGlobalVisualStudio15Generator::SetGeneratorInstance(
+  std::string const& i, cmMakefile* mf)
+{
+  if (!i.empty()) {
+    if (!this->vsSetupAPIHelper.SetVSInstance(i)) {
+      std::ostringstream e;
+      /* clang-format off */
+      e <<
+        "Generator\n"
+        "  " << this->GetName() << "\n"
+        "could not find specified instance of Visual Studio:\n"
+        "  " << i;
+      /* clang-format on */
+      mf->IssueMessage(cmake::FATAL_ERROR, e.str());
+      return false;
+    }
+  }
+
+  std::string vsInstance;
+  if (!this->vsSetupAPIHelper.GetVSInstanceInfo(vsInstance)) {
+    std::ostringstream e;
+    /* clang-format off */
+    e <<
+      "Generator\n"
+      "  " << this->GetName() << "\n"
+      "could not find any instance of Visual Studio.\n";
+    /* clang-format on */
+    mf->IssueMessage(cmake::FATAL_ERROR, e.str());
+    return false;
+  }
+
+  // Save the selected instance persistently.
+  std::string genInstance = mf->GetSafeDefinition("CMAKE_GENERATOR_INSTANCE");
+  if (vsInstance != genInstance) {
+    this->CMakeInstance->AddCacheEntry(
+      "CMAKE_GENERATOR_INSTANCE", vsInstance.c_str(),
+      "Generator instance identifier.", cmStateEnums::INTERNAL);
+  }
+
+  return true;
+}
+
+bool cmGlobalVisualStudio15Generator::GetVSInstance(std::string& dir) const
+{
+  return vsSetupAPIHelper.GetVSInstanceInfo(dir);
+}
+
+bool cmGlobalVisualStudio15Generator::IsDefaultToolset(
+  const std::string& version) const
+{
+  if (version.empty()) {
+    return true;
+  }
+
+  std::string vcToolsetVersion;
+  if (this->vsSetupAPIHelper.GetVCToolsetVersion(vcToolsetVersion)) {
+
+    cmsys::RegularExpression regex("[0-9][0-9]\\.[0-9]+");
+    if (regex.find(version) && regex.find(vcToolsetVersion)) {
+      const auto majorMinorEnd = vcToolsetVersion.find('.', 3);
+      const auto majorMinor = vcToolsetVersion.substr(0, majorMinorEnd);
+      return version == majorMinor;
+    }
+  }
+
+  return false;
+}
+
+std::string cmGlobalVisualStudio15Generator::GetAuxiliaryToolset() const
+{
+  const char* version = this->GetPlatformToolsetVersion();
+  if (version) {
+    std::string instancePath;
+    GetVSInstance(instancePath);
+    std::stringstream path;
+    path << instancePath;
+    path << "/VC/Auxiliary/Build/";
+    path << version;
+    path << "/Microsoft.VCToolsVersion." << version << ".props";
+
+    std::string toolsetPath = path.str();
+    cmSystemTools::ConvertToUnixSlashes(toolsetPath);
+    return toolsetPath;
+  }
+  return {};
+}
+
 bool cmGlobalVisualStudio15Generator::InitializeWindows(cmMakefile* mf)
 {
   // If the Win 8.1 SDK is installed then we can select a SDK matching

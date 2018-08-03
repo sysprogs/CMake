@@ -12,6 +12,7 @@
    \* CMP0021
    \* CMP0022
    \* CMP0027
+   \* CMP0037
    \* CMP0038
    \* CMP0041
    \* CMP0042
@@ -22,6 +23,7 @@
    \* CMP0065
    \* CMP0068
    \* CMP0069
+   \* CMP0073
 
 Call Stack \(most recent call first\):
   CMakeLists.txt:3 \(include\)

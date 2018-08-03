@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "cmInstalledFile.h"
@@ -16,7 +17,7 @@
 #include "cmStateTypes.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cm_jsoncpp_value.h"
+#  include "cm_jsoncpp_value.h"
 #endif
 
 class cmExternalMakefileProjectGeneratorFactory;
@@ -118,6 +119,9 @@ public:
 
   typedef std::map<std::string, cmInstalledFile> InstalledFilesMap;
 
+  static const int NO_BUILD_PARALLEL_LEVEL = -1;
+  static const int DEFAULT_BUILD_PARALLEL_LEVEL = 0;
+
   /// Default constructor
   cmake(Role role);
   /// Destructor
@@ -141,9 +145,9 @@ public:
    * path-to-source cmake was run with.
    */
   void SetHomeDirectory(const std::string& dir);
-  const char* GetHomeDirectory() const;
+  std::string const& GetHomeDirectory() const;
   void SetHomeOutputDirectory(const std::string& dir);
-  const char* GetHomeOutputDirectory() const;
+  std::string const& GetHomeOutputDirectory() const;
   //@}
 
   /**
@@ -203,6 +207,12 @@ public:
   ///! Get the names of the current registered generators
   void GetRegisteredGenerators(std::vector<GeneratorInfo>& generators) const;
 
+  ///! Set the name of the selected generator-specific instance.
+  void SetGeneratorInstance(std::string const& instance)
+  {
+    this->GeneratorInstance = instance;
+  }
+
   ///! Set the name of the selected generator-specific platform.
   void SetGeneratorPlatform(std::string const& ts)
   {
@@ -219,10 +229,26 @@ public:
   {
     return this->SourceFileExtensions;
   }
+
+  bool IsSourceExtension(const std::string& ext) const
+  {
+    return this->SourceFileExtensionsSet.find(ext) !=
+      this->SourceFileExtensionsSet.end();
+  }
+
   const std::vector<std::string>& GetHeaderExtensions() const
   {
     return this->HeaderFileExtensions;
   }
+
+  bool IsHeaderExtension(const std::string& ext) const
+  {
+    return this->HeaderFileExtensionsSet.find(ext) !=
+      this->HeaderFileExtensionsSet.end();
+  }
+
+  // Strips the extension (if present and known) from a filename
+  std::string StripExtension(const std::string& file) const;
 
   /**
    * Given a variable name, return its value (as a string).
@@ -231,6 +257,16 @@ public:
   ///! Add an entry into the cache
   void AddCacheEntry(const std::string& key, const char* value,
                      const char* helpString, int type);
+
+  bool DoWriteGlobVerifyTarget() const;
+  std::string const& GetGlobVerifyScript() const;
+  std::string const& GetGlobVerifyStamp() const;
+  void AddGlobCacheEntry(bool recurse, bool listDirectories,
+                         bool followSymlinks, const std::string& relative,
+                         const std::string& expression,
+                         const std::vector<std::string>& files,
+                         const std::string& variable,
+                         cmListFileBacktrace const& bt);
 
   /**
    * Get the system information and write it to the file specified
@@ -397,9 +433,12 @@ public:
     cmListFileBacktrace const& backtrace = cmListFileBacktrace()) const;
 
   ///! run the --build option
-  int Build(const std::string& dir, const std::string& target,
+  int Build(int jobs, const std::string& dir, const std::string& target,
             const std::string& config,
             const std::vector<std::string>& nativeOptions, bool clean);
+
+  ///! run the --open option
+  bool Open(const std::string& dir, bool dryRun);
 
   void UnwatchUnusedCli(const std::string& var);
   void WatchUnusedCli(const std::string& var);
@@ -428,6 +467,7 @@ protected:
 
   cmGlobalGenerator* GlobalGenerator;
   std::map<std::string, DiagLevel> DiagLevels;
+  std::string GeneratorInstance;
   std::string GeneratorPlatform;
   std::string GeneratorToolset;
 
@@ -476,7 +516,9 @@ private:
   std::string CheckStampList;
   std::string VSSolutionFile;
   std::vector<std::string> SourceFileExtensions;
+  std::unordered_set<std::string> SourceFileExtensionsSet;
   std::vector<std::string> HeaderFileExtensions;
+  std::unordered_set<std::string> HeaderFileExtensionsSet;
   bool ClearBuildSystem;
   bool DebugTryCompile;
   cmFileTimeComparison* FileComparison;
@@ -511,7 +553,7 @@ private:
 
 #define CMAKE_STANDARD_OPTIONS_TABLE                                          \
   { "-C <initial-cache>", "Pre-load a script to populate the cache." },       \
-    { "-D <var>[:<type>]=<value>", "Create a cmake cache entry." },           \
+    { "-D <var>[:<type>]=<value>", "Create or update a cmake cache entry." }, \
     { "-U <globbing_expr>", "Remove matching entries from CMake cache." },    \
     { "-G <generator-name>", "Specify a build system generator." },           \
     { "-T <toolset-name>",                                                    \
@@ -524,11 +566,13 @@ private:
     { "-Wno-error=dev", "Make developer warnings not errors." },              \
     { "-Wdeprecated", "Enable deprecation warnings." },                       \
     { "-Wno-deprecated", "Suppress deprecation warnings." },                  \
-    { "-Werror=deprecated", "Make deprecated macro and function warnings "    \
-                            "errors." },                                      \
+    { "-Werror=deprecated",                                                   \
+      "Make deprecated macro and function warnings "                          \
+      "errors." },                                                            \
   {                                                                           \
-    "-Wno-error=deprecated", "Make deprecated macro and function warnings "   \
-                             "not errors."                                    \
+    "-Wno-error=deprecated",                                                  \
+      "Make deprecated macro and function warnings "                          \
+      "not errors."                                                           \
   }
 
 #define FOR_EACH_C_FEATURE(F)                                                 \
@@ -545,6 +589,7 @@ private:
   F(cxx_std_11)                                                               \
   F(cxx_std_14)                                                               \
   F(cxx_std_17)                                                               \
+  F(cxx_std_20)                                                               \
   F(cxx_aggregate_default_initializers)                                       \
   F(cxx_alias_templates)                                                      \
   F(cxx_alignas)                                                              \

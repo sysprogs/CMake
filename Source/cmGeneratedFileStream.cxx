@@ -7,8 +7,8 @@
 #include "cmSystemTools.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cm_codecvt.hxx"
-#include "cm_zlib.h"
+#  include "cm_codecvt.hxx"
+#  include "cm_zlib.h"
 #endif
 
 cmGeneratedFileStream::cmGeneratedFileStream(Encoding encoding)
@@ -147,7 +147,7 @@ void cmGeneratedFileStreamBase::Open(const char* name)
   cmSystemTools::RemoveFile(this->TempName);
 
   std::string dir = cmSystemTools::GetFilenamePath(this->TempName);
-  cmSystemTools::MakeDirectory(dir.c_str());
+  cmSystemTools::MakeDirectory(dir);
 }
 
 bool cmGeneratedFileStreamBase::Close()

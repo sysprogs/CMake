@@ -32,7 +32,6 @@ public:
   /** Known versions of Visual Studio.  */
   enum VSVersion
   {
-    VS8 = 80,
     VS9 = 90,
     VS10 = 100,
     VS11 = 110,
@@ -82,12 +81,6 @@ public:
   // return true if target is fortran only
   bool TargetIsFortranOnly(const cmGeneratorTarget* gt);
 
-  // return true if target is C# only
-  static bool TargetIsCSharpOnly(cmGeneratorTarget const* gt);
-
-  // return true if target can be referenced by C# targets
-  bool TargetCanBeReferenced(cmGeneratorTarget const* gt);
-
   /** Get the top-level registry key for this VS version.  */
   std::string GetRegistryBase();
 
@@ -96,10 +89,12 @@ public:
 
   /** Return true if the generated build tree may contain multiple builds.
       i.e. "Can I build Debug and Release in the same tree?" */
-  virtual bool IsMultiConfig() const { return true; }
+  bool IsMultiConfig() const override { return true; }
 
   /** Return true if building for Windows CE */
   virtual bool TargetsWindowsCE() const { return false; }
+
+  bool IsIncludeExternalMSProjectSupported() const override { return true; }
 
   class TargetSet : public std::set<cmGeneratorTarget const*>
   {
@@ -120,8 +115,8 @@ public:
 
   bool FindMakeProgram(cmMakefile*) override;
 
-  virtual std::string ExpandCFGIntDir(const std::string& str,
-                                      const std::string& config) const;
+  std::string ExpandCFGIntDir(const std::string& str,
+                              const std::string& config) const override;
 
   void ComputeTargetObjectDirectory(cmGeneratorTarget* gt) const;
 
@@ -131,8 +126,11 @@ public:
                               std::vector<cmCustomCommand>& commands,
                               std::string const& configName);
 
+  bool Open(const std::string& bindir, const std::string& projectName,
+            bool dryRun) override;
+
 protected:
-  virtual void AddExtraIDETargets();
+  void AddExtraIDETargets() override;
 
   // Does this VS version link targets to each other if there are
   // dependencies in the SLN file?  This was done for VS versions
@@ -141,7 +139,7 @@ protected:
 
   virtual const char* GetIDEVersion() = 0;
 
-  virtual bool ComputeTargetDepends();
+  bool ComputeTargetDepends() override;
   class VSDependSet : public std::set<std::string>
   {
   };

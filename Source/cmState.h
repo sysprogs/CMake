@@ -12,6 +12,7 @@
 
 #include "cmDefinitions.h"
 #include "cmLinkedTree.h"
+#include "cmListFileCache.h"
 #include "cmPolicies.h"
 #include "cmProperty.h"
 #include "cmPropertyDefinitionMap.h"
@@ -21,8 +22,10 @@
 
 class cmCacheManager;
 class cmCommand;
+class cmGlobVerificationManager;
 class cmPropertyDefinition;
 class cmStateSnapshot;
+class cmMessenger;
 
 class cmState
 {
@@ -59,7 +62,7 @@ public:
                  std::set<std::string>& excludes,
                  std::set<std::string>& includes);
 
-  bool SaveCache(const std::string& path);
+  bool SaveCache(const std::string& path, cmMessenger* messenger);
 
   bool DeleteCache(const std::string& path);
 
@@ -122,7 +125,11 @@ public:
   bool GetIsGeneratorMultiConfig() const;
   void SetIsGeneratorMultiConfig(bool b);
 
+  // Returns a command from its name, case insensitive, or nullptr
   cmCommand* GetCommand(std::string const& name) const;
+  // Returns a command from its name, or nullptr
+  cmCommand* GetCommandByExactName(std::string const& name) const;
+
   void AddBuiltinCommand(std::string const& name, cmCommand* command);
   void AddDisallowedCommand(std::string const& name, cmCommand* command,
                             cmPolicies::PolicyID policy, const char* message);
@@ -137,9 +144,9 @@ public:
   const char* GetGlobalProperty(const std::string& prop);
   bool GetGlobalPropertyAsBool(const std::string& prop);
 
-  const char* GetSourceDirectory() const;
+  std::string const& GetSourceDirectory() const;
   void SetSourceDirectory(std::string const& sourceDirectory);
-  const char* GetBinaryDirectory() const;
+  std::string const& GetBinaryDirectory() const;
   void SetBinaryDirectory(std::string const& binaryDirectory);
 
   void SetWindowsShell(bool windowsShell);
@@ -164,12 +171,24 @@ private:
                      const char* helpString,
                      cmStateEnums::CacheEntryType type);
 
+  bool DoWriteGlobVerifyTarget() const;
+  std::string const& GetGlobVerifyScript() const;
+  std::string const& GetGlobVerifyStamp() const;
+  bool SaveVerificationScript(const std::string& path);
+  void AddGlobCacheEntry(bool recurse, bool listDirectories,
+                         bool followSymlinks, const std::string& relative,
+                         const std::string& expression,
+                         const std::vector<std::string>& files,
+                         const std::string& variable,
+                         cmListFileBacktrace const& bt);
+
   std::map<cmProperty::ScopeType, cmPropertyDefinitionMap> PropertyDefinitions;
   std::vector<std::string> EnabledLanguages;
   std::map<std::string, cmCommand*> BuiltinCommands;
   std::map<std::string, cmCommand*> ScriptedCommands;
   cmPropertyMap GlobalProperties;
   cmCacheManager* CacheManager;
+  cmGlobVerificationManager* GlobVerificationManager;
 
   cmLinkedTree<cmStateDetail::BuildsystemDirectoryStateType>
     BuildsystemDirectory;

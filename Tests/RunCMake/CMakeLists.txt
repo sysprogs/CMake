@@ -1,5 +1,8 @@
 # See adjacent README.rst for documentation of this test infrastructure.
 
+# Note that the _isMultiConfig variable is set in the parent directory's
+# CMakeLists.txt (slightly complex logic to support CMake versions before 3.9)
+
 macro(add_RunCMake_test test)
   set(TEST_ARGS ${ARGN})
   if ("${ARGV1}" STREQUAL "TEST_DIR")
@@ -14,7 +17,9 @@ macro(add_RunCMake_test test)
   endif()
   add_test(NAME RunCMake.${test} COMMAND ${CMAKE_CMAKE_COMMAND}
     -DCMAKE_MODULE_PATH=${CMAKE_CURRENT_SOURCE_DIR}
+    -DRunCMake_GENERATOR_IS_MULTI_CONFIG=${_isMultiConfig}
     -DRunCMake_GENERATOR=${CMAKE_GENERATOR}
+    -DRunCMake_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE}
     -DRunCMake_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
     -DRunCMake_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
     -DRunCMake_MAKE_PROGRAM=${CMake_TEST_EXPLICIT_MAKE_PROGRAM}
@@ -46,7 +51,9 @@ function(add_RunCMake_test_group test types)
       add_test(NAME RunCMake.${test}_${type} COMMAND ${CMAKE_CMAKE_COMMAND}
         -DTEST_TYPE=${type}
         -DCMAKE_MODULE_PATH=${CMAKE_CURRENT_SOURCE_DIR}
+        -DRunCMake_GENERATOR_IS_MULTI_CONFIG=${_isMultiConfig}
         -DRunCMake_GENERATOR=${CMAKE_GENERATOR}
+        -DRunCMake_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE}
         -DRunCMake_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
         -DRunCMake_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
         -DRunCMake_MAKE_PROGRAM=${CMake_TEST_EXPLICIT_MAKE_PROGRAM}
@@ -114,6 +121,9 @@ if(CMAKE_GENERATOR STREQUAL "Ninja")
     -DCMAKE_C_OUTPUT_EXTENSION=${CMAKE_C_OUTPUT_EXTENSION}
     -DCMAKE_SHARED_LIBRARY_PREFIX=${CMAKE_SHARED_LIBRARY_PREFIX}
     -DCMAKE_SHARED_LIBRARY_SUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX})
+  if(CMAKE_Fortran_COMPILER)
+    list(APPEND Ninja_ARGS -DTEST_Fortran=1)
+  endif()
   add_RunCMake_test(Ninja)
 endif()
 add_RunCMake_test(CTest)
@@ -142,10 +152,13 @@ add_RunCMake_test(ExternalData)
 add_RunCMake_test(FeatureSummary)
 add_RunCMake_test(FPHSA)
 add_RunCMake_test(FindBoost)
+add_RunCMake_test(FindLua)
+add_RunCMake_test(FindOpenGL)
 if(NOT CMAKE_C_COMPILER_ID MATCHES "Watcom")
   add_RunCMake_test(GenerateExportHeader)
 endif()
 add_RunCMake_test(GeneratorExpression)
+add_RunCMake_test(GeneratorInstance)
 add_RunCMake_test(GeneratorPlatform)
 add_RunCMake_test(GeneratorToolset)
 add_RunCMake_test(GetPrerequisites)
@@ -167,6 +180,7 @@ add_RunCMake_test(CompileDefinitions)
 add_RunCMake_test(CompileFeatures)
 add_RunCMake_test(PolicyScope)
 add_RunCMake_test(WriteCompilerDetectionHeader)
+add_RunCMake_test(SourceProperties)
 if(NOT WIN32)
   add_RunCMake_test(PositionIndependentCode)
 endif()
@@ -178,6 +192,7 @@ if (QT4_FOUND)
 endif()
 add_RunCMake_test(CompatibleInterface)
 add_RunCMake_test(Syntax)
+add_RunCMake_test(WorkingDirectory)
 
 add_RunCMake_test(add_custom_command)
 add_RunCMake_test(add_custom_target)
@@ -215,6 +230,7 @@ add_RunCMake_test(find_library)
 add_RunCMake_test(find_package)
 add_RunCMake_test(find_path)
 add_RunCMake_test(find_program -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME})
+add_RunCMake_test(foreach)
 add_RunCMake_test(get_filename_component)
 add_RunCMake_test(get_property)
 add_RunCMake_test(if)
@@ -224,6 +240,7 @@ add_RunCMake_test(include_guard)
 add_RunCMake_test(list)
 add_RunCMake_test(message)
 add_RunCMake_test(project -DCMake_TEST_RESOURCES=${CMake_TEST_RESOURCES})
+add_RunCMake_test(project_injected)
 add_RunCMake_test(return)
 add_RunCMake_test(separate_arguments)
 add_RunCMake_test(set_property)
@@ -294,13 +311,13 @@ endif()
 
 if("${CMAKE_GENERATOR}" MATCHES "Visual Studio")
   add_RunCMake_test(include_external_msproject)
-  if("${CMAKE_GENERATOR}" MATCHES "Visual Studio ([89]|10)" AND NOT CMAKE_VS_DEVENV_COMMAND)
+  if("${CMAKE_GENERATOR}" MATCHES "Visual Studio (9|10)" AND NOT CMAKE_VS_DEVENV_COMMAND)
     set(NO_USE_FOLDERS 1)
   endif()
   add_RunCMake_test(VSSolution -DNO_USE_FOLDERS=${NO_USE_FOLDERS})
 endif()
 
-if("${CMAKE_GENERATOR}" MATCHES "Visual Studio ([^89]|[89][0-9])")
+if("${CMAKE_GENERATOR}" MATCHES "Visual Studio ([^9]|9[0-9])")
   add_RunCMake_test(VS10Project)
 endif()
 
@@ -323,11 +340,23 @@ add_RunCMake_test(CheckIPOSupported)
 add_RunCMake_test(CommandLine -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME})
 add_RunCMake_test(CommandLineTar)
 
-add_RunCMake_test(install)
+if(CMAKE_PLATFORM_NO_VERSIONED_SONAME OR (NOT CMAKE_SHARED_LIBRARY_SONAME_FLAG AND NOT CMAKE_SHARED_LIBRARY_SONAME_C_FLAG))
+  set(NO_NAMELINK 1)
+else()
+  set(NO_NAMELINK 0)
+endif()
+
+add_RunCMake_test(install -DNO_NAMELINK=${NO_NAMELINK} -DCYGWIN=${CYGWIN})
+add_RunCMake_test(CPackCommandLine)
 add_RunCMake_test(CPackConfig)
 add_RunCMake_test(CPackInstallProperties)
 add_RunCMake_test(ExternalProject)
+add_RunCMake_test(FetchContent)
+if(NOT CMake_TEST_EXTERNAL_CMAKE)
+  set(CTestCommandLine_ARGS -DTEST_AFFINITY=$<TARGET_FILE:testAffinity>)
+endif()
 add_RunCMake_test(CTestCommandLine)
+add_RunCMake_test(CacheNewline)
 # Only run this test on unix platforms that support
 # symbolic links
 if(UNIX)
@@ -340,11 +369,17 @@ add_RunCMake_test(IfacePaths_INCLUDE_DIRECTORIES TEST_DIR IfacePaths)
 set(IfacePaths_SOURCES_ARGS -DTEST_PROP=SOURCES)
 add_RunCMake_test(IfacePaths_SOURCES TEST_DIR IfacePaths)
 
-add_RunCMake_test(COMPILE_LANGUAGE-genex)
-
 # Matlab module related tests
-if(CMake_TEST_FindMatlab)
-  add_RunCMake_test(FindMatlab)
+if(CMake_TEST_FindMatlab OR CMake_TEST_FindMatlab_MCR OR (NOT "${CMake_TEST_FindMatlab_MCR_ROOT_DIR}" STREQUAL ""))
+    set(FindMatlab_additional_test_options )
+    if(CMake_TEST_FindMatlab_MCR OR NOT "${CMake_TEST_FindMatlab_MCR_ROOT_DIR}" STREQUAL "")
+      set(FindMatlab_additional_test_options -DIS_MCR=TRUE)
+    endif()
+    if(NOT "${CMake_TEST_FindMatlab_MCR_ROOT_DIR}" STREQUAL "")
+      set(FindMatlab_additional_test_options ${FindMatlab_additional_test_options} "-DMCR_ROOT:FILEPATH=${CMake_TEST_FindMatlab_MCR_ROOT_DIR}")
+    endif()
+
+  add_RunCMake_test(FindMatlab ${FindMatlab_additional_test_options})
 endif()
 
 add_executable(pseudo_emulator pseudo_emulator.c)
@@ -379,6 +414,9 @@ if("${CMAKE_GENERATOR}" MATCHES "Make|Ninja")
   if(DEFINED CMake_TEST_CUDA)
     list(APPEND CompilerLauncher_ARGS -DCMake_TEST_CUDA=${CMake_TEST_CUDA})
   endif()
+  if(CMAKE_Fortran_COMPILER)
+    list(APPEND CompilerLauncher_ARGS -DCMake_TEST_Fortran=1)
+  endif()
   add_RunCMake_test(CompilerLauncher)
   add_RunCMake_test(ctest_labels_for_subprojects)
 endif()
@@ -411,6 +449,7 @@ if(CMake_TEST_ANDROID_NDK OR CMake_TEST_ANDROID_STANDALONE_TOOLCHAIN)
   set_property(TEST RunCMake.Android PROPERTY TIMEOUT ${CMake_TEST_ANDROID_TIMEOUT})
 endif()
 
-if(${CMAKE_GENERATOR} MATCHES "Visual Studio ([^89]|[89][0-9])")
+if(${CMAKE_GENERATOR} MATCHES "Visual Studio ([^9]|9[0-9])")
   add_RunCMake_test(CSharpCustomCommand)
+  add_RunCMake_test(CSharpReferenceImport)
 endif()

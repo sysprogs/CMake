@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "cmAlgorithms.h"
 #include "cmExecutionStatus.h"
 #include "cmMakefile.h"
 #include "cmSystemTools.h"
@@ -28,10 +29,10 @@ bool cmForEachFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
                                                  cmMakefile& mf,
                                                  cmExecutionStatus& inStatus)
 {
-  if (!cmSystemTools::Strucmp(lff.Name.c_str(), "foreach")) {
+  if (lff.Name.Lower == "foreach") {
     // record the number of nested foreach commands
     this->Depth++;
-  } else if (!cmSystemTools::Strucmp(lff.Name.c_str(), "endforeach")) {
+  } else if (lff.Name.Lower == "endforeach") {
     // if this is the endofreach for this statement
     if (!this->Depth) {
       // Remove the function blocker for this scope or bail.
@@ -96,7 +97,7 @@ bool cmForEachFunctionBlocker::IsFunctionBlocked(const cmListFileFunction& lff,
 bool cmForEachFunctionBlocker::ShouldRemove(const cmListFileFunction& lff,
                                             cmMakefile& mf)
 {
-  if (!cmSystemTools::Strucmp(lff.Name.c_str(), "endforeach")) {
+  if (lff.Name.Lower == "endforeach") {
     std::vector<std::string> expandedArguments;
     mf.ExpandArguments(lff.Arguments, expandedArguments);
     // if the endforeach has arguments then make sure
@@ -121,7 +122,7 @@ bool cmForEachCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   // create a function blocker
-  cmForEachFunctionBlocker* f = new cmForEachFunctionBlocker(this->Makefile);
+  auto f = cm::make_unique<cmForEachFunctionBlocker>(this->Makefile);
   if (args.size() > 1) {
     if (args[1] == "RANGE") {
       int start = 0;
@@ -175,7 +176,7 @@ bool cmForEachCommand::InitialPass(std::vector<std::string> const& args,
   } else {
     f->Args = args;
   }
-  this->Makefile->AddFunctionBlocker(f);
+  this->Makefile->AddFunctionBlocker(f.release());
 
   return true;
 }

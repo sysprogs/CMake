@@ -191,6 +191,12 @@
 #
 #  By default used QtIFW_ defaults (``maintenancetool``).
 #
+# .. variable:: CPACK_IFW_PACKAGE_REMOVE_TARGET_DIR
+#
+#  Set to ``OFF`` if the target directory should not be deleted when uninstalling.
+#
+#  Is ``ON`` by default
+#
 # .. variable:: CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_INI_FILE
 #
 #  Filename for the configuration of the generated maintenance tool.
@@ -817,7 +823,7 @@ if(CPACK_IFW_INSTALLERBASE_EXECUTABLE AND NOT CPACK_IFW_FRAMEWORK_VERSION_FORCED
       endif()
     endif()
   endforeach()
-  # Finaly try to get version from executable path
+  # Finally try to get version from executable path
   if(NOT CPACK_IFW_FRAMEWORK_VERSION)
     string(REGEX MATCH "[0-9]+(\\.[0-9]+)*"
       CPACK_IFW_FRAMEWORK_VERSION "${CPACK_IFW_INSTALLERBASE_EXECUTABLE}")
@@ -837,7 +843,7 @@ if(CPACK_IFW_VERBOSE)
   endif()
 endif()
 if(CPACK_IFW_INSTALLERBASE_EXECUTABLE AND NOT CPACK_IFW_FRAMEWORK_VERSION)
-  message(WARNING "Could not detect QtIFW tools version. Set used version to variable \"CPACK_IFW_FRAMEWORK_VERSION_FORCED\" manualy.")
+  message(WARNING "Could not detect QtIFW tools version. Set used version to variable \"CPACK_IFW_FRAMEWORK_VERSION_FORCED\" manually.")
 endif()
 
 #=============================================================================
@@ -864,7 +870,7 @@ macro(_cpack_ifw_resolve_script _variable)
   endif()
 endmacro()
 
-# Resolve full path to lisense file
+# Resolve full path to license file
 macro(_cpack_ifw_resolve_lisenses _variable)
   if(${_variable})
     set(_ifw_license_file FALSE)

@@ -40,8 +40,8 @@
 # Here are some CPackRPM wiki resources that are here for historic reasons and
 # are no longer maintained but may still prove useful:
 #
-#  - https://cmake.org/Wiki/CMake:CPackConfiguration
-#  - https://cmake.org/Wiki/CMake:CPackPackageGenerators#RPM_.28Unix_Only.29
+#  - https://gitlab.kitware.com/cmake/community/wikis/doc/cpack/Configuration
+#  - https://gitlab.kitware.com/cmake/community/wikis/doc/cpack/PackageGenerators#rpm-unix-only
 #
 # List of CPackRPM specific variables:
 #
@@ -191,7 +191,7 @@
 #  The projects URL.
 #
 #  * Mandatory : NO
-#  * Default   : -
+#  * Default   : :variable:`CMAKE_PROJECT_HOMEPAGE_URL`
 #
 # .. variable:: CPACK_RPM_PACKAGE_DESCRIPTION
 #               CPACK_RPM_<component>_PACKAGE_DESCRIPTION
@@ -410,17 +410,17 @@
 #
 # .. variable:: CPACK_RPM_SPEC_INSTALL_POST
 #
-#  Deprecated - use :variable:`CPACK_RPM_POST_INSTALL_SCRIPT_FILE` instead.
+#  Deprecated - use :variable:`CPACK_RPM_SPEC_MORE_DEFINE` instead.
 #
 #  * Mandatory : NO
 #  * Default   : -
 #  * Deprecated: YES
 #
-#  This way of specifying post-install script is deprecated, use
-#  :variable:`CPACK_RPM_POST_INSTALL_SCRIPT_FILE`.
-#  May be used to set an RPM post-install command inside the spec file.
-#  For example setting it to ``/bin/true`` may be used to prevent
-#  rpmbuild to strip binaries.
+#  May be used to override the ``__spec_install_post`` section within the
+#  generated spec file.  This affects the install step during package creation,
+#  not during package installation.  For adding operations to be performed
+#  during package installation, use
+#  :variable:`CPACK_RPM_POST_INSTALL_SCRIPT_FILE` instead.
 #
 # .. variable:: CPACK_RPM_SPEC_MORE_DEFINE
 #
@@ -429,7 +429,11 @@
 #  * Mandatory : NO
 #  * Default   : -
 #
-#  May be used to add any ``%define`` lines to the generated spec file.
+#  May be used to add any ``%define`` lines to the generated spec file.  An
+#  example of its use is to prevent stripping of executables (but note that
+#  this may also disable other default post install processing)::
+#
+#    set(CPACK_RPM_SPEC_MORE_DEFINE "%define __spec_install_post /bin/true")
 #
 # .. variable:: CPACK_RPM_PACKAGE_DEBUG
 #
@@ -545,7 +549,7 @@
 #                /usr/share/doc
 #
 #  May be used to exclude path (directories or files) from the auto-generated
-#  list of paths discovered by CPack RPM. The defaut value contains a
+#  list of paths discovered by CPack RPM. The default value contains a
 #  reasonable set of values if the variable is not defined by the user. If the
 #  variable is defined by the user then CPackRPM will NOT any of the default
 #  path. If you want to add some path to the default list then you can use
@@ -691,6 +695,22 @@
 #  are the same as for :variable:`CPACK_RPM_DEFAULT_FILE_PERMISSIONS`.
 #  Note that <compName> must be in upper-case.
 #
+# .. variable:: CPACK_RPM_INSTALL_WITH_EXEC
+#
+#  force execute permissions on programs and shared libraries
+#
+#  * Mandatory : NO
+#  * Default   : - (system default)
+#
+#  Force set owner, group and world execute permissions on programs and shared
+#  libraries. This can be used for creating valid rpm packages on systems such
+#  as Debian where shared libraries do not have execute permissions set.
+#
+# .. note::
+#
+#  Programs and shared libraries without execute permissions are ignored during
+#  separation of debug symbols from the binary for debuginfo packages.
+#
 # Packaging of Symbolic Links
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
@@ -751,7 +771,8 @@
 # .. note::
 #
 #  Packages generated from packages without binary files, with binary files but
-#  without execute permissions or without debug symbols will be empty.
+#  without execute permissions or without debug symbols will cause packaging
+#  termination.
 #
 # .. variable:: CPACK_BUILD_SOURCE_DIRS
 #
@@ -782,7 +803,7 @@
 #
 # .. note::
 #
-#  Each source path prefix is additionaly suffixed by ``src_<index>`` where
+#  Each source path prefix is additionally suffixed by ``src_<index>`` where
 #  index is index of the path used from :variable:`CPACK_BUILD_SOURCE_DIRS`
 #  variable. This produces ``<CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX>/src_<index>``
 #  replacement path.
@@ -860,9 +881,9 @@
 # variable while usually using :variable:`CPACK_INSTALLED_DIRECTORIES` variable
 # to provide directory containing CMakeLists.txt and source files.
 #
-# For CMake projects SRPM package would be product by executing:
+# For CMake projects SRPM package would be produced by executing::
 #
-# ``cpack -G RPM --config ./CPackSourceConfig.cmake``
+#   cpack -G RPM --config ./CPackSourceConfig.cmake
 #
 # .. note::
 #
@@ -875,10 +896,10 @@
 #
 # Once the SRPM package is generated it can be used to generate binary packages
 # by creating a directory structure for rpm generation and executing rpmbuild
-# tool:
+# tool::
 #
-# ``mkdir -p build_dir/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}``
-# ``rpmbuild --define "_topdir <path_to_build_dir>" --rebuild <SRPM_file_name>``
+#   mkdir -p build_dir/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+#   rpmbuild --define "_topdir <path_to_build_dir>" --rebuild <SRPM_file_name>
 #
 # Generated packages will be located in build_dir/RPMS directory or its sub
 # directories.
@@ -938,6 +959,34 @@
 #   set(CPACK_RPM_BUILDREQUIRES "python >= 2.5.0, cmake >= 2.8")
 
 # Author: Eric Noulard with the help of Alexander Neundorf.
+
+function(get_file_permissions FILE RETURN_VAR)
+  execute_process(COMMAND ls -l ${FILE}
+          OUTPUT_VARIABLE permissions_
+          ERROR_QUIET
+          OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+  string(REPLACE " " ";" permissions_ "${permissions_}")
+  list(GET permissions_ 0 permissions_)
+
+  unset(text_notation_)
+  set(any_chars_ ".")
+  foreach(PERMISSION_TYPE "OWNER" "GROUP" "WORLD")
+    if(permissions_ MATCHES "${any_chars_}r.*")
+      list(APPEND text_notation_ "${PERMISSION_TYPE}_READ")
+    endif()
+    string(APPEND any_chars_ ".")
+    if(permissions_ MATCHES "${any_chars_}w.*")
+      list(APPEND text_notation_ "${PERMISSION_TYPE}_WRITE")
+    endif()
+    string(APPEND any_chars_ ".")
+    if(permissions_ MATCHES "${any_chars_}x.*")
+      list(APPEND text_notation_ "${PERMISSION_TYPE}_EXECUTE")
+    endif()
+  endforeach()
+
+  set(${RETURN_VAR} "${text_notation_}" PARENT_SCOPE)
+endfunction()
 
 function(get_unix_permissions_octal_notation PERMISSIONS_VAR RETURN_VAR)
   set(PERMISSIONS ${${PERMISSIONS_VAR}})
@@ -1020,12 +1069,7 @@ function(cpack_rpm_prepare_relocation_paths)
   endforeach()
 
   # warn about all the paths that are not relocatable
-  cmake_policy(PUSH)
-    # Tell file(GLOB_RECURSE) not to follow directory symlinks
-    # even if the project does not set this policy to NEW.
-    cmake_policy(SET CMP0009 NEW)
-    file(GLOB_RECURSE FILE_PATHS_ "${WDIR}/*")
-  cmake_policy(POP)
+  file(GLOB_RECURSE FILE_PATHS_ "${WDIR}/*")
   foreach(TMP_PATH ${FILE_PATHS_})
     string(LENGTH "${WDIR}" WDIR_LEN)
     string(SUBSTRING "${TMP_PATH}" ${WDIR_LEN} -1 TMP_PATH)
@@ -1052,10 +1096,7 @@ endfunction()
 
 function(cpack_rpm_prepare_content_list)
   # get files list
-  cmake_policy(PUSH)
-    cmake_policy(SET CMP0009 NEW)
-    file(GLOB_RECURSE CPACK_RPM_INSTALL_FILES LIST_DIRECTORIES true RELATIVE "${WDIR}" "${WDIR}/*")
-  cmake_policy(POP)
+  file(GLOB_RECURSE CPACK_RPM_INSTALL_FILES LIST_DIRECTORIES true RELATIVE "${WDIR}" "${WDIR}/*")
   set(CPACK_RPM_INSTALL_FILES "/${CPACK_RPM_INSTALL_FILES}")
   string(REPLACE ";" ";/" CPACK_RPM_INSTALL_FILES "${CPACK_RPM_INSTALL_FILES}")
 
@@ -1074,10 +1115,7 @@ function(cpack_rpm_prepare_content_list)
         set(_DISTINCT_PATH "${_RPM_RELOCATION_PREFIX}")
 
         string(REPLACE "/" ";" _CPACK_RPM_PACKAGE_PREFIX_ELEMS " ${_RPM_RELOCATION_PREFIX}")
-        cmake_policy(PUSH)
-          cmake_policy(SET CMP0007 NEW)
-          list(REMOVE_AT _CPACK_RPM_PACKAGE_PREFIX_ELEMS -1)
-        cmake_policy(POP)
+        list(REMOVE_AT _CPACK_RPM_PACKAGE_PREFIX_ELEMS -1)
         unset(_TMP_LIST)
         # Now generate all of the parent dirs of the relocation path
         foreach(_PREFIX_PATH_ELEM ${_CPACK_RPM_PACKAGE_PREFIX_ELEMS})
@@ -1515,7 +1553,7 @@ function(cpack_rpm_debugsymbol_check INSTALL_FILES WORKING_DIR)
                     RESULT_VARIABLE OBJDUMP_EXEC_RESULT
                     OUTPUT_VARIABLE OBJDUMP_OUT
                     ERROR_QUIET)
-    # Check that if the given file was executable or not
+    # Check if the given file is an executable or not
     if(NOT OBJDUMP_EXEC_RESULT)
       string(FIND "${OBJDUMP_OUT}" "debug" FIND_RESULT)
       if(FIND_RESULT GREATER -1)
@@ -1559,6 +1597,30 @@ function(cpack_rpm_debugsymbol_check INSTALL_FILES WORKING_DIR)
         endforeach()
       else()
         message(WARNING "CPackRPM: File: ${F} does not contain debug symbols. They will possibly be missing from debuginfo package!")
+      endif()
+
+      get_file_permissions("${WORKING_DIR}/${F}" permissions_)
+      if(NOT "USER_EXECUTE" IN_LIST permissions_ AND
+         NOT "GROUP_EXECUTE" IN_LIST permissions_ AND
+         NOT "WORLD_EXECUTE" IN_LIST permissions_)
+        if(CPACK_RPM_INSTALL_WITH_EXEC)
+          execute_process(COMMAND chmod a+x ${WORKING_DIR}/${F}
+                  RESULT_VARIABLE res_
+                  ERROR_VARIABLE err_
+                  OUTPUT_QUIET)
+
+          if(res_)
+            message(FATAL_ERROR "CPackRPM: could not apply execute permissions "
+              "requested by CPACK_RPM_INSTALL_WITH_EXEC variable on "
+              "'${WORKING_DIR}/${F}'! Reason: '${err_}'")
+          endif()
+        else()
+          message(AUTHOR_WARNING "CPackRPM: File: ${WORKING_DIR}/${F} does not "
+            "have execute permissions. Debuginfo symbols will not be extracted"
+            "! Missing debuginfo may cause packaging failure. Consider setting "
+            "execute permissions or setting 'CPACK_RPM_INSTALL_WITH_EXEC' "
+            "variable.")
+        endif()
       endif()
     endif()
   endforeach()
@@ -1727,6 +1789,10 @@ function(cpack_rpm_generate_package)
       # if neither var is defined lets use the name as summary
       string(TOLOWER "${CPACK_PACKAGE_NAME}" CPACK_RPM_PACKAGE_SUMMARY)
     endif()
+  endif()
+
+  if(NOT CPACK_RPM_PACKAGE_URL AND CMAKE_PROJECT_HOMEPAGE_URL)
+    set(CPACK_RPM_PACKAGE_URL "${CMAKE_PROJECT_HOMEPAGE_URL}")
   endif()
 
   # CPACK_RPM_PACKAGE_NAME (mandatory)
@@ -1926,19 +1992,15 @@ function(cpack_rpm_generate_package)
     endif()
 
     if(DEFINED CPACK_RPM_PACKAGE_${_RPM_SPEC_HEADER})
-      cmake_policy(PUSH)
-        cmake_policy(SET CMP0057 NEW)
-        # Prefix can be replaced by Prefixes but the old version stil works so we'll ignore it for now
-        # Requires* is a special case because it gets transformed to Requires(pre/post/preun/postun)
-        # Auto* is a special case because the tags can not be queried by querytags rpmbuild flag
-        set(special_case_tags_ PREFIX REQUIRES_PRE REQUIRES_POST REQUIRES_PREUN REQUIRES_POSTUN AUTOPROV AUTOREQ AUTOREQPROV)
-        if(NOT _RPM_SPEC_HEADER IN_LIST RPMBUILD_TAG_LIST AND NOT _RPM_SPEC_HEADER IN_LIST special_case_tags_)
-          cmake_policy(POP)
-          message(AUTHOR_WARNING "CPackRPM:Warning: ${_RPM_SPEC_HEADER} not "
-              "supported in provided rpmbuild. Tag will not be used.")
-          continue()
-        endif()
-      cmake_policy(POP)
+      # Prefix can be replaced by Prefixes but the old version still works so we'll ignore it for now
+      # Requires* is a special case because it gets transformed to Requires(pre/post/preun/postun)
+      # Auto* is a special case because the tags can not be queried by querytags rpmbuild flag
+      set(special_case_tags_ PREFIX REQUIRES_PRE REQUIRES_POST REQUIRES_PREUN REQUIRES_POSTUN AUTOPROV AUTOREQ AUTOREQPROV)
+      if(NOT _RPM_SPEC_HEADER IN_LIST RPMBUILD_TAG_LIST AND NOT _RPM_SPEC_HEADER IN_LIST special_case_tags_)
+        message(AUTHOR_WARNING "CPackRPM:Warning: ${_RPM_SPEC_HEADER} not "
+            "supported in provided rpmbuild. Tag will not be used.")
+        continue()
+      endif()
 
       if(CPACK_RPM_PACKAGE_DEBUG)
         message("CPackRPM:Debug: using CPACK_RPM_PACKAGE_${_RPM_SPEC_HEADER}")
@@ -1985,13 +2047,13 @@ function(cpack_rpm_generate_package)
   # CPACK_RPM_POST_INSTALL_SCRIPT_FILE (or CPACK_RPM_<COMPONENT>_POST_INSTALL_SCRIPT_FILE)
   # CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE (or CPACK_RPM_<COMPONENT>_POST_UNINSTALL_SCRIPT_FILE)
   # May be used to embed a post (un)installation script in the spec file.
-  # The refered script file(s) will be read and directly
+  # The referred script file(s) will be read and directly
   # put after the %post or %postun section
   # ----------------------------------------------------------------
   # CPACK_RPM_PRE_INSTALL_SCRIPT_FILE (or CPACK_RPM_<COMPONENT>_PRE_INSTALL_SCRIPT_FILE)
   # CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE (or CPACK_RPM_<COMPONENT>_PRE_UNINSTALL_SCRIPT_FILE)
   # May be used to embed a pre (un)installation script in the spec file.
-  # The refered script file(s) will be read and directly
+  # The referred script file(s) will be read and directly
   # put after the %pre or %preun section
   foreach(RPM_SCRIPT_FILE_TYPE_ "INSTALL" "UNINSTALL")
     foreach(RPM_SCRIPT_FILE_TIME_ "PRE" "POST")
@@ -2022,7 +2084,7 @@ function(cpack_rpm_generate_package)
 
   # CPACK_RPM_CHANGELOG_FILE
   # May be used to embed a changelog in the spec file.
-  # The refered file will be read and directly put after the %changelog section
+  # The referred file will be read and directly put after the %changelog section
   if(CPACK_RPM_CHANGELOG_FILE)
     if(EXISTS ${CPACK_RPM_CHANGELOG_FILE})
       file(READ ${CPACK_RPM_CHANGELOG_FILE} CPACK_RPM_SPEC_CHANGELOG)
@@ -2152,7 +2214,7 @@ function(cpack_rpm_generate_package)
     string(STRIP "${CPACK_RPM_INSTALL_FILES}" CPACK_RPM_INSTALL_FILES_LIST)
     # Transform endline separated - string into CMake List
     string(REPLACE "\n" ";" CPACK_RPM_INSTALL_FILES_LIST "${CPACK_RPM_INSTALL_FILES_LIST}")
-    # Remove unecessary quotes
+    # Remove unnecessary quotes
     string(REPLACE "\"" "" CPACK_RPM_INSTALL_FILES_LIST "${CPACK_RPM_INSTALL_FILES_LIST}")
     # Remove ABSOLUTE install file from INSTALL FILE LIST
     list(REMOVE_ITEM CPACK_RPM_INSTALL_FILES_LIST ${CPACK_ABSOLUTE_DESTINATION_FILES_INTERNAL})
@@ -2230,12 +2292,9 @@ function(cpack_rpm_generate_package)
             continue()
           endif()
 
-          cmake_policy(PUSH)
-            cmake_policy(SET CMP0009 NEW)
-            file(GLOB_RECURSE files_for_move_ LIST_DIRECTORIES false RELATIVE
-              "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}"
-              "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}/*")
-          cmake_policy(POP)
+          file(GLOB_RECURSE files_for_move_ LIST_DIRECTORIES false RELATIVE
+            "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}"
+            "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}/*")
 
           foreach(f_ IN LISTS files_for_move_)
             get_filename_component(dir_path_ "${f_}" DIRECTORY)
@@ -2367,13 +2426,9 @@ ${TMP_DEBUGINFO_ADDITIONAL_SOURCES}
     "CPACK_RPM_FILE_NAME")
   if(NOT CPACK_RPM_FILE_NAME STREQUAL "RPM-DEFAULT")
     if(CPACK_RPM_FILE_NAME)
-      cmake_policy(PUSH)
-        cmake_policy(SET CMP0010 NEW)
-        if(NOT CPACK_RPM_FILE_NAME MATCHES ".*\\.rpm")
-      cmake_policy(POP)
-          message(FATAL_ERROR "'${CPACK_RPM_FILE_NAME}' is not a valid RPM package file name as it must end with '.rpm'!")
-        endif()
-      cmake_policy(POP)
+      if(NOT CPACK_RPM_FILE_NAME MATCHES ".*\\.rpm")
+        message(FATAL_ERROR "'${CPACK_RPM_FILE_NAME}' is not a valid RPM package file name as it must end with '.rpm'!")
+      endif()
     else()
       # old file name format for back compatibility
       string(TOUPPER "${CPACK_RPM_MAIN_COMPONENT}"
@@ -2413,7 +2468,7 @@ ${TMP_DEBUGINFO_ADDITIONAL_SOURCES}
     endif()
 
     # Disable debuginfo packages - srpm generates invalid packages due to
-    # releasing controll to cpack to generate binary packages.
+    # releasing control to cpack to generate binary packages.
     # Note however that this doesn't prevent cpack to generate debuginfo
     # packages when run from srpm with --rebuild.
     set(TMP_RPM_DISABLE_DEBUGINFO "%define debug_package %{nil}")
@@ -2691,13 +2746,8 @@ mv %_topdir/tmpBBroot $RPM_BUILD_ROOT
     endif()
 
     # find generated rpm files and take their names
-    cmake_policy(PUSH)
-      # Tell file(GLOB_RECURSE) not to follow directory symlinks
-      # even if the project does not set this policy to NEW.
-      cmake_policy(SET CMP0009 NEW)
-      file(GLOB_RECURSE GENERATED_FILES "${CPACK_RPM_DIRECTORY}/RPMS/*.rpm"
-        "${CPACK_RPM_DIRECTORY}/SRPMS/*.rpm")
-    cmake_policy(POP)
+    file(GLOB_RECURSE GENERATED_FILES "${CPACK_RPM_DIRECTORY}/RPMS/*.rpm"
+      "${CPACK_RPM_DIRECTORY}/SRPMS/*.rpm")
 
     if(NOT GENERATED_FILES)
       message(FATAL_ERROR "RPM package was not generated! ${CPACK_RPM_DIRECTORY}")

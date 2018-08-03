@@ -9,6 +9,11 @@ set(CMAKE_DEPFILE_FLAGS_CXX "-MD -MT <OBJECT> -MF <DEPFILE>")
 
 if("x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC")
 
+  if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 18.0.0)
+    set(CMAKE_CXX17_STANDARD_COMPILE_OPTION "-Qstd=c++17")
+    set(CMAKE_CXX17_EXTENSION_COMPILE_OPTION "-Qstd=c++17")
+  endif()
+
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16.0)
     set(CMAKE_CXX14_STANDARD_COMPILE_OPTION "-Qstd=c++14")
     set(CMAKE_CXX14_EXTENSION_COMPILE_OPTION "-Qstd=c++14")
@@ -29,14 +34,23 @@ if("x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC")
 
 else()
 
+  if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 18.0.0)
+    set(CMAKE_CXX17_STANDARD_COMPILE_OPTION "-std=c++17")
+    set(CMAKE_CXX17_EXTENSION_COMPILE_OPTION "-std=gnu++17")
+  endif()
+
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15.0.2)
     set(CMAKE_CXX14_STANDARD_COMPILE_OPTION "-std=c++14")
-    # todo: there is no gnu++14 value supported; figure out what to do
-    set(CMAKE_CXX14_EXTENSION_COMPILE_OPTION "-std=c++14")
   elseif (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15.0.0)
     set(CMAKE_CXX14_STANDARD_COMPILE_OPTION "-std=c++1y")
-    # todo: there is no gnu++14 value supported; figure out what to do
-    set(CMAKE_CXX14_EXTENSION_COMPILE_OPTION "-std=c++1y")
+  endif()
+
+  # Intel 15.0.2 accepts c++14 instead of c++1y, but not gnu++14
+  # instead of gnu++1y.  Intel 17.0.0 accepts gnu++14 too.
+  if(NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17.0)
+    set(CMAKE_CXX14_EXTENSION_COMPILE_OPTION "-std=gnu++14")
+  elseif (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15.0.0)
+    set(CMAKE_CXX14_EXTENSION_COMPILE_OPTION "-std=gnu++1y")
   endif()
 
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13.0)

@@ -3,28 +3,32 @@
 #include "cmSystemTools.h"
 
 #include "cmAlgorithms.h"
+#include "cmDuration.h"
 #include "cmProcessOutput.h"
 #include "cm_sys_stat.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cmArchiveWrite.h"
-#include "cmLocale.h"
-#include "cm_libarchive.h"
-#ifndef __LA_INT64_T
-#define __LA_INT64_T la_int64_t
-#endif
+#  include "cmArchiveWrite.h"
+#  include "cmLocale.h"
+#  include "cm_libarchive.h"
+#  ifndef __LA_INT64_T
+#    define __LA_INT64_T la_int64_t
+#  endif
+#  ifndef __LA_SSIZE_T
+#    define __LA_SSIZE_T la_ssize_t
+#  endif
 #endif
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#include "cmCryptoHash.h"
+#  include "cmCryptoHash.h"
 #endif
 
 #if defined(CMAKE_USE_ELF_PARSER)
-#include "cmELF.h"
+#  include "cmELF.h"
 #endif
 
 #if defined(CMAKE_USE_MACH_PARSER)
-#include "cmMachO.h"
+#  include "cmMachO.h"
 #endif
 
 #include "cmsys/Directory.hxx"
@@ -47,26 +51,30 @@
 #include <utility>
 
 #if defined(_WIN32)
-#include <windows.h>
+#  include <windows.h>
 // include wincrypt.h after windows.h
-#include <wincrypt.h>
+#  include <wincrypt.h>
+
+#  include <fcntl.h> /* _O_TEXT */
+
+#  include "cm_uv.h"
 #else
-#include <sys/time.h>
-#include <unistd.h>
-#include <utime.h>
+#  include <sys/time.h>
+#  include <unistd.h>
+#  include <utime.h>
 #endif
 
 #if defined(_WIN32) &&                                                        \
   (defined(_MSC_VER) || defined(__WATCOMC__) || defined(__MINGW32__))
-#include <io.h>
+#  include <io.h>
 #endif
 
 #if defined(__APPLE__)
-#include <mach-o/dyld.h>
+#  include <mach-o/dyld.h>
 #endif
 
 #ifdef __QNX__
-#include <malloc.h> /* for malloc/free on QNX */
+#  include <malloc.h> /* for malloc/free on QNX */
 #endif
 
 static bool cm_isspace(char c)
@@ -88,32 +96,32 @@ public:
 
 #if !defined(HAVE_ENVIRON_NOT_REQUIRE_PROTOTYPE)
 // For GetEnvironmentVariables
-#if defined(_WIN32)
+#  if defined(_WIN32)
 extern __declspec(dllimport) char** environ;
-#else
+#  else
 extern char** environ;
-#endif
+#  endif
 #endif
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
 static std::string cm_archive_entry_pathname(struct archive_entry* entry)
 {
-#if cmsys_STL_HAS_WSTRING
+#  if cmsys_STL_HAS_WSTRING
   return cmsys::Encoding::ToNarrow(archive_entry_pathname_w(entry));
-#else
+#  else
   return archive_entry_pathname(entry);
-#endif
+#  endif
 }
 
 static int cm_archive_read_open_file(struct archive* a, const char* file,
                                      int block_size)
 {
-#if cmsys_STL_HAS_WSTRING
+#  if cmsys_STL_HAS_WSTRING
   std::wstring wfile = cmsys::Encoding::ToWide(file);
   return archive_read_open_filename_w(a, wfile.c_str(), block_size);
-#else
+#  else
   return archive_read_open_filename(a, file, block_size);
-#endif
+#  endif
 }
 #endif
 
@@ -139,9 +147,9 @@ private:
   HANDLE handle_;
 };
 #elif defined(__APPLE__)
-#include <crt_externs.h>
+#  include <crt_externs.h>
 
-#define environ (*_NSGetEnviron())
+#  define environ (*_NSGetEnviron())
 #endif
 
 bool cmSystemTools::s_RunCommandHideConsole = false;
@@ -545,12 +553,13 @@ std::vector<std::string> cmSystemTools::ParseArguments(const char* command)
 
   bool win_path = false;
 
-  if ((command[0] != '/' && command[1] == ':' && command[2] == '\\') ||
-      (command[0] == '\"' && command[1] != '/' && command[2] == ':' &&
-       command[3] == '\\') ||
-      (command[0] == '\'' && command[1] != '/' && command[2] == ':' &&
-       command[3] == '\\') ||
-      (command[0] == '\\' && command[1] == '\\')) {
+  if (command[0] && command[1] &&
+      ((command[0] != '/' && command[1] == ':' && command[2] == '\\') ||
+       (command[0] == '\"' && command[1] != '/' && command[2] == ':' &&
+        command[3] == '\\') ||
+       (command[0] == '\'' && command[1] != '/' && command[2] == ':' &&
+        command[3] == '\\') ||
+       (command[0] == '\\' && command[1] == '\\'))) {
     win_path = true;
   }
   // Split the command into an argv array.
@@ -683,11 +692,11 @@ size_t cmSystemTools::CalculateCommandLineLengthLimit()
     // We estimate the size of the environment block to be 1000.
     // This isn't accurate at all, but leaves some headroom.
     szArgMax = szArgMax < 1000 ? 0 : szArgMax - 1000;
-#if defined(_WIN32) || defined(__linux)
+#  if defined(_WIN32) || defined(__linux)
     sz = std::min(sz, static_cast<size_t>(szArgMax));
-#else
+#  else
     sz = static_cast<size_t>(szArgMax);
-#endif
+#  endif
   }
 #endif
   return sz;
@@ -697,7 +706,7 @@ bool cmSystemTools::RunSingleCommand(std::vector<std::string> const& command,
                                      std::string* captureStdOut,
                                      std::string* captureStdErr, int* retVal,
                                      const char* dir, OutputOption outputflag,
-                                     double timeout, Encoding encoding)
+                                     cmDuration timeout, Encoding encoding)
 {
   std::vector<const char*> argv;
   argv.reserve(command.size() + 1);
@@ -725,7 +734,7 @@ bool cmSystemTools::RunSingleCommand(std::vector<std::string> const& command,
   }
   assert(!captureStdErr || captureStdErr != captureStdOut);
 
-  cmsysProcess_SetTimeout(cp, timeout);
+  cmsysProcess_SetTimeout(cp, timeout.count());
   cmsysProcess_Execute(cp);
 
   std::vector<char> tempStdOut;
@@ -838,7 +847,7 @@ bool cmSystemTools::RunSingleCommand(const char* command,
                                      std::string* captureStdOut,
                                      std::string* captureStdErr, int* retVal,
                                      const char* dir, OutputOption outputflag,
-                                     double timeout)
+                                     cmDuration timeout)
 {
   if (s_DisableRunCommandOutput) {
     outputflag = OUTPUT_NONE;
@@ -872,7 +881,7 @@ bool cmSystemTools::DoesFileExistWithExtensions(
     hname = name;
     hname += ".";
     hname += headerExt;
-    if (cmSystemTools::FileExists(hname.c_str())) {
+    if (cmSystemTools::FileExists(hname)) {
       return true;
     }
   }
@@ -890,7 +899,7 @@ std::string cmSystemTools::FileExistsInParentDirectories(const char* fname,
   std::string prevDir;
   while (dir != prevDir) {
     std::string path = dir + "/" + file;
-    if (cmSystemTools::FileExists(path.c_str())) {
+    if (cmSystemTools::FileExists(path)) {
       return path;
     }
     if (dir.size() < strlen(toplevel)) {
@@ -945,12 +954,64 @@ cmSystemTools::WindowsFileRetry cmSystemTools::GetWindowsFileRetry()
 }
 #endif
 
+std::string cmSystemTools::GetRealPathResolvingWindowsSubst(
+  const std::string& path, std::string* errorMessage)
+{
+#ifdef _WIN32
+  // uv_fs_realpath uses Windows Vista API so fallback to kwsys if not found
+  std::string resolved_path;
+  uv_fs_t req;
+  int err = uv_fs_realpath(NULL, &req, path.c_str(), NULL);
+  if (!err) {
+    resolved_path = std::string((char*)req.ptr);
+    cmSystemTools::ConvertToUnixSlashes(resolved_path);
+    // Normalize to upper-case drive letter as GetActualCaseForPath does.
+    if (resolved_path.size() > 1 && resolved_path[1] == ':') {
+      resolved_path[0] = toupper(resolved_path[0]);
+    }
+  } else if (err == UV_ENOSYS) {
+    resolved_path = cmsys::SystemTools::GetRealPath(path, errorMessage);
+  } else if (errorMessage) {
+    LPSTR message = NULL;
+    DWORD size = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+      NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&message, 0,
+      NULL);
+    *errorMessage = std::string(message, size);
+    LocalFree(message);
+
+    resolved_path = "";
+  } else {
+    resolved_path = path;
+  }
+  return resolved_path;
+#else
+  return cmsys::SystemTools::GetRealPath(path, errorMessage);
+#endif
+}
+
+void cmSystemTools::InitializeLibUV()
+{
+#if defined(_WIN32)
+  // Perform libuv one-time initialization now, and then un-do its
+  // global _fmode setting so that using libuv does not change the
+  // default file text/binary mode.  See libuv issue 840.
+  uv_loop_close(uv_default_loop());
+#  ifdef _MSC_VER
+  _set_fmode(_O_TEXT);
+#  else
+  _fmode = _O_TEXT;
+#  endif
+#endif
+}
+
 bool cmSystemTools::RenameFile(const char* oldname, const char* newname)
 {
 #ifdef _WIN32
-#ifndef INVALID_FILE_ATTRIBUTES
-#define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
-#endif
+#  ifndef INVALID_FILE_ATTRIBUTES
+#    define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
+#  endif
   /* Windows MoveFileEx may not replace read-only or in-use files.  If it
      fails then remove the read-only attribute from any existing destination.
      Try multiple times since we may be racing against another process
@@ -1101,7 +1162,7 @@ void cmSystemTools::Glob(const std::string& directory,
     for (i = 0; i < numf; i++) {
       std::string fname = d.GetFile(i);
       if (reg.find(fname)) {
-        files.push_back(fname);
+        files.push_back(std::move(fname));
       }
     }
   }
@@ -1273,6 +1334,9 @@ cmSystemTools::FileFormat cmSystemTools::GetFileFormat(const char* cext)
   if (ext == "java" || ext == ".java") {
     return cmSystemTools::JAVA_FILE_FORMAT;
   }
+  if (ext == "cu" || ext == ".cu") {
+    return cmSystemTools::CUDA_FILE_FORMAT;
+  }
   if (ext == "H" || ext == ".H" || ext == "h" || ext == ".h" || ext == "h++" ||
       ext == ".h++" || ext == "hm" || ext == ".hm" || ext == "hpp" ||
       ext == ".hpp" || ext == "hxx" || ext == ".hxx" || ext == "in" ||
@@ -1315,7 +1379,7 @@ bool cmSystemTools::Split(const char* s, std::vector<std::string>& l)
   return res;
 }
 
-std::string cmSystemTools::ConvertToOutputPath(const char* path)
+std::string cmSystemTools::ConvertToOutputPath(std::string const& path)
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
   if (s_ForceUnixPaths) {
@@ -1352,15 +1416,16 @@ std::string cmSystemTools::ConvertToRunCommandPath(const char* path)
 }
 
 // compute the relative path from here to there
-std::string cmSystemTools::RelativePath(const char* local, const char* remote)
+std::string cmSystemTools::RelativePath(std::string const& local,
+                                        std::string const& remote)
 {
   if (!cmSystemTools::FileIsFullPath(local)) {
     cmSystemTools::Error("RelativePath must be passed a full path to local: ",
-                         local);
+                         local.c_str());
   }
   if (!cmSystemTools::FileIsFullPath(remote)) {
     cmSystemTools::Error("RelativePath must be passed a full path to remote: ",
-                         remote);
+                         remote.c_str());
   }
   return cmsys::SystemTools::RelativePath(local, remote);
 }
@@ -1398,14 +1463,14 @@ std::string cmSystemTools::CollapseCombinedPath(std::string const& dir,
 #ifdef CMAKE_BUILD_WITH_CMAKE
 bool cmSystemTools::UnsetEnv(const char* value)
 {
-#if !defined(HAVE_UNSETENV)
+#  if !defined(HAVE_UNSETENV)
   std::string var = value;
   var += "=";
   return cmSystemTools::PutEnv(var.c_str());
-#else
+#  else
   unsetenv(value);
   return true;
-#endif
+#  endif
 }
 
 std::vector<std::string> cmSystemTools::GetEnvironmentVariables()
@@ -1451,7 +1516,7 @@ cmSystemTools::SaveRestoreEnvironment::~SaveRestoreEnvironment()
 void cmSystemTools::EnableVSConsoleOutput()
 {
 #ifdef _WIN32
-  // Visual Studio 8 2005 (devenv.exe or VCExpress.exe) will not
+  // Visual Studio tools like devenv may not
   // display output to the console unless this environment variable is
   // set.  We need it to capture the output of these build tools.
   // Note for future work that one could pass "/out \\.\pipe\NAME" to
@@ -1460,13 +1525,13 @@ void cmSystemTools::EnableVSConsoleOutput()
   // output and allow it to be captured on the fly.
   cmSystemTools::PutEnv("vsconsoleoutput=1");
 
-#ifdef CMAKE_BUILD_WITH_CMAKE
+#  ifdef CMAKE_BUILD_WITH_CMAKE
   // VS sets an environment variable to tell MS tools like "cl" to report
   // output through a backdoor pipe instead of stdout/stderr.  Unset the
   // environment variable to close this backdoor for any path of process
   // invocations that passes through CMake so we can capture the output.
   cmSystemTools::UnsetEnv("VS_UNICODE_OUTPUT");
-#endif
+#  endif
 #endif
 }
 
@@ -1514,9 +1579,9 @@ bool cmSystemTools::CreateTar(const char* outFileName,
   a.SetMTime(mtime);
   a.SetVerbose(verbose);
   for (auto path : files) {
-    if (cmSystemTools::FileIsFullPath(path.c_str())) {
+    if (cmSystemTools::FileIsFullPath(path)) {
       // Get the relative path to the file.
-      path = cmSystemTools::RelativePath(cwd.c_str(), path.c_str());
+      path = cmSystemTools::RelativePath(cwd, path);
     }
     if (!a.Add(path)) {
       break;
@@ -1537,8 +1602,8 @@ bool cmSystemTools::CreateTar(const char* outFileName,
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
 namespace {
-#define BSDTAR_FILESIZE_PRINTF "%lu"
-#define BSDTAR_FILESIZE_TYPE unsigned long
+#  define BSDTAR_FILESIZE_PRINTF "%lu"
+#  define BSDTAR_FILESIZE_TYPE unsigned long
 void list_item_verbose(FILE* out, struct archive_entry* entry)
 {
   char tmp[100];
@@ -1611,13 +1676,13 @@ void list_item_verbose(FILE* out, struct archive_entry* entry)
 
   /* Format the time using 'ls -l' conventions. */
   tim = archive_entry_mtime(entry);
-#define HALF_YEAR ((time_t)365 * 86400 / 2)
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#  define HALF_YEAR ((time_t)365 * 86400 / 2)
+#  if defined(_WIN32) && !defined(__CYGWIN__)
 /* Windows' strftime function does not support %e format. */
-#define DAY_FMT "%d"
-#else
-#define DAY_FMT "%e" /* Day number without leading zeros */
-#endif
+#    define DAY_FMT "%d"
+#  else
+#    define DAY_FMT "%e" /* Day number without leading zeros */
+#  endif
   if (tim < now - HALF_YEAR || tim > now + HALF_YEAR) {
     fmt = DAY_FMT " %b  %Y";
   } else {
@@ -1638,35 +1703,43 @@ void list_item_verbose(FILE* out, struct archive_entry* entry)
   fflush(out);
 }
 
-long copy_data(struct archive* ar, struct archive* aw)
+// Return 'true' on success
+bool copy_data(struct archive* ar, struct archive* aw)
 {
   long r;
   const void* buff;
   size_t size;
-#if defined(ARCHIVE_VERSION_NUMBER) && ARCHIVE_VERSION_NUMBER >= 3000000
+#  if defined(ARCHIVE_VERSION_NUMBER) && ARCHIVE_VERSION_NUMBER >= 3000000
   __LA_INT64_T offset;
-#else
+#  else
   off_t offset;
-#endif
+#  endif
 
   for (;;) {
+    // Return value:
+    // * ARCHIVE_OK - read succeed
+    // * ARCHIVE_EOF - no more data to read left
     r = archive_read_data_block(ar, &buff, &size, &offset);
     if (r == ARCHIVE_EOF) {
-      return (ARCHIVE_OK);
+      return true;
     }
     if (r != ARCHIVE_OK) {
-      return (r);
+      return false;
     }
-    r = archive_write_data_block(aw, buff, size, offset);
-    if (r != ARCHIVE_OK) {
+    // Return value:
+    // * >= ARCHIVE_OK - write succeed
+    // * < ARCHIVE_OK - write failed
+    const __LA_SSIZE_T w_size =
+      archive_write_data_block(aw, buff, size, offset);
+    if (w_size < ARCHIVE_OK) {
       cmSystemTools::Message("archive_write_data_block()",
                              archive_error_string(aw));
-      return (r);
+      return false;
     }
   }
-#if !defined(__clang__) && !defined(__HP_aCC)
-  return r; /* this should not happen but it quiets some compilers */
-#endif
+#  if !defined(__clang__) && !defined(__HP_aCC)
+  return false; /* this should not happen but it quiets some compilers */
+#  endif
 }
 
 bool extract_tar(const char* outFileName, bool verbose, bool extract)
@@ -1718,7 +1791,10 @@ bool extract_tar(const char* outFileName, bool verbose, bool extract)
 
       r = archive_write_header(ext, entry);
       if (r == ARCHIVE_OK) {
-        copy_data(a, ext);
+        if (!copy_data(a, ext)) {
+          cmSystemTools::Error("Problem with copy_data");
+          break;
+        }
         r = archive_write_finish_entry(ext);
         if (r != ARCHIVE_OK) {
           cmSystemTools::Error("Problem with archive_write_finish_entry(): ",
@@ -1726,13 +1802,13 @@ bool extract_tar(const char* outFileName, bool verbose, bool extract)
           break;
         }
       }
-#ifdef _WIN32
+#  ifdef _WIN32
       else if (const char* linktext = archive_entry_symlink(entry)) {
         std::cerr << "cmake -E tar: warning: skipping symbolic link \""
                   << cm_archive_entry_pathname(entry) << "\" -> \"" << linktext
                   << "\"." << std::endl;
       }
-#endif
+#  endif
       else {
         cmSystemTools::Error("Problem with archive_write_header(): ",
                              archive_error_string(ext));
@@ -1773,7 +1849,7 @@ bool cmSystemTools::ListTar(const char* outFileName, bool verbose)
 }
 
 int cmSystemTools::WaitForLine(cmsysProcess* process, std::string& line,
-                               double timeout, std::vector<char>& out,
+                               cmDuration timeout, std::vector<char>& out,
                                std::vector<char>& err)
 {
   line.clear();
@@ -1821,7 +1897,9 @@ int cmSystemTools::WaitForLine(cmsysProcess* process, std::string& line,
     // No newlines found.  Wait for more data from the process.
     int length;
     char* data;
-    int pipe = cmsysProcess_WaitForData(process, &data, &length, &timeout);
+    double timeoutAsDbl = timeout.count();
+    int pipe =
+      cmsysProcess_WaitForData(process, &data, &length, &timeoutAsDbl);
     if (pipe == cmsysProcess_Pipe_Timeout) {
       // Timeout has been exceeded.
       return pipe;
@@ -1977,9 +2055,9 @@ bool cmSystemTools::FileTimeSet(const char* fname, cmSystemToolsFileTime* t)
 }
 
 #ifdef _WIN32
-#ifndef CRYPT_SILENT
-#define CRYPT_SILENT 0x40 /* Not defined by VS 6 version of header.  */
-#endif
+#  ifndef CRYPT_SILENT
+#    define CRYPT_SILENT 0x40 /* Not defined by VS 6 version of header.  */
+#  endif
 static int WinCryptRandom(void* data, size_t size)
 {
   int result = 0;
@@ -2052,18 +2130,23 @@ void cmSystemTools::FindCMakeResources(const char* argv0)
   (void)argv0; // ignore this on windows
   wchar_t modulepath[_MAX_PATH];
   ::GetModuleFileNameW(NULL, modulepath, sizeof(modulepath));
-  exe_dir =
-    cmSystemTools::GetFilenamePath(cmsys::Encoding::ToNarrow(modulepath));
+  std::string path = cmsys::Encoding::ToNarrow(modulepath);
+  std::string realPath =
+    cmSystemTools::GetRealPathResolvingWindowsSubst(path, NULL);
+  if (realPath.empty()) {
+    realPath = path;
+  }
+  exe_dir = cmSystemTools::GetFilenamePath(realPath);
 #elif defined(__APPLE__)
   (void)argv0; // ignore this on OS X
-#define CM_EXE_PATH_LOCAL_SIZE 16384
+#  define CM_EXE_PATH_LOCAL_SIZE 16384
   char exe_path_local[CM_EXE_PATH_LOCAL_SIZE];
-#if defined(MAC_OS_X_VERSION_10_3) && !defined(MAC_OS_X_VERSION_10_4)
+#  if defined(MAC_OS_X_VERSION_10_3) && !defined(MAC_OS_X_VERSION_10_4)
   unsigned long exe_path_size = CM_EXE_PATH_LOCAL_SIZE;
-#else
+#  else
   uint32_t exe_path_size = CM_EXE_PATH_LOCAL_SIZE;
-#endif
-#undef CM_EXE_PATH_LOCAL_SIZE
+#  endif
+#  undef CM_EXE_PATH_LOCAL_SIZE
   char* exe_path = exe_path_local;
   if (_NSGetExecutablePath(exe_path, &exe_path_size) < 0) {
     exe_path = static_cast<char*>(malloc(exe_path_size));
@@ -2115,19 +2198,19 @@ void cmSystemTools::FindCMakeResources(const char* argv0)
   cmSystemToolsCMakeGUICommand = exe_dir;
   cmSystemToolsCMakeGUICommand += "/cmake-gui";
   cmSystemToolsCMakeGUICommand += cmSystemTools::GetExecutableExtension();
-  if (!cmSystemTools::FileExists(cmSystemToolsCMakeGUICommand.c_str())) {
+  if (!cmSystemTools::FileExists(cmSystemToolsCMakeGUICommand)) {
     cmSystemToolsCMakeGUICommand.clear();
   }
   cmSystemToolsCMakeCursesCommand = exe_dir;
   cmSystemToolsCMakeCursesCommand += "/ccmake";
   cmSystemToolsCMakeCursesCommand += cmSystemTools::GetExecutableExtension();
-  if (!cmSystemTools::FileExists(cmSystemToolsCMakeCursesCommand.c_str())) {
+  if (!cmSystemTools::FileExists(cmSystemToolsCMakeCursesCommand)) {
     cmSystemToolsCMakeCursesCommand.clear();
   }
   cmSystemToolsCMClDepsCommand = exe_dir;
   cmSystemToolsCMClDepsCommand += "/cmcldeps";
   cmSystemToolsCMClDepsCommand += cmSystemTools::GetExecutableExtension();
-  if (!cmSystemTools::FileExists(cmSystemToolsCMClDepsCommand.c_str())) {
+  if (!cmSystemTools::FileExists(cmSystemToolsCMClDepsCommand)) {
     cmSystemToolsCMClDepsCommand.clear();
   }
 
@@ -2142,7 +2225,7 @@ void cmSystemTools::FindCMakeResources(const char* argv0)
   }
   if (cmSystemToolsCMakeRoot.empty() ||
       !cmSystemTools::FileExists(
-        (cmSystemToolsCMakeRoot + "/Modules/CMake.cmake").c_str())) {
+        (cmSystemToolsCMakeRoot + "/Modules/CMake.cmake"))) {
     // Build tree has "<build>/bin[/<config>]/cmake" and
     // "<build>/CMakeFiles/CMakeSourceDir.txt".
     std::string dir = cmSystemTools::GetFilenamePath(exe_dir);

@@ -23,6 +23,7 @@ static const std::string kPROGRESS_TYPE = "progress";
 static const std::string kREPLY_TYPE = "reply";
 static const std::string kSET_GLOBAL_SETTINGS_TYPE = "setGlobalSettings";
 static const std::string kSIGNAL_TYPE = "signal";
+static const std::string kCTEST_INFO_TYPE = "ctestInfo";
 
 static const std::string kARTIFACTS_KEY = "artifacts";
 static const std::string kBUILD_DIRECTORY_KEY = "buildDirectory";
@@ -88,6 +89,13 @@ static const std::string kWARN_UNUSED_CLI_KEY = "warnUnusedCli";
 static const std::string kWARN_UNUSED_KEY = "warnUnused";
 static const std::string kWATCHED_DIRECTORIES_KEY = "watchedDirectories";
 static const std::string kWATCHED_FILES_KEY = "watchedFiles";
+static const std::string kHAS_INSTALL_RULE = "hasInstallRule";
+static const std::string kINSTALL_PATHS = "installPaths";
+static const std::string kCTEST_NAME = "ctestName";
+static const std::string kCTEST_COMMAND = "ctestCommand";
+static const std::string kCTEST_INFO = "ctestInfo";
+static const std::string kMINIMUM_CMAKE_VERSION = "minimumCMakeVersion";
+static const std::string kIS_GENERATOR_PROVIDED_KEY = "isGeneratorProvided";
 
 static const std::string kTARGET_CROSS_REFERENCES_KEY = "crossReferences";
 static const std::string kLINE_NUMBER_KEY = "line";

@@ -3,6 +3,7 @@
 
 #include "cmTargetPropertyComputer.h"
 
+#include <cctype>
 #include <sstream>
 #include <unordered_set>
 
@@ -49,6 +50,12 @@ bool cmTargetPropertyComputer::WhiteListedInterfaceProperty(
   if (cmHasLiteralPrefix(prop, "INTERFACE_")) {
     return true;
   }
+  if (cmHasLiteralPrefix(prop, "_")) {
+    return true;
+  }
+  if (std::islower(prop[0])) {
+    return true;
+  }
   static std::unordered_set<std::string> builtIns;
   if (builtIns.empty()) {
     builtIns.insert("COMPATIBLE_INTERFACE_BOOL");
@@ -57,6 +64,7 @@ bool cmTargetPropertyComputer::WhiteListedInterfaceProperty(
     builtIns.insert("COMPATIBLE_INTERFACE_STRING");
     builtIns.insert("EXPORT_NAME");
     builtIns.insert("IMPORTED");
+    builtIns.insert("IMPORTED_GLOBAL");
     builtIns.insert("NAME");
     builtIns.insert("TYPE");
   }

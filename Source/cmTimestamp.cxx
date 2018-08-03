@@ -33,11 +33,14 @@ std::string cmTimestamp::FileModificationTime(const char* path,
                                               const std::string& formatString,
                                               bool utcFlag)
 {
-  if (!cmsys::SystemTools::FileExists(path)) {
+  std::string real_path =
+    cmSystemTools::GetRealPathResolvingWindowsSubst(path);
+
+  if (!cmsys::SystemTools::FileExists(real_path)) {
     return std::string();
   }
 
-  time_t mtime = cmsys::SystemTools::ModifiedTime(path);
+  time_t mtime = cmsys::SystemTools::ModifiedTime(real_path);
   return CreateTimestampFromTimeT(mtime, formatString, utcFlag);
 }
 
@@ -151,7 +154,7 @@ std::string cmTimestamp::AddTimestampComponent(char flag,
       if (unixEpoch == -1) {
         cmSystemTools::Error(
           "Error generating UNIX epoch in "
-          "STRING(TIMESTAMP ...). Please, file a bug report aginst CMake");
+          "STRING(TIMESTAMP ...). Please, file a bug report against CMake");
         return std::string();
       }
 

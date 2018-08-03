@@ -31,9 +31,6 @@ find_path(GIF_INCLUDE_DIR gif_lib.h
   HINTS
     ENV GIF_DIR
   PATH_SUFFIXES include
-  PATHS
-  ~/Library/Frameworks
-  /usr/freeware
 )
 
 # the gif library can have many names :-/
@@ -44,9 +41,6 @@ find_library(GIF_LIBRARY
   HINTS
     ENV GIF_DIR
   PATH_SUFFIXES lib
-  PATHS
-  ~/Library/Frameworks
-  /usr/freeware
 )
 
 # see readme.txt

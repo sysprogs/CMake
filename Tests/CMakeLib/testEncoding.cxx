@@ -3,7 +3,7 @@
 #include <string>
 
 #ifdef _WIN32
-#include "cmsys/ConsoleBuf.hxx"
+#  include "cmsys/ConsoleBuf.hxx"
 #endif
 
 #ifdef _WIN32
@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
   }
   const std::string encoding(argv[1]);
 #ifdef _WIN32
-  if (encoding == "UTF8") {
+  if ((encoding == "UTF8") || (encoding == "UTF-8")) {
     setEncoding(consoleOut, CP_UTF8);
   } else if (encoding == "ANSI") {
     setEncoding(consoleOut, CP_ACP);

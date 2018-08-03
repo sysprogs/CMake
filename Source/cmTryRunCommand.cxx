@@ -4,8 +4,8 @@
 
 #include "cmsys/FStream.hxx"
 #include <stdio.h>
-#include <string.h>
 
+#include "cmDuration.h"
 #include "cmMakefile.h"
 #include "cmState.h"
 #include "cmStateTypes.h"
@@ -153,7 +153,7 @@ bool cmTryRunCommand::InitialPass(std::vector<std::string> const& argv,
 
   // if we created a directory etc, then cleanup after ourselves
   if (!this->Makefile->GetCMakeInstance()->GetDebugTryCompile()) {
-    this->CleanupFiles(this->BinaryDirectory.c_str());
+    this->CleanupFiles(this->BinaryDirectory);
   }
   return true;
 }
@@ -186,18 +186,19 @@ void cmTryRunCommand::RunExecutable(const std::string& runArgs,
   if (!runArgs.empty()) {
     finalCommand += runArgs;
   }
-  int timeout = 0;
   bool worked = cmSystemTools::RunSingleCommand(
     finalCommand.c_str(), out, out, &retVal, nullptr,
-    cmSystemTools::OUTPUT_NONE, timeout);
+    cmSystemTools::OUTPUT_NONE, cmDuration::zero());
   // set the run var
-  char retChar[1000];
+  char retChar[16];
+  const char* retStr;
   if (worked) {
     sprintf(retChar, "%i", retVal);
+    retStr = retChar;
   } else {
-    strcpy(retChar, "FAILED_TO_RUN");
+    retStr = "FAILED_TO_RUN";
   }
-  this->Makefile->AddCacheDefinition(this->RunResultVariable, retChar,
+  this->Makefile->AddCacheDefinition(this->RunResultVariable, retStr,
                                      "Result of TRY_RUN",
                                      cmStateEnums::INTERNAL);
 }

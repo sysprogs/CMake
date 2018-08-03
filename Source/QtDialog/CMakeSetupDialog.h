@@ -16,7 +16,9 @@ class QProgressBar;
 class QToolButton;
 
 /// Qt user interface for CMake
-class CMakeSetupDialog : public QMainWindow, public Ui::CMakeSetupDialog
+class CMakeSetupDialog
+  : public QMainWindow
+  , public Ui::CMakeSetupDialog
 {
   Q_OBJECT
 public:
@@ -31,7 +33,6 @@ protected slots:
   void initialize();
   void doConfigure();
   void doGenerate();
-  QString getProjectFilename();
   void doOpenProject();
   void doInstallForCommandLine();
   void doHelp();

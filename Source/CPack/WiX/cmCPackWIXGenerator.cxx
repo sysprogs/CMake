@@ -22,7 +22,13 @@
 #include "cmsys/FStream.hxx"
 #include "cmsys/SystemTools.hxx"
 
-#include <rpc.h> // for GUID generation
+#ifdef _WIN32
+#  include <rpc.h> // for GUID generation (windows only)
+#else
+#  include <uuid/uuid.h> // for GUID generation (libuuid)
+#endif
+
+#include "cmCMakeToWixPath.h"
 
 cmCPackWIXGenerator::cmCPackWIXGenerator()
   : Patch(0)
@@ -49,8 +55,8 @@ bool cmCPackWIXGenerator::RunWiXCommand(std::string const& command)
 {
   std::string logFileName = this->CPackTopLevel + "/wix.log";
 
-  cmCPackLogger(cmCPackLog::LOG_DEBUG, "Running WiX command: " << command
-                                                               << std::endl);
+  cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                "Running WiX command: " << command << std::endl);
 
   std::string output;
 
@@ -65,8 +71,9 @@ bool cmCPackWIXGenerator::RunWiXCommand(std::string const& command)
   logFile.close();
 
   if (!status || returnValue) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Problem running WiX candle. "
-                                         "Please check '"
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Problem running WiX candle. "
+                  "Please check '"
                     << logFileName << "' for errors." << std::endl);
 
     return false;
@@ -110,7 +117,7 @@ bool cmCPackWIXGenerator::RunLightCommand(std::string const& objectFiles)
   std::ostringstream command;
   command << QuotePath(executable);
   command << " -nologo";
-  command << " -out " << QuotePath(packageFileNames.at(0));
+  command << " -out " << QuotePath(CMakeToWixPath(packageFileNames.at(0)));
 
   for (std::string const& ext : this->LightExtensions) {
     command << " -ext " << QuotePath(ext);
@@ -131,8 +138,8 @@ bool cmCPackWIXGenerator::RunLightCommand(std::string const& objectFiles)
 int cmCPackWIXGenerator::PackageFiles()
 {
   if (!PackageFilesImpl() || cmSystemTools::GetErrorOccuredFlag()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Fatal WiX Generator Error"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Fatal WiX Generator Error" << std::endl);
     return false;
   }
 
@@ -142,8 +149,8 @@ int cmCPackWIXGenerator::PackageFiles()
 bool cmCPackWIXGenerator::InitializeWiXConfiguration()
 {
   if (!ReadListFile("CPackWIX.cmake")) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Error while executing CPackWIX.cmake"
-                    << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Error while executing CPackWIX.cmake" << std::endl);
     return false;
   }
 
@@ -160,12 +167,13 @@ bool cmCPackWIXGenerator::InitializeWiXConfiguration()
     std::string guid = GenerateGUID();
     SetOption("CPACK_WIX_UPGRADE_GUID", guid.c_str());
 
-    cmCPackLogger(
-      cmCPackLog::LOG_WARNING, "CPACK_WIX_UPGRADE_GUID implicitly set to "
-        << guid << " . "
-                   "Please refer to the documentation on how and why "
-                   "you might want to set this explicitly."
-        << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_WARNING,
+                  "CPACK_WIX_UPGRADE_GUID implicitly set to "
+                    << guid
+                    << " . "
+                       "Please refer to the documentation on how and why "
+                       "you might want to set this explicitly."
+                    << std::endl);
   }
 
   if (!RequireOption("CPACK_TOPLEVEL_DIRECTORY", this->CPackTopLevel)) {
@@ -270,11 +278,12 @@ bool cmCPackWIXGenerator::PackageFilesImpl()
     std::string objectFilename =
       this->CPackTopLevel + "/" + uniqueBaseName + ".wixobj";
 
-    if (!RunCandleCommand(sourceFilename, objectFilename)) {
+    if (!RunCandleCommand(CMakeToWixPath(sourceFilename),
+                          CMakeToWixPath(objectFilename))) {
       return false;
     }
 
-    objectFiles << " " << QuotePath(objectFilename);
+    objectFiles << " " << QuotePath(CMakeToWixPath(objectFilename));
   }
 
   AppendUserSuppliedExtraObjects(objectFiles);
@@ -320,10 +329,10 @@ void cmCPackWIXGenerator::CreateWiXVariablesIncludeFile()
   CopyDefinition(includeFile, "CPACK_PACKAGE_VENDOR");
   CopyDefinition(includeFile, "CPACK_PACKAGE_NAME");
   CopyDefinition(includeFile, "CPACK_PACKAGE_VERSION");
-  CopyDefinition(includeFile, "CPACK_WIX_LICENSE_RTF");
-  CopyDefinition(includeFile, "CPACK_WIX_PRODUCT_ICON");
-  CopyDefinition(includeFile, "CPACK_WIX_UI_BANNER");
-  CopyDefinition(includeFile, "CPACK_WIX_UI_DIALOG");
+  CopyDefinition(includeFile, "CPACK_WIX_LICENSE_RTF", DefinitionType::PATH);
+  CopyDefinition(includeFile, "CPACK_WIX_PRODUCT_ICON", DefinitionType::PATH);
+  CopyDefinition(includeFile, "CPACK_WIX_UI_BANNER", DefinitionType::PATH);
+  CopyDefinition(includeFile, "CPACK_WIX_UI_DIALOG", DefinitionType::PATH);
   SetOptionIfNotSet("CPACK_WIX_PROGRAM_MENU_FOLDER",
                     GetOption("CPACK_PACKAGE_NAME"));
   CopyDefinition(includeFile, "CPACK_WIX_PROGRAM_MENU_FOLDER");
@@ -363,8 +372,9 @@ void cmCPackWIXGenerator::CreateWiXPropertiesIncludeFile()
     includeFile.AddAttribute("Id", "FindInstallLocation");
     includeFile.AddAttribute("Root", "HKLM");
     includeFile.AddAttribute(
-      "Key", "Software\\Microsoft\\Windows\\"
-             "CurrentVersion\\Uninstall\\[WIX_UPGRADE_DETECTED]");
+      "Key",
+      "Software\\Microsoft\\Windows\\"
+      "CurrentVersion\\Uninstall\\[WIX_UPGRADE_DETECTED]");
     includeFile.AddAttribute("Name", "InstallLocation");
     includeFile.AddAttribute("Type", "raw");
     includeFile.EndElement("RegistrySearch");
@@ -390,11 +400,16 @@ void cmCPackWIXGenerator::CreateWiXProductFragmentIncludeFile()
 }
 
 void cmCPackWIXGenerator::CopyDefinition(cmWIXSourceWriter& source,
-                                         std::string const& name)
+                                         std::string const& name,
+                                         DefinitionType type)
 {
   const char* value = GetOption(name.c_str());
   if (value) {
-    AddDefinition(source, name, value);
+    if (type == DefinitionType::PATH) {
+      AddDefinition(source, name, CMakeToWixPath(value));
+    } else {
+      AddDefinition(source, name, value);
+    }
   }
 }
 
@@ -601,8 +616,9 @@ bool cmCPackWIXGenerator::GenerateMainSourceFileFromTemplate()
   std::string mainSourceFilePath = this->CPackTopLevel + "/main.wxs";
 
   if (!ConfigureFile(wixTemplate.c_str(), mainSourceFilePath.c_str())) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Failed creating '"
-                    << mainSourceFilePath << "'' from template." << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Failed creating '" << mainSourceFilePath
+                                      << "'' from template." << std::endl);
 
     return false;
   }
@@ -945,8 +961,8 @@ bool cmCPackWIXGenerator::RequireOption(std::string const& name,
 
     return true;
   } else {
-    cmCPackLogger(cmCPackLog::LOG_ERROR, "Required variable "
-                    << name << " not set" << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR,
+                  "Required variable " << name << " not set" << std::endl);
 
     return false;
   }
@@ -966,6 +982,7 @@ std::string cmCPackWIXGenerator::GetArchitecture() const
 
 std::string cmCPackWIXGenerator::GenerateGUID()
 {
+#ifdef _WIN32
   UUID guid;
   UuidCreate(&guid);
 
@@ -975,6 +992,14 @@ std::string cmCPackWIXGenerator::GenerateGUID()
   std::string result =
     cmsys::Encoding::ToNarrow(reinterpret_cast<wchar_t*>(tmp));
   RpcStringFreeW(&tmp);
+#else
+  uuid_t guid;
+  char guid_ch[37] = { 0 };
+
+  uuid_generate(guid);
+  uuid_unparse(guid, guid_ch);
+  std::string result = guid_ch;
+#endif
 
   return cmSystemTools::UpperCase(result);
 }

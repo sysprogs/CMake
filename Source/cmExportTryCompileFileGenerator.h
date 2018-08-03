@@ -21,10 +21,12 @@ class cmExportTryCompileFileGenerator : public cmExportFileGenerator
 public:
   cmExportTryCompileFileGenerator(cmGlobalGenerator* gg,
                                   std::vector<std::string> const& targets,
-                                  cmMakefile* mf);
+                                  cmMakefile* mf,
+                                  std::set<std::string> const& langs);
 
   /** Set the list of targets to export.  */
   void SetConfig(const std::string& config) { this->Config = config; }
+
 protected:
   // Implement virtual methods from the superclass.
   bool GenerateMainFile(std::ostream& os) override;
@@ -49,10 +51,12 @@ protected:
 private:
   std::string FindTargets(const std::string& prop,
                           const cmGeneratorTarget* tgt,
+                          std::string const& language,
                           std::set<const cmGeneratorTarget*>& emitted);
 
   std::vector<cmGeneratorTarget const*> Exports;
   std::string Config;
+  std::vector<std::string> Languages;
 };
 
 #endif

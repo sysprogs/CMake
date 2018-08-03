@@ -8,16 +8,16 @@
 #include <string>
 
 #if defined(__hpux)
-#include <dl.h>
+#  include <dl.h>
 #elif defined(_WIN32) && !defined(__CYGWIN__)
-#include <windows.h>
+#  include <windows.h>
 #elif defined(__APPLE__)
-#include <AvailabilityMacros.h>
-#if MAC_OS_X_VERSION_MAX_ALLOWED < 1030
-#include <mach-o/dyld.h>
-#endif
+#  include <AvailabilityMacros.h>
+#  if MAC_OS_X_VERSION_MAX_ALLOWED < 1030
+#    include <mach-o/dyld.h>
+#  endif
 #elif defined(__BEOS__)
-#include <be/kernel/image.h>
+#  include <be/kernel/image.h>
 #endif
 
 namespace @KWSYS_NAMESPACE@ {
@@ -35,7 +35,7 @@ namespace @KWSYS_NAMESPACE@ {
  * or absolute) pathname.  Otherwise, the dynamic linker searches for the
  * library as follows : see ld.so(8) for further details):
  * Whereas this distinction does not exist on Win32. Therefore ideally you
- * should be doing full path to garantee to have a consistent way of dealing
+ * should be doing full path to guarantee to have a consistent way of dealing
  * with dynamic loading of shared library.
  *
  * \warning the Cygwin implementation do not use the Win32 HMODULE. Put extra
@@ -52,11 +52,11 @@ public:
 #elif defined(_WIN32) && !defined(__CYGWIN__)
   typedef HMODULE LibraryHandle;
 #elif defined(__APPLE__)
-#if MAC_OS_X_VERSION_MAX_ALLOWED < 1030
+#  if MAC_OS_X_VERSION_MAX_ALLOWED < 1030
   typedef NSModule LibraryHandle;
-#else
+#  else
   typedef void* LibraryHandle;
-#endif
+#  endif
 #elif defined(__BEOS__)
   typedef image_id LibraryHandle;
 #else // POSIX
@@ -72,7 +72,7 @@ public:
   static LibraryHandle OpenLibrary(const std::string&);
 
   /** Attempt to detach a dynamic library from the
-   * process.  A value of true is returned if it is sucessful. */
+   * process.  A value of true is returned if it is successful. */
   static int CloseLibrary(LibraryHandle);
 
   /** Find the address of the symbol in the given library. */

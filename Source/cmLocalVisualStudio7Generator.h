@@ -21,6 +21,19 @@ class cmMakefile;
 class cmSourceFile;
 class cmSourceGroup;
 
+class cmVS7GeneratorOptions : public cmVisualStudioGeneratorOptions
+{
+public:
+  cmVS7GeneratorOptions(cmLocalVisualStudioGenerator* lg, Tool tool,
+                        cmVS7FlagTable const* table = nullptr,
+                        cmVS7FlagTable const* extraTable = nullptr)
+    : cmVisualStudioGeneratorOptions(lg, tool, table, extraTable)
+  {
+  }
+  void OutputFlag(std::ostream& fout, int indent, const char* tag,
+                  const std::string& content) override;
+};
+
 /** \class cmLocalVisualStudio7Generator
  * \brief Write Visual Studio .NET project files.
  *
@@ -35,12 +48,12 @@ public:
 
   virtual ~cmLocalVisualStudio7Generator();
 
-  virtual void AddHelperCommands();
+  void AddHelperCommands() override;
 
   /**
    * Generate the makefile for this directory.
    */
-  virtual void Generate();
+  void Generate() override;
 
   enum BuildType
   {
@@ -56,22 +69,21 @@ public:
    */
   void SetBuildType(BuildType, const std::string& name);
 
-  virtual std::string GetTargetDirectory(
-    cmGeneratorTarget const* target) const;
+  std::string GetTargetDirectory(
+    cmGeneratorTarget const* target) const override;
   cmSourceFile* CreateVCProjBuildRule();
   void WriteStampFiles();
-  virtual std::string ComputeLongestObjectDirectory(
-    cmGeneratorTarget const*) const;
+  std::string ComputeLongestObjectDirectory(
+    cmGeneratorTarget const*) const override;
 
   virtual void ReadAndStoreExternalGUID(const std::string& name,
                                         const char* path);
-  virtual void AddCMakeListsRules();
 
 protected:
   void CreateSingleVCProj(const std::string& lname, cmGeneratorTarget* tgt);
 
 private:
-  typedef cmVisualStudioGeneratorOptions Options;
+  typedef cmVS7GeneratorOptions Options;
   typedef cmLocalVisualStudio7GeneratorFCInfo FCInfo;
   std::string GetBuildTypeLinkerFlags(std::string rootLinkerFlags,
                                       const std::string& configName);
@@ -117,10 +129,11 @@ private:
                        FCInfo& fcinfo);
   void WriteTargetVersionAttribute(std::ostream& fout, cmGeneratorTarget* gt);
 
+  class AllConfigSources;
   bool WriteGroup(const cmSourceGroup* sg, cmGeneratorTarget* target,
                   std::ostream& fout, const std::string& libName,
                   std::vector<std::string> const& configs,
-                  std::map<cmSourceFile const*, size_t> const& sourcesIndex);
+                  AllConfigSources const& sources);
 
   friend class cmLocalVisualStudio7GeneratorFCInfo;
   friend class cmLocalVisualStudio7GeneratorInternals;

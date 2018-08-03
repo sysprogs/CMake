@@ -19,6 +19,7 @@
 #              [EXPORT_FILE_NAME <export_file_name>]
 #              [DEPRECATED_MACRO_NAME <deprecated_macro_name>]
 #              [NO_EXPORT_MACRO_NAME <no_export_macro_name>]
+#              [INCLUDE_GUARD_NAME <include_guard_name>]
 #              [STATIC_DEFINE <static_define>]
 #              [NO_DEPRECATED_MACRO_NAME <no_deprecated_macro_name>]
 #              [DEFINE_NO_DEPRECATED]
@@ -184,11 +185,19 @@
 # :prop_tgt:`CXX_VISIBILITY_PRESET <<LANG>_VISIBILITY_PRESET>` and
 # :prop_tgt:`VISIBILITY_INLINES_HIDDEN` instead.
 
+include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 
 # TODO: Install this macro separately?
 macro(_check_cxx_compiler_attribute _ATTRIBUTE _RESULT)
   check_cxx_source_compiles("${_ATTRIBUTE} int somefunc() { return 0; }
+    int main() { return somefunc();}" ${_RESULT}
+  )
+endmacro()
+
+# TODO: Install this macro separately?
+macro(_check_c_compiler_attribute _ATTRIBUTE _RESULT)
+  check_c_source_compiles("${_ATTRIBUTE} int somefunc() { return 0; }
     int main() { return somefunc();}" ${_RESULT}
   )
 endmacro()
@@ -212,9 +221,15 @@ macro(_test_compiler_hidden_visibility)
       AND NOT CMAKE_CXX_COMPILER_ID MATCHES XL
       AND NOT CMAKE_CXX_COMPILER_ID MATCHES PGI
       AND NOT CMAKE_CXX_COMPILER_ID MATCHES Watcom)
-    check_cxx_compiler_flag(-fvisibility=hidden COMPILER_HAS_HIDDEN_VISIBILITY)
-    check_cxx_compiler_flag(-fvisibility-inlines-hidden
-      COMPILER_HAS_HIDDEN_INLINE_VISIBILITY)
+    if (CMAKE_CXX_COMPILER_LOADED)
+      check_cxx_compiler_flag(-fvisibility=hidden COMPILER_HAS_HIDDEN_VISIBILITY)
+      check_cxx_compiler_flag(-fvisibility-inlines-hidden
+        COMPILER_HAS_HIDDEN_INLINE_VISIBILITY)
+    else()
+      check_c_compiler_flag(-fvisibility=hidden COMPILER_HAS_HIDDEN_VISIBILITY)
+      check_c_compiler_flag(-fvisibility-inlines-hidden
+        COMPILER_HAS_HIDDEN_INLINE_VISIBILITY)
+    endif()
   endif()
 endmacro()
 
@@ -231,14 +246,27 @@ macro(_test_compiler_has_deprecated)
     set(COMPILER_HAS_DEPRECATED "" CACHE INTERNAL
       "Compiler support for a deprecated attribute")
   else()
-    _check_cxx_compiler_attribute("__attribute__((__deprecated__))"
-      COMPILER_HAS_DEPRECATED_ATTR)
-    if(COMPILER_HAS_DEPRECATED_ATTR)
-      set(COMPILER_HAS_DEPRECATED "${COMPILER_HAS_DEPRECATED_ATTR}"
-        CACHE INTERNAL "Compiler support for a deprecated attribute")
+    if (CMAKE_CXX_COMPILER_LOADED)
+      _check_cxx_compiler_attribute("__attribute__((__deprecated__))"
+        COMPILER_HAS_DEPRECATED_ATTR)
+      if(COMPILER_HAS_DEPRECATED_ATTR)
+        set(COMPILER_HAS_DEPRECATED "${COMPILER_HAS_DEPRECATED_ATTR}"
+          CACHE INTERNAL "Compiler support for a deprecated attribute")
+      else()
+        _check_cxx_compiler_attribute("__declspec(deprecated)"
+          COMPILER_HAS_DEPRECATED)
+      endif()
     else()
-      _check_cxx_compiler_attribute("__declspec(deprecated)"
-        COMPILER_HAS_DEPRECATED)
+      _check_c_compiler_attribute("__attribute__((__deprecated__))"
+        COMPILER_HAS_DEPRECATED_ATTR)
+      if(COMPILER_HAS_DEPRECATED_ATTR)
+        set(COMPILER_HAS_DEPRECATED "${COMPILER_HAS_DEPRECATED_ATTR}"
+          CACHE INTERNAL "Compiler support for a deprecated attribute")
+      else()
+        _check_c_compiler_attribute("__declspec(deprecated)"
+          COMPILER_HAS_DEPRECATED)
+      endif()
+
     endif()
   endif()
 endmacro()
@@ -277,7 +305,7 @@ macro(_DO_GENERATE_EXPORT_HEADER TARGET_LIBRARY)
   set(options DEFINE_NO_DEPRECATED)
   set(oneValueArgs PREFIX_NAME BASE_NAME EXPORT_MACRO_NAME EXPORT_FILE_NAME
     DEPRECATED_MACRO_NAME NO_EXPORT_MACRO_NAME STATIC_DEFINE
-    NO_DEPRECATED_MACRO_NAME CUSTOM_CONTENT_FROM_VARIABLE)
+    NO_DEPRECATED_MACRO_NAME CUSTOM_CONTENT_FROM_VARIABLE INCLUDE_GUARD_NAME)
   set(multiValueArgs)
 
   cmake_parse_arguments(_GEH "${options}" "${oneValueArgs}" "${multiValueArgs}"
@@ -341,7 +369,11 @@ macro(_DO_GENERATE_EXPORT_HEADER TARGET_LIBRARY)
   endif()
   string(MAKE_C_IDENTIFIER ${NO_DEPRECATED_MACRO_NAME} NO_DEPRECATED_MACRO_NAME)
 
-  set(INCLUDE_GUARD_NAME "${EXPORT_MACRO_NAME}_H")
+  if(_GEH_INCLUDE_GUARD_NAME)
+    set(INCLUDE_GUARD_NAME ${_GEH_INCLUDE_GUARD_NAME})
+  else()
+    set(INCLUDE_GUARD_NAME "${EXPORT_MACRO_NAME}_H")
+  endif()
 
   get_target_property(EXPORT_IMPORT_CONDITION ${TARGET_LIBRARY} DEFINE_SYMBOL)
 

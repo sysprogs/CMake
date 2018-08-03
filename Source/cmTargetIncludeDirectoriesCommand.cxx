@@ -21,22 +21,12 @@ bool cmTargetIncludeDirectoriesCommand::InitialPass(
                                ArgumentFlags(PROCESS_BEFORE | PROCESS_SYSTEM));
 }
 
-void cmTargetIncludeDirectoriesCommand::HandleImportedTarget(
-  const std::string& tgt)
-{
-  std::ostringstream e;
-  e << "Cannot specify include directories for imported target \"" << tgt
-    << "\".";
-  this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
-}
-
 void cmTargetIncludeDirectoriesCommand::HandleMissingTarget(
   const std::string& name)
 {
   std::ostringstream e;
   e << "Cannot specify include directories for target \"" << name
-    << "\" "
-       "which is not built by this project.";
+    << "\" which is not built by this project.";
   this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
 }
 
@@ -48,7 +38,7 @@ std::string cmTargetIncludeDirectoriesCommand::Join(
   std::string prefix =
     this->Makefile->GetCurrentSourceDirectory() + std::string("/");
   for (std::string const& it : content) {
-    if (cmSystemTools::FileIsFullPath(it.c_str()) ||
+    if (cmSystemTools::FileIsFullPath(it) ||
         cmGeneratorExpression::Find(it) == 0) {
       dirs += sep + it;
     } else {
@@ -70,7 +60,7 @@ bool cmTargetIncludeDirectoriesCommand::HandleDirectContent(
       this->Makefile->GetCurrentSourceDirectory() + std::string("/");
     std::set<std::string> sdirs;
     for (std::string const& it : content) {
-      if (cmSystemTools::FileIsFullPath(it.c_str()) ||
+      if (cmSystemTools::FileIsFullPath(it) ||
           cmGeneratorExpression::Find(it) == 0) {
         sdirs.insert(it);
       } else {
@@ -79,7 +69,7 @@ bool cmTargetIncludeDirectoriesCommand::HandleDirectContent(
     }
     tgt->AddSystemIncludeDirectories(sdirs);
   }
-  return true;
+  return true; // Successfully handled.
 }
 
 void cmTargetIncludeDirectoriesCommand::HandleInterfaceContent(

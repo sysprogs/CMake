@@ -82,17 +82,20 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
     if (strcmp(tt, cmState::GetTargetTypeName(cmStateEnums::EXECUTABLE)) ==
         0) {
       targetType = cmStateEnums::EXECUTABLE;
-    } else if (strcmp(tt, cmState::GetTargetTypeName(
-                            cmStateEnums::STATIC_LIBRARY)) == 0) {
+    } else if (strcmp(tt,
+                      cmState::GetTargetTypeName(
+                        cmStateEnums::STATIC_LIBRARY)) == 0) {
       targetType = cmStateEnums::STATIC_LIBRARY;
     } else {
       this->Makefile->IssueMessage(
-        cmake::FATAL_ERROR, std::string("Invalid value '") + tt +
+        cmake::FATAL_ERROR,
+        std::string("Invalid value '") + tt +
           "' for "
           "CMAKE_TRY_COMPILE_TARGET_TYPE.  Only "
           "'" +
-          cmState::GetTargetTypeName(cmStateEnums::EXECUTABLE) + "' and "
-                                                                 "'" +
+          cmState::GetTargetTypeName(cmStateEnums::EXECUTABLE) +
+          "' and "
+          "'" +
           cmState::GetTargetTypeName(cmStateEnums::STATIC_LIBRARY) +
           "' "
           "are allowed.");
@@ -224,8 +227,9 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
               cmake::FATAL_ERROR,
               "Only libraries may be used as try_compile or try_run IMPORTED "
               "LINK_LIBRARIES.  Got " +
-                std::string(tgt->GetName()) + " of "
-                                              "type " +
+                std::string(tgt->GetName()) +
+                " of "
+                "type " +
                 cmState::GetTargetTypeName(tgt->GetType()) + ".");
             return -1;
         }
@@ -391,7 +395,7 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
     }
   }
   // make sure the binary directory exists
-  cmSystemTools::MakeDirectory(this->BinaryDirectory.c_str());
+  cmSystemTools::MakeDirectory(this->BinaryDirectory);
 
   // do not allow recursive try Compiles
   if (this->BinaryDirectory == this->Makefile->GetHomeOutputDirectory()) {
@@ -487,8 +491,9 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
       const char* flags = this->Makefile->GetDefinition(langFlags);
       fprintf(fout, "set(CMAKE_%s_FLAGS %s)\n", li.c_str(),
               cmOutputConverter::EscapeForCMake(flags ? flags : "").c_str());
-      fprintf(fout, "set(CMAKE_%s_FLAGS \"${CMAKE_%s_FLAGS}"
-                    " ${COMPILE_DEFINITIONS}\")\n",
+      fprintf(fout,
+              "set(CMAKE_%s_FLAGS \"${CMAKE_%s_FLAGS}"
+              " ${COMPILE_DEFINITIONS}\")\n",
               li.c_str(), li.c_str());
     }
     switch (this->Makefile->GetPolicyStatus(cmPolicies::CMP0066)) {
@@ -563,8 +568,9 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
         }
         break;
     }
-    fprintf(fout, "set(CMAKE_EXE_LINKER_FLAGS \"${CMAKE_EXE_LINKER_FLAGS}"
-                  " ${EXE_LINKER_FLAGS}\")\n");
+    fprintf(fout,
+            "set(CMAKE_EXE_LINKER_FLAGS \"${CMAKE_EXE_LINKER_FLAGS}"
+            " ${EXE_LINKER_FLAGS}\")\n");
     fprintf(fout, "include_directories(${INCLUDE_DIRECTORIES})\n");
     fprintf(fout, "set(CMAKE_SUPPRESS_REGENERATION 1)\n");
     fprintf(fout, "link_directories(${LINK_DIRECTORIES})\n");
@@ -580,7 +586,8 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
 
     if (!targets.empty()) {
       std::string fname = "/" + std::string(targetName) + "Targets.cmake";
-      cmExportTryCompileFileGenerator tcfg(gg, targets, this->Makefile);
+      cmExportTryCompileFileGenerator tcfg(gg, targets, this->Makefile,
+                                           testLangs);
       tcfg.SetExportFile((this->BinaryDirectory + fname).c_str());
       tcfg.SetConfig(tcConfig);
 
@@ -631,13 +638,13 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
             kCMAKE_TRY_COMPILE_OSX_ARCHITECTURES)) {
         vars.erase(kCMAKE_OSX_ARCHITECTURES);
         std::string flag = "-DCMAKE_OSX_ARCHITECTURES=" + std::string(tcArchs);
-        cmakeFlags.push_back(flag);
+        cmakeFlags.push_back(std::move(flag));
       }
 
       for (std::string const& var : vars) {
         if (const char* val = this->Makefile->GetDefinition(var)) {
           std::string flag = "-D" + var + "=" + val;
-          cmakeFlags.push_back(flag);
+          cmakeFlags.push_back(std::move(flag));
         }
       }
     }
@@ -817,7 +824,8 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
   // actually do the try compile now that everything is setup
   int res = this->Makefile->TryCompile(
     sourceDirectory, this->BinaryDirectory, projectName, targetName,
-    this->SrcFileSignature, &cmakeFlags, output);
+    this->SrcFileSignature, cmake::NO_BUILD_PARALLEL_LEVEL, &cmakeFlags,
+    output);
   if (erroroc) {
     cmSystemTools::SetErrorOccured();
   }
@@ -864,18 +872,17 @@ int cmCoreTryCompile::TryCompileCode(std::vector<std::string> const& argv,
   return res;
 }
 
-void cmCoreTryCompile::CleanupFiles(const char* binDir)
+void cmCoreTryCompile::CleanupFiles(std::string const& binDir)
 {
-  if (!binDir) {
+  if (binDir.empty()) {
     return;
   }
 
-  std::string bdir = binDir;
-  if (bdir.find("CMakeTmp") == std::string::npos) {
+  if (binDir.find("CMakeTmp") == std::string::npos) {
     cmSystemTools::Error(
       "TRY_COMPILE attempt to remove -rf directory that does not contain "
       "CMakeTmp:",
-      binDir);
+      binDir.c_str());
     return;
   }
 
@@ -889,7 +896,7 @@ void cmCoreTryCompile::CleanupFiles(const char* binDir)
         std::string const fullPath =
           std::string(binDir).append("/").append(fileName);
         if (cmSystemTools::FileIsDirectory(fullPath)) {
-          this->CleanupFiles(fullPath.c_str());
+          this->CleanupFiles(fullPath);
           cmSystemTools::RemoveADirectory(fullPath);
         } else {
 #ifdef _WIN32
@@ -897,9 +904,8 @@ void cmCoreTryCompile::CleanupFiles(const char* binDir)
           // cannot delete them immediately.  Try a few times.
           cmSystemTools::WindowsFileRetry retry =
             cmSystemTools::GetWindowsFileRetry();
-          while (!cmSystemTools::RemoveFile(fullPath.c_str()) &&
-                 --retry.Count &&
-                 cmSystemTools::FileExists(fullPath.c_str())) {
+          while (!cmSystemTools::RemoveFile(fullPath) && --retry.Count &&
+                 cmSystemTools::FileExists(fullPath)) {
             cmSystemTools::Delay(retry.Delay);
           }
           if (retry.Count == 0)
@@ -938,7 +944,7 @@ void cmCoreTryCompile::FindOutputFile(const std::string& targetName,
   // a list of directories where to search for the compilation result
   // at first directly in the binary dir
   std::vector<std::string> searchDirs;
-  searchDirs.push_back("");
+  searchDirs.emplace_back();
 
   const char* config =
     this->Makefile->GetDefinition("CMAKE_TRY_COMPILE_CONFIGURATION");
@@ -946,12 +952,12 @@ void cmCoreTryCompile::FindOutputFile(const std::string& targetName,
   if (config && config[0]) {
     std::string tmp = "/";
     tmp += config;
-    searchDirs.push_back(tmp);
+    searchDirs.push_back(std::move(tmp));
   }
   searchDirs.push_back("/Debug");
 #if defined(__APPLE__)
   std::string app = "/Debug/" + targetName + ".app";
-  searchDirs.push_back(app);
+  searchDirs.push_back(std::move(app));
 #endif
   searchDirs.push_back("/Development");
 
@@ -959,7 +965,7 @@ void cmCoreTryCompile::FindOutputFile(const std::string& targetName,
     std::string command = this->BinaryDirectory;
     command += sdir;
     command += tmpOutputFile;
-    if (cmSystemTools::FileExists(command.c_str())) {
+    if (cmSystemTools::FileExists(command)) {
       this->OutputFile = cmSystemTools::CollapseFullPath(command);
       return;
     }

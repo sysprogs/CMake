@@ -13,6 +13,14 @@
 #include <assert.h>
 #include <sstream>
 
+cmCommandContext::cmCommandName& cmCommandContext::cmCommandName::operator=(
+  std::string const& name)
+{
+  this->Original = name;
+  this->Lower = cmSystemTools::LowerCase(name);
+  return *this;
+}
+
 struct cmListFileParser
 {
   cmListFileParser(cmListFile* lf, cmListFileBacktrace const& lfbt,
@@ -252,8 +260,7 @@ bool cmListFileParser::ParseFunction(const char* name, long line)
 bool cmListFileParser::AddArgument(cmListFileLexer_Token* token,
                                    cmListFileArgument::Delimiter delim)
 {
-  cmListFileArgument a(token->text, delim, token->line);
-  this->Function.Arguments.push_back(a);
+  this->Function.Arguments.emplace_back(token->text, delim, token->line);
   if (this->Separation == SeparationOkay) {
     return true;
   }
@@ -436,6 +443,19 @@ void cmListFileBacktrace::PrintCallStack(std::ostream& out) const
     }
     out << "  " << lfc << "\n";
   }
+}
+
+size_t cmListFileBacktrace::Depth() const
+{
+  size_t depth = 0;
+  if (this->Cur == nullptr) {
+    return 0;
+  }
+
+  for (Entry* i = this->Cur->Up; i; i = i->Up) {
+    depth++;
+  }
+  return depth;
 }
 
 std::ostream& operator<<(std::ostream& os, cmListFileContext const& lfc)

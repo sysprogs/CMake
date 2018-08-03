@@ -7,14 +7,15 @@ Add an executable to the project using the specified source files.
 
   add_executable(<name> [WIN32] [MACOSX_BUNDLE]
                  [EXCLUDE_FROM_ALL]
-                 source1 [source2 ...])
+                 [source1] [source2 ...])
 
 Adds an executable target called ``<name>`` to be built from the source
-files listed in the command invocation.  The ``<name>`` corresponds to the
-logical target name and must be globally unique within a project.  The
-actual file name of the executable built is constructed based on
-conventions of the native platform (such as ``<name>.exe`` or just
-``<name>``).
+files listed in the command invocation.  (The source files can be omitted
+here if they are added later using :command:`target_sources`.)  The
+``<name>`` corresponds to the logical target name and must be globally
+unique within a project.  The actual file name of the executable built is
+constructed based on conventions of the native platform (such as
+``<name>.exe`` or just ``<name>``).
 
 By default the executable file will be created in the build tree
 directory corresponding to the source tree directory in which the
@@ -73,8 +74,9 @@ properties for more information.
 Creates an :ref:`Alias Target <Alias Targets>`, such that ``<name>`` can
 be used to refer to ``<target>`` in subsequent commands.  The ``<name>``
 does not appear in the generated buildsystem as a make target.  The
-``<target>`` may not be an :ref:`Imported Target <Imported Targets>` or an
-``ALIAS``.  ``ALIAS`` targets can be used as targets to read properties
+``<target>`` may not be a non-``GLOBAL``
+:ref:`Imported Target <Imported Targets>` or an ``ALIAS``.
+``ALIAS`` targets can be used as targets to read properties
 from, executables for custom commands and custom targets.  They can also be
 tested for existence with the regular :command:`if(TARGET)` subcommand.
 The ``<name>`` may not be used to modify properties of ``<target>``, that

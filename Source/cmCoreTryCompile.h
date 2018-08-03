@@ -33,7 +33,7 @@ protected:
    * This way we do not have to rely on the timing and
    * dependencies of makefiles.
    */
-  void CleanupFiles(const char* binDir);
+  void CleanupFiles(std::string const& binDir);
 
   /**
    * This tries to find the (executable) file created by
@@ -46,7 +46,7 @@ protected:
   std::string BinaryDirectory;
   std::string OutputFile;
   std::string FindErrorMessage;
-  bool SrcFileSignature;
+  bool SrcFileSignature = false;
 
 private:
   std::vector<std::string> WarnCMP0067;
