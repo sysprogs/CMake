@@ -1426,6 +1426,14 @@ private:
 
 void cmMakefile::Configure()
 {
+  if (!m_pDebugServer) {
+    m_pDebugServer.reset(new Sysprogs::HLDPServer(123));
+    if (!m_pDebugServer->WaitForClient()) {
+      cmSystemTools::Error("Failed to start debugging server. Aborting...");
+      cmSystemTools::SetFatalErrorOccured();
+    }
+  }
+
   std::string currentStart =
     this->StateSnapshot.GetDirectory().GetCurrentSource();
   currentStart += "/CMakeLists.txt";

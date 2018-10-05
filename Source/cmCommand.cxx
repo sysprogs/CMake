@@ -16,6 +16,11 @@ bool cmCommand::InvokeInitialPass(const std::vector<cmListFileArgument>& args,
     // reported, so we can skip this command without error.
     return true;
   }
+
+  auto pServer = Makefile->GetDebugServer();
+  if (pServer)
+    pServer->OnExecutingInitialPass(this, expandedArguments);
+
   return this->InitialPass(expandedArguments, status);
 }
 

@@ -544,6 +544,7 @@ set(SRCS
   cmSeparateArgumentsCommand.cxx
   cmSeparateArgumentsCommand.h
   cmSetCommand.cxx
+  sysprogs/HLDPServer.cpp
   cmSetCommand.h
   cmSetDirectoryPropertiesCommand.cxx
   cmSetDirectoryPropertiesCommand.h

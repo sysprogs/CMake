@@ -28,6 +28,7 @@
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
 #  include "cmSourceGroup.h"
+#  include "Sysprogs/HLDPServer.h"
 #endif
 
 class cmCommand;
@@ -820,6 +821,11 @@ public:
 
   cmStateSnapshot GetStateSnapshot() const;
 
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  Sysprogs::HLDPServer* GetDebugServer() const { return m_pDebugServer.get(); }
+#endif
+
+
   const char* GetDefineFlagsCMP0059() const;
 
   std::string GetExecutionFilePath() const;
@@ -894,6 +900,7 @@ protected:
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   std::vector<cmSourceGroup> SourceGroups;
   size_t ObjectLibrariesSourceGroupIndex;
+  std::unique_ptr<Sysprogs::HLDPServer> m_pDebugServer;
 #endif
 
   std::vector<cmCommand*> FinalPassCommands;
