@@ -334,6 +334,14 @@ bool cmMakefile::ExecuteCommand(const cmListFileFunction& lff,
       if (this->GetCMakeInstance()->GetTrace()) {
         this->PrintCommandTrace(lff);
       }
+
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+      std::unique_ptr<Sysprogs::HLDPServer::RAIIScope> pScope;
+      if (m_pDebugServer)
+        pScope =
+          m_pDebugServer->OnExecutingInitialPass(pcmd.get(), this, lff);
+#endif
+
       // Try invoking the command.
       bool invokeSucceeded = pcmd->InvokeInitialPass(lff.Arguments, status);
       bool hadNestedError = status.GetNestedError();
@@ -1424,16 +1432,23 @@ private:
   bool ReportError;
 };
 
-void cmMakefile::Configure()
+
+void cmMakefile::StartDebugServer(unsigned port)
 {
+#if defined(CMAKE_BUILD_WITH_CMAKE)
   if (!m_pDebugServer) {
-    m_pDebugServer.reset(new Sysprogs::HLDPServer(123));
+    m_pDebugServer.reset(new Sysprogs::HLDPServer(port));
     if (!m_pDebugServer->WaitForClient()) {
       cmSystemTools::Error("Failed to start debugging server. Aborting...");
       cmSystemTools::SetFatalErrorOccured();
     }
   }
+#endif
+}
 
+
+void cmMakefile::Configure()
+{
   std::string currentStart =
     this->StateSnapshot.GetDirectory().GetCurrentSource();
   currentStart += "/CMakeLists.txt";

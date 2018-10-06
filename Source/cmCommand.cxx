@@ -17,10 +17,6 @@ bool cmCommand::InvokeInitialPass(const std::vector<cmListFileArgument>& args,
     return true;
   }
 
-  auto pServer = Makefile->GetDebugServer();
-  if (pServer)
-    pServer->OnExecutingInitialPass(this, expandedArguments);
-
   return this->InitialPass(expandedArguments, status);
 }
 

@@ -731,6 +731,8 @@ void cmake::SetArgs(const std::vector<std::string>& args,
       }
       this->GeneratorToolset = value;
       haveToolset = true;
+    } else if (arg.find("--debug-server-port=", 0) == 0) {
+      DebugServerPort = atoi(arg.c_str() + 20);
     } else if (arg.find("-G", 0) == 0) {
       std::string value = arg.substr(2);
       if (value.empty()) {

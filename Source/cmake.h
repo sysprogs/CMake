@@ -442,6 +442,7 @@ public:
 
   void UnwatchUnusedCli(const std::string& var);
   void WatchUnusedCli(const std::string& var);
+  unsigned GetDebugServerPort() const { return DebugServerPort; }
 
   cmState* GetState() const { return this->State; }
   void SetCurrentSnapshot(cmStateSnapshot const& snapshot)
@@ -470,6 +471,7 @@ protected:
   std::string GeneratorInstance;
   std::string GeneratorPlatform;
   std::string GeneratorToolset;
+  unsigned DebugServerPort = 0;
 
   ///! read in a cmake list file to initialize the cache
   void ReadListFile(const std::vector<std::string>& args, const char* path);

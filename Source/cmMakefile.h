@@ -228,6 +228,7 @@ public:
                        bool immediate);
 
   void Configure();
+  void StartDebugServer(unsigned port);
 
   /**
    * Configure a subdirectory
@@ -820,11 +821,6 @@ public:
   void StoreMatches(cmsys::RegularExpression& re);
 
   cmStateSnapshot GetStateSnapshot() const;
-
-#if defined(CMAKE_BUILD_WITH_CMAKE)
-  Sysprogs::HLDPServer* GetDebugServer() const { return m_pDebugServer.get(); }
-#endif
-
 
   const char* GetDefineFlagsCMP0059() const;
 

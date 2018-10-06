@@ -123,53 +123,79 @@ bool HLDPServer::WaitForClient()
   return true;
 }
 
-void HLDPServer::OnExecutingInitialPass(cmCommand* pCommand,
-                                        const std::vector<std::string>& args)
+std::unique_ptr<HLDPServer::RAIIScope> HLDPServer::OnExecutingInitialPass(
+  cmCommand* pCommand, cmMakefile* pMakefile,
+  const cmListFileFunction& function)
 {
+  if (m_Detached)
+    return nullptr;
+
+  std::unique_ptr<RAIIScope> pScope(
+    new RAIIScope(this, pCommand, pMakefile, function));
+
+  UniqueScopeID parentScope = kRootScope;
+  if (m_CallStack.size() >= 2) {
+    parentScope = m_CallStack[m_CallStack.size() - 2]->GetUniqueID();
+  }
+
+  if (parentScope == m_EndOfStepScopeID)
+    m_BreakInPending = true;
+
   if (!m_BreakInPending) {
     if (m_pSocket->HasIncomingData()) {
       RequestReader reader;
       HLDPPacketType requestType = ReceiveRequest(reader);
       switch (requestType) {
         case HLDPPacketType::Invalid:
-          return;
+          return nullptr;
         case HLDPPacketType::csBreakIn:
           m_BreakInPending = true;
           break;
         default:
           SendErrorPacket(
             "Unexpected packet received while the target is running");
-          return;
+          return nullptr;
       }
     }
 
-    return;
+    return std::move(pScope);
   }
 
   m_BreakInPending = false;
+  m_EndOfStepScopeID = 0;
   ReplyBuilder builder;
   builder.AppendInt32((unsigned)TargetStopReason::InitialBreakIn);
   builder.AppendInt32(0);
   builder.AppendString("");
 
-  cmListFileBacktrace backtraceCopy = pCommand->GetMakefile()->GetBacktrace();
   auto backtraceEntryCount = builder.AppendDelayedInt32();
 
   int frameNumber = 0;
+  for (int i = m_CallStack.size() - 1; i >= 0; i--) {
+    auto* pEntry = m_CallStack[i];
+    pCommand->GetMakefile()->GetBacktrace();
+    builder.AppendInt32(frameNumber++);
 
-  while (!backtraceCopy.Top().FilePath.empty()) {
-    builder.AppendInt32(frameNumber);
-    builder.AppendString(backtraceCopy.Top().Name);
-    builder.AppendString(""); // TODO: format arguments if known
-    builder.AppendString(backtraceCopy.Top().FilePath);
-    builder.AppendInt32(backtraceCopy.Top().Line);
+    if (i == 0)
+      builder.AppendString("");
+    else
+      builder.AppendString(m_CallStack[i - 1]->Function.Name.Original);
 
-    backtraceCopy = backtraceCopy.Pop();
+    std::string args;
+    for (const auto& arg : pEntry->Function.Arguments) {
+      if (args.length() > 0)
+        args.append(", ");
+
+      args.append(arg.Value);
+    }
+    builder.AppendString(args);
+    builder.AppendString(pEntry->SourceFile);
+    builder.AppendInt32(pEntry->Function.Line);
     (*backtraceEntryCount)++;
   }
 
   if (!SendReply(HLDPPacketType::scTargetStopped, builder))
-    return;
+    return nullptr;
 
   for (;;) {
     builder.Reset();
@@ -177,22 +203,44 @@ void HLDPServer::OnExecutingInitialPass(cmCommand* pCommand,
     RequestReader reader;
     HLDPPacketType requestType = ReceiveRequest(reader);
     switch (requestType) {
-        // TODO: resend backtrace.
       case HLDPPacketType::csBreakIn:
+        // TODO: resend backtrace.
         continue; // The target is already stopped.
       case HLDPPacketType::csContinue:
+        SendReply(HLDPPacketType::scTargetRunning, builder);
+        return std::move(pScope);
       case HLDPPacketType::csStepIn:
-      case HLDPPacketType::csStepOut:
-      case HLDPPacketType::csStepOver:
         m_BreakInPending = true;
         SendReply(HLDPPacketType::scTargetRunning, builder);
-        return;
+        return std::move(pScope);
+      case HLDPPacketType::csStepOut:
+        if (m_CallStack.size() >= 3)
+          m_EndOfStepScopeID =
+            m_CallStack[m_CallStack.size() - 3]->GetUniqueID();
+        else if (m_CallStack.size() == 2)
+          m_EndOfStepScopeID = kRootScope;
+        SendReply(HLDPPacketType::scTargetRunning, builder);
+        return std::move(pScope);
+      case HLDPPacketType::csStepOver:
+        m_EndOfStepScopeID = parentScope;
+        SendReply(HLDPPacketType::scTargetRunning, builder);
+        return std::move(pScope);
+      case HLDPPacketType::csDetach:
+        m_Detached = true;
+        SendReply(HLDPPacketType::scTargetRunning, builder);
+        return nullptr;
+      case HLDPPacketType::csTerminate:
+        cmSystemTools::Error("Configuration aborted via debugging interface.");
+        cmSystemTools::SetFatalErrorOccured();
+        return nullptr;
       default:
         SendErrorPacket(
           "Unexpected packet received while the target is stopped");
         break;
     }
   }
+
+  return std::move(pScope);
 }
 
 bool HLDPServer::SendReply(HLDPPacketType packetType,
@@ -242,5 +290,29 @@ void HLDPServer::SendErrorPacket(std::string details)
   ReplyBuilder builder;
   builder.AppendString(details);
   SendReply(HLDPPacketType::scError, builder);
+}
+
+inline HLDPServer::RAIIScope::RAIIScope(HLDPServer* pServer,
+                                        cmCommand* pCommand,
+                                        cmMakefile* pMakefile,
+                                        const cmListFileFunction& function)
+  : m_pServer(pServer)
+  , Command(pCommand)
+  , Makefile(pMakefile)
+  , Function(function)
+  , m_UniqueID(pServer->m_NextScopeID++)
+{
+  pServer->m_CallStack.push_back(this);
+  SourceFile = Makefile->GetStateSnapshot().GetExecutionListFile();
+}
+
+HLDPServer::RAIIScope::~RAIIScope()
+{
+  if (m_pServer->m_CallStack.back() != this) {
+    cmSystemTools::Error("CMake scope imbalance detected");
+    cmSystemTools::SetFatalErrorOccured();
+  }
+
+  m_pServer->m_CallStack.pop_back();
 }
 }
