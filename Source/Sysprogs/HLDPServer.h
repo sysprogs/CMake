@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <string>
 #include <vector>
 
@@ -6,67 +7,84 @@ class cmCommand;
 class BasicIncomingSocket;
 struct cmListFileFunction;
 
-namespace Sysprogs {
-class ReplyBuilder;
-class RequestReader;
-enum class HLDPPacketType;
-
-class HLDPServer
+namespace Sysprogs
 {
-public:
-  HLDPServer(int tcpPort);
-  ~HLDPServer();
+	class ReplyBuilder;
+	class RequestReader;
+	enum class HLDPPacketType;
 
-  bool WaitForClient();
+	class HLDPServer
+	{
+	public:
+		HLDPServer(int tcpPort);
+		~HLDPServer();
 
-  typedef int UniqueScopeID;
+		bool WaitForClient();
 
-  class RAIIScope
-  {
-  private:
-    HLDPServer* m_pServer;
-    UniqueScopeID m_UniqueID;
+		typedef int UniqueScopeID, UniqueExpressionID;
 
-  public:
-    cmCommand* Command;
-    cmMakefile* Makefile;
-    const cmListFileFunction& Function;
-    std::string SourceFile;
-    UniqueScopeID GetUniqueID() { return m_UniqueID; }
+		class RAIIScope
+		{
+		private:
+			HLDPServer *m_pServer;
+			UniqueScopeID m_UniqueID;
 
-  public:
-    RAIIScope(HLDPServer* pServer, cmCommand* pCommand, cmMakefile* pMakefile,
-              const cmListFileFunction& function);
+		public:
+			cmCommand *Command;
+			cmMakefile *Makefile;
+			const cmListFileFunction &Function;
+			std::string SourceFile;
+			cmStateDetail::PositionType Position;
+			UniqueScopeID GetUniqueID() { return m_UniqueID; }
 
-    RAIIScope(const RAIIScope&) = delete;
-    void operator=(const RAIIScope&) = delete;
+		public:
+			RAIIScope(HLDPServer *pServer, cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function);
 
-    ~RAIIScope();
-  };
+			RAIIScope(const RAIIScope &) = delete;
+			void operator=(const RAIIScope &) = delete;
 
-  std::unique_ptr<RAIIScope> OnExecutingInitialPass(
-    cmCommand* pCommand, cmMakefile* pMakefile,
-    const cmListFileFunction& function);
+			~RAIIScope();
+		};
 
-private:
-  bool SendReply(HLDPPacketType packetType, const ReplyBuilder& builder);
-  HLDPPacketType ReceiveRequest(
-    RequestReader& reader); // Returns 'Invalid' on error
-  void SendErrorPacket(std::string details);
+		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function);
 
-private:
-  BasicIncomingSocket* m_pSocket;
-  bool m_BreakInPending = false;
-  bool m_Detached = false;
-  std::vector<RAIIScope*> m_CallStack;
+	private:
+		bool SendReply(HLDPPacketType packetType, const ReplyBuilder &builder);
+		HLDPPacketType ReceiveRequest(RequestReader &reader); // Returns 'Invalid' on error
+		void SendErrorPacket(std::string details);
 
-  enum
-  {
-	  kNoScope = -1,
-	  kRootScope = -2,
-  };
+	private:
+		class ExpressionBase
+		{
+		public:
+			UniqueExpressionID AssignedID = -1;
+			std::string Value, Type;
 
-  UniqueScopeID m_NextScopeID = 0;
-  UniqueScopeID m_EndOfStepScopeID = kNoScope;
-};
-}
+		public:
+			virtual ~ExpressionBase() {}
+		};
+
+		class SimpleExpression;
+
+	private:
+		std::unique_ptr<ExpressionBase> CreateExpression(const std::string &text, const RAIIScope &scope);
+
+	private:
+		BasicIncomingSocket *m_pSocket;
+		bool m_BreakInPending = false;
+		bool m_Detached = false;
+		std::vector<RAIIScope *> m_CallStack;
+		std::map<UniqueExpressionID, std::unique_ptr<ExpressionBase>> m_ExpressionCache;
+
+		enum
+		{
+			kNoScope = -1,
+			kRootScope = -2,
+		};
+
+		UniqueScopeID m_NextScopeID = 0;
+		UniqueScopeID m_EndOfStepScopeID = kNoScope;
+
+		UniqueExpressionID m_NextExpressionID = 0;
+	};
+} // namespace Sysprogs

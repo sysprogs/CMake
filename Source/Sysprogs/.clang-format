@@ -1,0 +1,25 @@
+---
+# This configuration requires clang-format version 6.0 exactly.
+BasedOnStyle: llvm
+ColumnLimit: 200
+UseTab: Always
+TabWidth: 4
+IndentWidth: 4
+BreakBeforeBraces: Allman
+AccessModifierOffset: -4
+BraceWrapping: 
+  AfterClass: true
+  AfterControlStatement: true
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterObjCDeclaration: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+NamespaceIndentation: All
+ObjCBlockIndentWidth: 4
+SortIncludes: false
+...
