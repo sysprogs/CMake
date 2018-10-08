@@ -545,6 +545,7 @@ set(SRCS
   cmSeparateArgumentsCommand.h
   cmSetCommand.cxx
   sysprogs/HLDPServer.cpp
+  sysprogs/BasicBreakpointManager.cpp
   cmSetCommand.h
   cmSetDirectoryPropertiesCommand.cxx
   cmSetDirectoryPropertiesCommand.h

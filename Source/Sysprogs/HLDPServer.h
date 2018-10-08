@@ -2,6 +2,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "BasicBreakpointManager.h"
 
 class cmCommand;
 class BasicIncomingSocket;
@@ -12,14 +13,13 @@ namespace Sysprogs
 	class ReplyBuilder;
 	class RequestReader;
 	enum class HLDPPacketType;
+	enum class TargetStopReason;
 
 	class HLDPServer
 	{
 	public:
 		HLDPServer(int tcpPort);
 		~HLDPServer();
-
-		bool WaitForClient();
 
 		typedef int UniqueScopeID, UniqueExpressionID;
 
@@ -46,12 +46,18 @@ namespace Sysprogs
 			~RAIIScope();
 		};
 
+	public:	//Public interface for debugged code
+		bool WaitForClient();
 		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function);
+		void OnMessageProduced(cmake::MessageType type, const std::string &message);
 
 	private:
+		void HandleBreakpointRelatedCommand(HLDPPacketType type, RequestReader &reader);
 		bool SendReply(HLDPPacketType packetType, const ReplyBuilder &builder);
 		HLDPPacketType ReceiveRequest(RequestReader &reader); // Returns 'Invalid' on error
 		void SendErrorPacket(std::string details);
+
+		void ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string& stringParam);
 
 	private:
 		class ExpressionBase
@@ -75,6 +81,7 @@ namespace Sysprogs
 		bool m_Detached = false;
 		std::vector<RAIIScope *> m_CallStack;
 		std::map<UniqueExpressionID, std::unique_ptr<ExpressionBase>> m_ExpressionCache;
+		BasicBreakpointManager m_BreakpointManager;
 
 		enum
 		{

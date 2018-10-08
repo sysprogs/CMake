@@ -7,6 +7,7 @@
 #include "cmMessenger.h"
 #include "cmSystemTools.h"
 #include "cmake.h"
+#include "Sysprogs/HLDPServer.h"
 
 class cmExecutionStatus;
 
@@ -61,6 +62,9 @@ bool cmMessageCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   std::string message = cmJoin(cmMakeRange(i, args.end()), std::string());
+  Sysprogs::HLDPServer *pServer = Makefile->GetDebugServer();
+  if (pServer)
+    pServer->OnMessageProduced(type, message);
 
   if (type != cmake::MESSAGE) {
     // we've overridden the message type, above, so display it directly

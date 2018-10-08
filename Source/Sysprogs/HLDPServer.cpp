@@ -120,7 +120,13 @@ namespace Sysprogs
 
 	HLDPServer::HLDPServer(int tcpPort) : m_BreakInPending(true) { m_pSocket = new BasicIncomingSocket(tcpPort); }
 
-	HLDPServer::~HLDPServer() { delete m_pSocket; }
+	HLDPServer::~HLDPServer()
+	{
+		ReplyBuilder builder;
+		builder.AppendInt32(0);
+		SendReply(HLDPPacketType::scTargetExited, builder);
+		delete m_pSocket; 
+	}
 
 	bool HLDPServer::WaitForClient()
 	{
@@ -151,6 +157,22 @@ namespace Sysprogs
 			return nullptr;
 
 		std::unique_ptr<RAIIScope> pScope(new RAIIScope(this, pCommand, pMakefile, function));
+		struct
+		{
+			TargetStopReason reason = TargetStopReason::UnspecifiedEvent;
+			unsigned intParam = 0;
+			std::string stringParam;
+		} stopRecord;
+
+		{
+			auto *pBreakpoint = m_BreakpointManager.TryGetBreakpointAtLocation(pScope->SourceFile, pScope->Function.Line);
+			if (pBreakpoint && pBreakpoint->IsEnabled)
+			{
+				m_BreakInPending = true;
+				stopRecord.intParam = pBreakpoint->AssignedID;
+				stopRecord.reason = TargetStopReason::Breakpoint;
+			}
+		}
 
 		UniqueScopeID parentScope = kRootScope;
 		if (m_CallStack.size() >= 2)
@@ -159,7 +181,11 @@ namespace Sysprogs
 		}
 
 		if (parentScope == m_EndOfStepScopeID)
+		{
 			m_BreakInPending = true;
+			if (stopRecord.reason == TargetStopReason::UnspecifiedEvent)
+				stopRecord.reason = TargetStopReason::StepComplete;
+		}
 
 		if (!m_BreakInPending)
 		{
@@ -172,10 +198,16 @@ namespace Sysprogs
 				case HLDPPacketType::Invalid:
 					return nullptr;
 				case HLDPPacketType::csBreakIn:
+					stopRecord.reason = TargetStopReason::BreakInRequested;
 					m_BreakInPending = true;
 					break;
 				default:
-					SendErrorPacket("Unexpected packet received while the target is running");
+					if (requestType > HLDPPacketType::BeforeFirstBreakpointRelatedCommand && requestType < HLDPPacketType::AfterLastBreakpointRelatedCommand)
+					{
+						HandleBreakpointRelatedCommand(requestType, reader);
+					}
+					else
+						SendErrorPacket("Unexpected packet received while the target is running");
 					return nullptr;
 				}
 			}
@@ -183,129 +215,91 @@ namespace Sysprogs
 			return std::move(pScope);
 		}
 
-		m_BreakInPending = false;
-		m_EndOfStepScopeID = 0;
+		ReportStopAndServeDebugRequests(stopRecord.reason, stopRecord.intParam, stopRecord.stringParam);
+		return std::move(pScope);
+	}
+
+	void HLDPServer::OnMessageProduced(cmake::MessageType type, const std::string &message)
+	{
 		ReplyBuilder builder;
-		builder.AppendInt32((unsigned)TargetStopReason::InitialBreakIn);
 		builder.AppendInt32(0);
-		builder.AppendString("");
+		builder.AppendString(message);
+		SendReply(HLDPPacketType::scDebugMessage, builder);
 
-		auto backtraceEntryCount = builder.AppendDelayedInt32();
-
-		for (int i = m_CallStack.size() - 1; i >= 0; i--)
+		switch (type)
 		{
-			auto *pEntry = m_CallStack[i];
-			pCommand->GetMakefile()->GetBacktrace();
-			builder.AppendInt32(i);
+		case cmake::FATAL_ERROR:
+		case cmake::INTERNAL_ERROR:
+		case cmake::AUTHOR_ERROR:
+		case cmake::DEPRECATION_ERROR:
+			ReportStopAndServeDebugRequests(TargetStopReason::Exception, 0, message);
+			break;
+		}
+	}
 
-			std::string args;
-			if (i == 0)
-				builder.AppendString("");
+	void HLDPServer::HandleBreakpointRelatedCommand(HLDPPacketType type, RequestReader &reader)
+	{
+		std::string file;
+		int line;
+		ReplyBuilder builder;
+		BasicBreakpointManager::UniqueBreakpointID id;
+
+		struct
+		{
+			BreakpointField field;
+			int IntArg1, IntArg2;
+			std::string StringArg;
+		} breakpointUpdateRequest;
+
+		switch (type)
+		{
+		case HLDPPacketType::csCreateBreakpoint:
+			if (!reader.ReadString(&file) || !reader.ReadInt32(&line))
+				SendErrorPacket("Invalid breakpoint request");
 			else
 			{
-				builder.AppendString(m_CallStack[i - 1]->Function.Name.Original);
-
-				for (const auto &arg : m_CallStack[i - 1]->Function.Arguments)
-				{
-					if (args.length() > 0)
-						args.append(", ");
-
-					args.append(arg.Value);
-				}
-			}
-
-			builder.AppendString(args);
-			builder.AppendString(pEntry->SourceFile);
-			builder.AppendInt32(pEntry->Function.Line);
-			(*backtraceEntryCount)++;
-		}
-
-		if (!SendReply(HLDPPacketType::scTargetStopped, builder))
-			return nullptr;
-
-		for (;;)
-		{
-			builder.Reset();
-
-			RequestReader reader;
-			HLDPPacketType requestType = ReceiveRequest(reader);
-			switch (requestType)
-			{
-			case HLDPPacketType::csBreakIn:
-				// TODO: resend backtrace.
-				continue; // The target is already stopped.
-			case HLDPPacketType::csContinue:
-				SendReply(HLDPPacketType::scTargetRunning, builder);
-				return std::move(pScope);
-			case HLDPPacketType::csStepIn:
-				m_BreakInPending = true;
-				SendReply(HLDPPacketType::scTargetRunning, builder);
-				return std::move(pScope);
-			case HLDPPacketType::csStepOut:
-				if (m_CallStack.size() >= 3)
-					m_EndOfStepScopeID = m_CallStack[m_CallStack.size() - 3]->GetUniqueID();
-				else if (m_CallStack.size() == 2)
-					m_EndOfStepScopeID = kRootScope;
-				SendReply(HLDPPacketType::scTargetRunning, builder);
-				return std::move(pScope);
-			case HLDPPacketType::csStepOver:
-				m_EndOfStepScopeID = parentScope;
-				SendReply(HLDPPacketType::scTargetRunning, builder);
-				return std::move(pScope);
-			case HLDPPacketType::csDetach:
-				m_Detached = true;
-				SendReply(HLDPPacketType::scTargetRunning, builder);
-				return nullptr;
-			case HLDPPacketType::csTerminate:
-				cmSystemTools::Error("Configuration aborted via debugging interface.");
-				cmSystemTools::SetFatalErrorOccured();
-				return nullptr;
-			case HLDPPacketType::csCreateExpression:
-			{
-				int frameID = 0;
-				std::string expression;
-				if (!reader.ReadInt32(&frameID) || !reader.ReadString(&expression))
-				{
-					SendErrorPacket("Invalid expression request");
-					continue;
-				}
-
-				std::unique_ptr<ExpressionBase> pExpression;
-				if (frameID < 0 || frameID >= m_CallStack.size())
-					SendErrorPacket("Invalid frame ID");
+				id = m_BreakpointManager.CreateBreakpoint(file, line);
+				if (!id)
+					SendErrorPacket("Invalid or non-existent file: " + file);
 				else
 				{
-					pExpression = CreateExpression(expression, *m_CallStack[frameID]);
-					if (pExpression)
-					{
-						pExpression->AssignedID = m_NextExpressionID++;
-
-						builder.AppendInt32(pExpression->AssignedID);
-						builder.AppendString(pExpression->Value);
-						builder.AppendString(pExpression->Type);
-						builder.AppendInt32(0);
-
-						m_ExpressionCache[pExpression->AssignedID] = std::move(pExpression);
-
-						SendReply(HLDPPacketType::scExpressionCreated, builder);
-					}
-					else
-					{
-						SendErrorPacket("Failed to create expression");
-					}
+					builder.AppendInt32(id);
+					SendReply(HLDPPacketType::scBreakpointCreated, builder);
 				}
-
-				continue;
 			}
 			break;
-			default:
-				SendErrorPacket("Unexpected packet received while the target is stopped");
-				break;
+		case HLDPPacketType::csDeleteBreakpoint:
+			if (!reader.ReadInt32(&id))
+				SendErrorPacket("Invalid breakpoint request");
+			else
+			{
+				m_BreakpointManager.DeleteBreakpoint(id);
+				SendReply(HLDPPacketType::scBreakpointUpdated, builder);
+			}
+			break;
+		case HLDPPacketType::csUpdateBreakpoint:
+			if (!reader.ReadInt32(&id) || !reader.ReadInt32((int *)&breakpointUpdateRequest.field) || !reader.ReadInt32(&breakpointUpdateRequest.IntArg1) ||
+				!reader.ReadInt32(&breakpointUpdateRequest.IntArg2) || !reader.ReadString(&breakpointUpdateRequest.StringArg))
+				SendErrorPacket("Invalid breakpoint request");
+			else
+			{
+				auto *pBreakpoint = m_BreakpointManager.TryLookupBreakpointObject(id);
+				if (!pBreakpoint)
+					SendErrorPacket("Could not find a breakpoint with the specified ID");
+				else
+				{
+					switch (breakpointUpdateRequest.field)
+					{
+					case BreakpointField::IsEnabled:
+						pBreakpoint->IsEnabled = breakpointUpdateRequest.IntArg1 != 0;
+						SendReply(HLDPPacketType::scBreakpointUpdated, builder);
+						break;
+					default:
+						SendErrorPacket("Invalid breakpoint field");
+					}
+				}
 			}
 		}
-
-		m_ExpressionCache.clear();
-		return std::move(pScope);
 	}
 
 	bool HLDPServer::SendReply(HLDPPacketType packetType, const ReplyBuilder &builder)
@@ -358,6 +352,141 @@ namespace Sysprogs
 		ReplyBuilder builder;
 		builder.AppendString(details);
 		SendReply(HLDPPacketType::scError, builder);
+	}
+
+	void HLDPServer::ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string &stringParam)
+	{
+		m_BreakInPending = false;
+		m_EndOfStepScopeID = 0;
+
+		ReplyBuilder builder;
+		builder.AppendInt32((unsigned)stopReason);
+		builder.AppendInt32(intParam);
+		builder.AppendString(stringParam);
+
+		auto backtraceEntryCount = builder.AppendDelayedInt32();
+
+		for (int i = m_CallStack.size() - 1; i >= 0; i--)
+		{
+			auto *pEntry = m_CallStack[i];
+			builder.AppendInt32(i);
+
+			std::string args;
+			if (i == 0)
+				builder.AppendString("");
+			else
+			{
+				builder.AppendString(m_CallStack[i - 1]->Function.Name.Original);
+
+				for (const auto &arg : m_CallStack[i - 1]->Function.Arguments)
+				{
+					if (args.length() > 0)
+						args.append(", ");
+
+					args.append(arg.Value);
+				}
+			}
+
+			builder.AppendString(args);
+			builder.AppendString(pEntry->SourceFile);
+			builder.AppendInt32(pEntry->Function.Line);
+			(*backtraceEntryCount)++;
+		}
+
+		if (!SendReply(HLDPPacketType::scTargetStopped, builder))
+			return;
+
+		for (;;)
+		{
+			builder.Reset();
+
+			RequestReader reader;
+			HLDPPacketType requestType = ReceiveRequest(reader);
+			switch (requestType)
+			{
+			case HLDPPacketType::csBreakIn:
+				// TODO: resend backtrace.
+				continue; // The target is already stopped.
+			case HLDPPacketType::csContinue:
+				m_EndOfStepScopeID = kNoScope;
+				SendReply(HLDPPacketType::scTargetRunning, builder);
+				return;
+			case HLDPPacketType::csStepIn:
+				m_BreakInPending = true;
+				SendReply(HLDPPacketType::scTargetRunning, builder);
+				return;
+			case HLDPPacketType::csStepOut:
+				if (m_CallStack.size() >= 3)
+					m_EndOfStepScopeID = m_CallStack[m_CallStack.size() - 3]->GetUniqueID();
+				else if (m_CallStack.size() == 2)
+					m_EndOfStepScopeID = kRootScope;
+				SendReply(HLDPPacketType::scTargetRunning, builder);
+				return;
+			case HLDPPacketType::csStepOver:
+				if (m_CallStack.size() >= 2)
+					m_EndOfStepScopeID = m_CallStack[m_CallStack.size() - 2]->GetUniqueID();
+				else
+					m_EndOfStepScopeID = kRootScope;
+				SendReply(HLDPPacketType::scTargetRunning, builder);
+				return;
+			case HLDPPacketType::csDetach:
+				m_Detached = true;
+				SendReply(HLDPPacketType::scTargetRunning, builder);
+				return;
+			case HLDPPacketType::csTerminate:
+				cmSystemTools::Error("Configuration aborted via debugging interface.");
+				cmSystemTools::SetFatalErrorOccured();
+				return;
+			case HLDPPacketType::csCreateExpression:
+			{
+				int frameID = 0;
+				std::string expression;
+				if (!reader.ReadInt32(&frameID) || !reader.ReadString(&expression))
+				{
+					SendErrorPacket("Invalid expression request");
+					continue;
+				}
+
+				std::unique_ptr<ExpressionBase> pExpression;
+				if (frameID < 0 || frameID >= m_CallStack.size())
+					SendErrorPacket("Invalid frame ID");
+				else
+				{
+					pExpression = CreateExpression(expression, *m_CallStack[frameID]);
+					if (pExpression)
+					{
+						pExpression->AssignedID = m_NextExpressionID++;
+
+						builder.AppendInt32(pExpression->AssignedID);
+						builder.AppendString(pExpression->Value);
+						builder.AppendString(pExpression->Type);
+						builder.AppendInt32(0);
+
+						m_ExpressionCache[pExpression->AssignedID] = std::move(pExpression);
+
+						SendReply(HLDPPacketType::scExpressionCreated, builder);
+					}
+					else
+					{
+						SendErrorPacket("Failed to create expression");
+					}
+				}
+
+				continue;
+			}
+			break;
+			default:
+				if (requestType > HLDPPacketType::BeforeFirstBreakpointRelatedCommand && requestType < HLDPPacketType::AfterLastBreakpointRelatedCommand)
+				{
+					HandleBreakpointRelatedCommand(requestType, reader);
+				}
+				else
+					SendErrorPacket("Unexpected packet received while the target is stopped");
+				break;
+			}
+		}
+
+		m_ExpressionCache.clear();
 	}
 
 	inline HLDPServer::RAIIScope::RAIIScope(HLDPServer *pServer, cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function)

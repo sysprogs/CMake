@@ -27,8 +27,8 @@
 #include "cmake.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#  include "cmSourceGroup.h"
 #  include "Sysprogs/HLDPServer.h"
+#  include "cmSourceGroup.h"
 #endif
 
 class cmCommand;
@@ -229,6 +229,7 @@ public:
 
   void Configure();
   void StartDebugServer(unsigned port);
+  Sysprogs::HLDPServer* GetDebugServer() { return m_pDebugServer.get(); }
 
   /**
    * Configure a subdirectory
