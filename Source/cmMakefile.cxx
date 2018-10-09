@@ -339,8 +339,12 @@ bool cmMakefile::ExecuteCommand(const cmListFileFunction& lff,
       std::unique_ptr<Sysprogs::HLDPServer::RAIIScope> pScope;
       auto pDebugServer =
         GlobalGenerator->GetCMakeInstance()->GetDebugServer();
+      bool skipThisInstruction = false;
       if (pDebugServer)
-        pScope = pDebugServer->OnExecutingInitialPass(pcmd.get(), this, lff);
+        pScope = pDebugServer->OnExecutingInitialPass(pcmd.get(), this, lff,
+                                                      skipThisInstruction);
+      if (skipThisInstruction)
+        return true;
 #endif
 
       // Try invoking the command.
@@ -605,6 +609,15 @@ void cmMakefile::ReadListFile(cmListFile const& listFile,
       // Exit early due to return command.
       break;
     }
+
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+    auto pDebugServer = GlobalGenerator->GetCMakeInstance()->GetDebugServer();
+    if (pDebugServer) {
+      i++;
+      pDebugServer->AdjustNextExecutedFunction(listFile.Functions, i);
+      i--;
+    }
+#endif
   }
   this->CheckForUnusedVariables();
 

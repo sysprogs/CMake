@@ -12,6 +12,16 @@ Sysprogs::BasicBreakpointManager::BreakpointObject *Sysprogs::BasicBreakpointMan
 	return TryLookupBreakpointObject(*it->second.begin());
 }
 
+Sysprogs::BasicBreakpointManager::BreakpointObject *Sysprogs::BasicBreakpointManager::TryGetBreakpointForFunction(const std::string &function)
+{
+	auto it = m_BreakpointsByFunctionName.find(function);
+
+	if (it == m_BreakpointsByFunctionName.end() || it->second.empty())
+		return 0;
+
+	return TryLookupBreakpointObject(*it->second.begin());
+}
+
 Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointManager::CreateBreakpoint(const std::string &file, int oneBasedLine)
 {
 	auto id = m_NextID++;
@@ -23,6 +33,15 @@ Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointMa
 	return id;
 }
 
+Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointManager::CreateBreakpoint(const std::string &function) 
+{
+	auto id = m_NextID++;
+	CaseInsensitiveFunctionName name = function;
+	m_BreakpointsByFunctionName[name].insert(id);
+	m_BreakpointsByID[id] = std::make_unique<BreakpointObject>(id, name);
+	return id;
+}
+
 void Sysprogs::BasicBreakpointManager::DeleteBreakpoint(UniqueBreakpointID id)
 {
 	auto it = m_BreakpointsByID.find(id);
@@ -31,6 +50,7 @@ void Sysprogs::BasicBreakpointManager::DeleteBreakpoint(UniqueBreakpointID id)
 
 	// We may want to clear the remove the location record in case it was the last breakpoint, but it should not cause any noticeable delays.
 	m_BreakpointsByLocation[it->second->Location].erase(id);
+	m_BreakpointsByFunctionName[it->second->FunctionName].erase(id);
 	m_BreakpointsByID.erase(it);
 }
 

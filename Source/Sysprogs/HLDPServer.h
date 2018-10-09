@@ -48,7 +48,9 @@ namespace Sysprogs
 
 	public: // Public interface for debugged code
 		bool WaitForClient();
-		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function);
+		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function, bool &skipThisInstruction);
+		void AdjustNextExecutedFunction(const std::vector<cmListFileFunction> &functions, size_t &i);
+
 		void OnMessageProduced(unsigned /*cmake::MessageType*/ type, const std::string &message);
 
 	private:
@@ -57,7 +59,7 @@ namespace Sysprogs
 		HLDPPacketType ReceiveRequest(RequestReader &reader); // Returns 'Invalid' on error
 		void SendErrorPacket(std::string details);
 
-		void ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string &stringParam);
+		void ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string &stringParam, bool *pSkipThisInstruction);
 
 	private:
 		class ExpressionBase
@@ -95,6 +97,8 @@ namespace Sysprogs
 		bool m_BreakInPending = false;
 		bool m_EventsReported = false;
 		bool m_Detached = false;
+		int m_NextOneBasedLineToExecute = 0;	//Used with "Set next statement"
+
 		std::vector<RAIIScope *> m_CallStack;
 		std::map<UniqueExpressionID, std::unique_ptr<ExpressionBase>> m_ExpressionCache;
 		BasicBreakpointManager m_BreakpointManager;

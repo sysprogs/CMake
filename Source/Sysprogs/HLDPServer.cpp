@@ -204,8 +204,9 @@ namespace Sysprogs
 		return true;
 	}
 
-	std::unique_ptr<HLDPServer::RAIIScope> HLDPServer::OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function)
+	std::unique_ptr<HLDPServer::RAIIScope> HLDPServer::OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function, bool &skipThisInstruction)
 	{
+		skipThisInstruction = false;
 		if (m_Detached)
 			return nullptr;
 
@@ -219,6 +220,9 @@ namespace Sysprogs
 
 		{
 			auto *pBreakpoint = m_BreakpointManager.TryGetBreakpointAtLocation(pScope->SourceFile, pScope->Function.Line);
+			if (!pBreakpoint)
+				pBreakpoint = m_BreakpointManager.TryGetBreakpointForFunction(function.Name.Original);
+
 			if (pBreakpoint && pBreakpoint->IsEnabled)
 			{
 				m_BreakInPending = true;
@@ -268,12 +272,30 @@ namespace Sysprogs
 			return std::move(pScope);
 		}
 
+		if (m_NextOneBasedLineToExecute && stopRecord.reason == TargetStopReason::UnspecifiedEvent)
+			stopRecord.reason = TargetStopReason::SetNextStatement;
+
 		if (!m_EventsReported && stopRecord.reason == TargetStopReason::UnspecifiedEvent)
 			stopRecord.reason = TargetStopReason::InitialBreakIn;
 
 		m_EventsReported = true;
-		ReportStopAndServeDebugRequests(stopRecord.reason, stopRecord.intParam, stopRecord.stringParam);
+		ReportStopAndServeDebugRequests(stopRecord.reason, stopRecord.intParam, stopRecord.stringParam, &skipThisInstruction);
 		return std::move(pScope);
+	}
+
+	void HLDPServer::AdjustNextExecutedFunction(const std::vector<cmListFileFunction> &functions, size_t &i)
+	{
+		if (m_NextOneBasedLineToExecute)
+		{
+			for (int j = 0; j < functions.size(); j++)
+			{
+				if (functions[j].Line == m_NextOneBasedLineToExecute)
+				{
+					i = j;
+					return;
+				}
+			}
+		}
 	}
 
 	void HLDPServer::OnMessageProduced(unsigned rawType, const std::string &message)
@@ -291,14 +313,14 @@ namespace Sysprogs
 		case cmake::INTERNAL_ERROR:
 		case cmake::AUTHOR_ERROR:
 		case cmake::DEPRECATION_ERROR:
-			ReportStopAndServeDebugRequests(TargetStopReason::Exception, 0, message);
+			ReportStopAndServeDebugRequests(TargetStopReason::Exception, 0, message, nullptr);
 			break;
 		}
 	}
 
 	void HLDPServer::HandleBreakpointRelatedCommand(HLDPPacketType type, RequestReader &reader)
 	{
-		std::string file;
+		std::string file, func;
 		int line;
 		ReplyBuilder builder;
 		BasicBreakpointManager::UniqueBreakpointID id;
@@ -320,6 +342,21 @@ namespace Sysprogs
 				id = m_BreakpointManager.CreateBreakpoint(file, line);
 				if (!id)
 					SendErrorPacket("Invalid or non-existent file: " + file);
+				else
+				{
+					builder.AppendInt32(id);
+					SendReply(HLDPPacketType::scBreakpointCreated, builder);
+				}
+			}
+			break;
+		case HLDPPacketType::csCreateFunctionBreakpoint:
+			if (!reader.ReadString(&func))
+				SendErrorPacket("Invalid breakpoint request");
+			else
+			{
+				id = m_BreakpointManager.CreateBreakpoint(func);
+				if (!id)
+					SendErrorPacket("Failed to create a function breakpoint for " + func);
 				else
 				{
 					builder.AppendInt32(id);
@@ -413,10 +450,11 @@ namespace Sysprogs
 		SendReply(HLDPPacketType::scError, builder);
 	}
 
-	void HLDPServer::ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string &stringParam)
+	void HLDPServer::ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string &stringParam, bool *pSkipThisInstruction)
 	{
 		m_BreakInPending = false;
 		m_EndOfStepScopeID = 0;
+		m_NextOneBasedLineToExecute = 0;
 
 		ReplyBuilder builder;
 		builder.AppendInt32((unsigned)stopReason);
@@ -491,6 +529,37 @@ namespace Sysprogs
 					m_EndOfStepScopeID = kRootScope;
 				SendReply(HLDPPacketType::scTargetRunning, builder);
 				return;
+			case HLDPPacketType::csSetNextStatement:
+				if (!pSkipThisInstruction)
+				{
+					SendErrorPacket("Cannot set next statement in this context");
+					continue;
+				}
+				else if (!reader.ReadString(&expression) || !reader.ReadInt32(&ID))
+				{
+					SendErrorPacket("Invalid set-next-statement request");
+					continue;
+				}
+				else if (m_CallStack.size() == 0)
+				{
+					SendErrorPacket("Unknown CMake call stack");
+					continue;
+				}
+				else
+				{
+					std::string canonicalRequestedPath = cmsys::SystemTools::GetRealPath(expression);
+					std::string canonicalCurrentPath = cmsys::SystemTools::GetRealPath(m_CallStack[m_CallStack.size() - 1]->SourceFile);
+					if (stricmp(canonicalCurrentPath.c_str(), canonicalRequestedPath.c_str()) != 0)
+						SendErrorPacket("Cannot step to a different source file");
+					else
+					{
+						m_NextOneBasedLineToExecute = ID;
+						m_BreakInPending = true;
+						*pSkipThisInstruction = true;
+						SendReply(HLDPPacketType::scTargetRunning, builder);
+						return;
+					}
+				}
 			case HLDPPacketType::csDetach:
 				m_Detached = true;
 				SendReply(HLDPPacketType::scTargetRunning, builder);
