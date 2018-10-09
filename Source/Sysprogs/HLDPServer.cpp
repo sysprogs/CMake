@@ -113,8 +113,32 @@ namespace Sysprogs
 	public:
 		SimpleExpression(const std::string &name, const std::string &type, const std::string &value)
 		{
+			Name = name;
 			Type = type;
 			Value = value;
+		}
+	};
+
+	class HLDPServer::TargetExpression : public ExpressionBase
+	{
+	private:
+		cmTarget *m_pTarget;
+
+	public:
+		TargetExpression(cmTarget *pTarget) : m_pTarget(pTarget)
+		{
+			Type = "(CMake target)";
+			Name = pTarget->GetName();
+			Value = "target";
+			ChildCountOrMinusOneIfNotYetComputed = -1;
+		}
+
+		virtual std::vector<std::unique_ptr<ExpressionBase>> CreateChildren()
+		{
+			std::vector<std::unique_ptr<ExpressionBase>> result;
+			for (const auto &kv : m_pTarget->GetProperties())
+				result.push_back(std::make_unique<SimpleExpression>(kv.first, "(property entry)", kv.second.GetValue()));
+			return std::move(result);
 		}
 	};
 
@@ -125,7 +149,7 @@ namespace Sysprogs
 		ReplyBuilder builder;
 		builder.AppendInt32(0);
 		SendReply(HLDPPacketType::scTargetExited, builder);
-		delete m_pSocket; 
+		delete m_pSocket;
 	}
 
 	bool HLDPServer::WaitForClient()
@@ -215,6 +239,10 @@ namespace Sysprogs
 			return std::move(pScope);
 		}
 
+		if (!m_EventsReported && stopRecord.reason == TargetStopReason::UnspecifiedEvent)
+			stopRecord.reason = TargetStopReason::InitialBreakIn;
+
+		m_EventsReported = true;
 		ReportStopAndServeDebugRequests(stopRecord.reason, stopRecord.intParam, stopRecord.stringParam);
 		return std::move(pScope);
 	}
@@ -396,6 +424,8 @@ namespace Sysprogs
 		if (!SendReply(HLDPPacketType::scTargetStopped, builder))
 			return;
 
+		int ID = 0;
+
 		for (;;)
 		{
 			builder.Reset();
@@ -439,20 +469,19 @@ namespace Sysprogs
 				return;
 			case HLDPPacketType::csCreateExpression:
 			{
-				int frameID = 0;
 				std::string expression;
-				if (!reader.ReadInt32(&frameID) || !reader.ReadString(&expression))
+				if (!reader.ReadInt32(&ID) || !reader.ReadString(&expression))
 				{
 					SendErrorPacket("Invalid expression request");
 					continue;
 				}
 
 				std::unique_ptr<ExpressionBase> pExpression;
-				if (frameID < 0 || frameID >= m_CallStack.size())
+				if (ID < 0 || ID >= m_CallStack.size())
 					SendErrorPacket("Invalid frame ID");
 				else
 				{
-					pExpression = CreateExpression(expression, *m_CallStack[frameID]);
+					pExpression = CreateExpression(expression, *m_CallStack[ID]);
 					if (pExpression)
 					{
 						pExpression->AssignedID = m_NextExpressionID++;
@@ -460,7 +489,7 @@ namespace Sysprogs
 						builder.AppendInt32(pExpression->AssignedID);
 						builder.AppendString(pExpression->Value);
 						builder.AppendString(pExpression->Type);
-						builder.AppendInt32(0);
+						builder.AppendInt32(pExpression->ChildCountOrMinusOneIfNotYetComputed);
 
 						m_ExpressionCache[pExpression->AssignedID] = std::move(pExpression);
 
@@ -471,10 +500,55 @@ namespace Sysprogs
 						SendErrorPacket("Failed to create expression");
 					}
 				}
-
 				continue;
 			}
-			break;
+			case HLDPPacketType::csQueryExpressionChildren:
+				if (!reader.ReadInt32(&ID))
+				{
+					SendErrorPacket("Invalid expression request");
+					continue;
+				}
+				else
+				{
+					auto it = m_ExpressionCache.find(ID);
+					if (it == m_ExpressionCache.end())
+					{
+						SendErrorPacket("Invalid expression ID");
+						continue;
+					}
+					else
+					{
+						if (!it->second->ChildrenRegistered)
+						{
+							it->second->ChildrenRegistered = true;
+							for (auto &pChild : it->second->CreateChildren())
+							{
+								pChild->AssignedID = m_NextExpressionID++;
+								it->second->RegisteredChildren.push_back(pChild->AssignedID);
+								m_ExpressionCache[pChild->AssignedID] = std::move(pChild);
+							}
+						}
+
+						auto childCount = builder.AppendDelayedInt32();
+						for (auto &id : it->second->RegisteredChildren)
+						{
+							auto it = m_ExpressionCache.find(id);
+							if (it == m_ExpressionCache.end())
+								continue;
+
+							builder.AppendInt32(id);
+							builder.AppendString(it->second->Name);
+							builder.AppendString(it->second->Type);
+							builder.AppendString(it->second->Value);
+							builder.AppendInt32(it->second->ChildCountOrMinusOneIfNotYetComputed);
+
+							(*childCount)++;
+						}
+
+						SendReply(HLDPPacketType::scExpressionChildrenQueried, builder);
+					}
+				}
+				break;
 			default:
 				if (requestType > HLDPPacketType::BeforeFirstBreakpointRelatedCommand && requestType < HLDPPacketType::AfterLastBreakpointRelatedCommand)
 				{
@@ -514,9 +588,11 @@ namespace Sysprogs
 	{
 		const char *pValue = cmDefinitions::Get(text, scope.Position->Vars, scope.Position->Root);
 		if (pValue)
-		{
 			return std::make_unique<SimpleExpression>(text, "(CMake Variable)", pValue);
-		}
+
+		cmTarget *pTarget = scope.Makefile->FindTargetToUse(text, false);
+		if (pTarget)
+			return std::make_unique<TargetExpression>(pTarget);
 
 		return nullptr;
 	}

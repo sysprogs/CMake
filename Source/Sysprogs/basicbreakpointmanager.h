@@ -9,7 +9,20 @@ namespace Sysprogs
 	{
 	public:
 		typedef int UniqueBreakpointID;
-		typedef std::pair<int, std::string> CanonicalFileLocation;
+		struct CanonicalFileLocation
+		{
+			std::string Path;
+			int OneBasedLine;
+
+			bool operator<(const CanonicalFileLocation &right) const
+			{
+				if (OneBasedLine != right.OneBasedLine)
+					return OneBasedLine < right.OneBasedLine;
+				return stricmp(Path.c_str(), right.Path.c_str()) < 0;
+			}
+
+			CanonicalFileLocation(const std::string &path, int line) : Path(path), OneBasedLine(line) {}
+		};
 
 		struct BreakpointObject
 		{
@@ -17,10 +30,9 @@ namespace Sysprogs
 			CanonicalFileLocation Location;
 			bool IsEnabled = true;
 
-			BreakpointObject(UniqueBreakpointID id, const CanonicalFileLocation &location)
+			BreakpointObject(UniqueBreakpointID id, const CanonicalFileLocation &location) : Location(location)
 			{
-				AssignedID = id; 
-				Location = location;
+				AssignedID = id;
 			}
 		};
 

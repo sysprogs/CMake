@@ -268,7 +268,7 @@ static void setErrorMessage(std::string* errorMessage, const std::string& text)
 }
 
 static bool getOrTestHomeDirectory(cmState* state, std::string& value,
-                              std::string* errorMessage)
+                                   std::string* errorMessage)
 {
   const std::string cachedValue =
     std::string(state->GetCacheEntryValue("CMAKE_HOME_DIRECTORY"));
@@ -292,7 +292,7 @@ static bool getOrTestHomeDirectory(cmState* state, std::string& value,
 static bool getOrTestValue(cmState* state, const std::string& key,
                            std::string& value,
                            const std::string& keyDescription,
-                      std::string* errorMessage)
+                           std::string* errorMessage)
 {
   const char* entry = state->GetCacheEntryValue(key);
   const std::string cachedValue =
@@ -343,13 +343,13 @@ bool cmServerProtocol1::DoActivate(const cmServerRequest& request,
 
       // Check generator:
       if (!getOrTestValue(state, "CMAKE_GENERATOR", generator, "generator",
-                     errorMessage)) {
+                          errorMessage)) {
         return false;
       }
 
       // check extra generator:
       if (!getOrTestValue(state, "CMAKE_EXTRA_GENERATOR", extraGenerator,
-                     "extra generator", errorMessage)) {
+                          "extra generator", errorMessage)) {
         return false;
       }
 
@@ -360,7 +360,7 @@ bool cmServerProtocol1::DoActivate(const cmServerRequest& request,
 
       // check toolset:
       if (!getOrTestValue(state, "CMAKE_GENERATOR_TOOLSET", toolset, "toolset",
-                     errorMessage)) {
+                          errorMessage)) {
         return false;
       }
 
@@ -639,7 +639,7 @@ struct hash<LanguageData>
     for (auto const& i : in.IncludePathList) {
       result = result ^
         (hash<std::string>()(i.first) ^
-                         (i.second ? std::numeric_limits<size_t>::max() : 0));
+         (i.second ? std::numeric_limits<size_t>::max() : 0));
     }
     for (auto const& i : in.Defines) {
       result = result ^ hash<std::string>()(i);
@@ -1282,6 +1282,13 @@ cmServerResponse cmServerProtocol1::ProcessConfigure(
   if (!cm->SetCacheArgs(cacheArgs)) {
     return request.ReportError("cacheArguments could not be set.");
   }
+
+  auto value = request.Data["sysprogsDebugServerPort"];
+  if (value.isInt()) 
+    cm->SetDebugServerPort(value.asInt());
+   else
+    cm->SetDebugServerPort(0);
+
 
   int ret = cm->Configure();
   if (ret < 0) {

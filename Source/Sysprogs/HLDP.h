@@ -39,7 +39,7 @@ namespace Sysprogs
 		csCreateExpression,			 // Payload: Unique Frame ID:int32, Expression:string
 		scExpressionCreated,		 // Payload: ID:int32, value:string, type:string, ChildCount:int32 (ChildCount = -1 indicates that the exact count will be computed later)
 		csQueryExpressionChildren,   // Payload: ID:int32
-		scExpressionChildrenQueried, // Payload: array of [ID:int32, name:string, type:string, value:string]
+		scExpressionChildrenQueried, // Payload: array of [ID:int32, name:string, type:string, value:string, ChildCount:int32]
 
 		// Breakpoint commands can be executed without stopping the target
 		BeforeFirstBreakpointRelatedCommand,

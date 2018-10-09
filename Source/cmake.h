@@ -443,6 +443,7 @@ public:
   void UnwatchUnusedCli(const std::string& var);
   void WatchUnusedCli(const std::string& var);
   unsigned GetDebugServerPort() const { return DebugServerPort; }
+  void SetDebugServerPort(unsigned port) {DebugServerPort = port;}
 
   cmState* GetState() const { return this->State; }
   void SetCurrentSnapshot(cmStateSnapshot const& snapshot)

@@ -1,5 +1,6 @@
 #include "cmsys/SystemTools.hxx"
 #include "BasicBreakpointManager.h"
+#include "cmSystemTools.h"
 
 Sysprogs::BasicBreakpointManager::BreakpointObject *Sysprogs::BasicBreakpointManager::TryGetBreakpointAtLocation(const std::string &file, int oneBasedLine)
 {
@@ -15,7 +16,7 @@ Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointMa
 {
 	auto id = m_NextID++;
 	auto location = MakeCanonicalLocation(file, oneBasedLine);
-	if (location.second.empty())
+	if (location.Path.empty())
 		return 0;
 	m_BreakpointsByLocation[location].insert(id);
 	m_BreakpointsByID[id] = std::make_unique<BreakpointObject>(id, location);
@@ -45,9 +46,9 @@ Sysprogs::BasicBreakpointManager::CanonicalFileLocation Sysprogs::BasicBreakpoin
 {
 	auto it = m_CanonicalPathMap.find(file);
 	if (it != m_CanonicalPathMap.end())
-		return CanonicalFileLocation(oneBasedLine, it->second);
+		return CanonicalFileLocation(it->second, oneBasedLine);
 
 	std::string canonicalPath = cmsys::SystemTools::GetRealPath(file);
 	m_CanonicalPathMap[file] = canonicalPath;
-	return CanonicalFileLocation(oneBasedLine, canonicalPath);
+	return CanonicalFileLocation(canonicalPath, oneBasedLine);
 }

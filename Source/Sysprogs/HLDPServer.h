@@ -46,7 +46,7 @@ namespace Sysprogs
 			~RAIIScope();
 		};
 
-	public:	//Public interface for debugged code
+	public: // Public interface for debugged code
 		bool WaitForClient();
 		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function);
 		void OnMessageProduced(cmake::MessageType type, const std::string &message);
@@ -57,20 +57,28 @@ namespace Sysprogs
 		HLDPPacketType ReceiveRequest(RequestReader &reader); // Returns 'Invalid' on error
 		void SendErrorPacket(std::string details);
 
-		void ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string& stringParam);
+		void ReportStopAndServeDebugRequests(TargetStopReason stopReason, unsigned intParam, const std::string &stringParam);
 
 	private:
 		class ExpressionBase
 		{
 		public:
 			UniqueExpressionID AssignedID = -1;
-			std::string Value, Type;
+			std::string Name, Value, Type;
+			int ChildCountOrMinusOneIfNotYetComputed = 0;
+
+		public:
+			std::vector<UniqueExpressionID> RegisteredChildren;
+			bool ChildrenRegistered = false;
+			virtual std::vector<std::unique_ptr<ExpressionBase>> CreateChildren() { return std::vector<std::unique_ptr<ExpressionBase>>(); }
 
 		public:
 			virtual ~ExpressionBase() {}
 		};
 
 		class SimpleExpression;
+		class TargetExpression;
+		class TargetPropertyListExpression;
 
 	private:
 		std::unique_ptr<ExpressionBase> CreateExpression(const std::string &text, const RAIIScope &scope);
@@ -78,6 +86,7 @@ namespace Sysprogs
 	private:
 		BasicIncomingSocket *m_pSocket;
 		bool m_BreakInPending = false;
+		bool m_EventsReported = false;
 		bool m_Detached = false;
 		std::vector<RAIIScope *> m_CallStack;
 		std::map<UniqueExpressionID, std::unique_ptr<ExpressionBase>> m_ExpressionCache;
