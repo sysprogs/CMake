@@ -5,6 +5,7 @@
 #include "HLDPServer.h"
 #include "cmSystemTools.h"
 #include "cmStatePrivate.h"
+#include "cmVariableWatch.h"
 
 namespace Sysprogs
 {
@@ -108,6 +109,7 @@ namespace Sysprogs
 		}
 	};
 
+#pragma region Expressions
 	class HLDPServer::SimpleExpression : public ExpressionBase
 	{
 	public:
@@ -169,6 +171,24 @@ namespace Sysprogs
 				result.push_back(std::make_unique<SimpleExpression>(kv.first, "(property entry)", kv.second.GetValue()));
 			return std::move(result);
 		}
+	};
+#pragma endregion
+
+	enum class CMakeDomainSpecificBreakpointType
+	{
+		VariableAccessed,
+		VariableUpdated,
+		MessageSent,
+		TargetCreated,
+	};
+
+	class HLDPServer::DomainSpecificBreakpoint : public BasicBreakpointManager::DomainSpecificBreakpointExtension
+	{
+	public:
+		CMakeDomainSpecificBreakpointType Type;
+		std::string StringArg;
+
+		DomainSpecificBreakpoint(const std::string &stringArg, int intArg) : StringArg(stringArg), Type((CMakeDomainSpecificBreakpointType)intArg) {}
 	};
 
 	HLDPServer::HLDPServer(int tcpPort) : m_BreakInPending(true) { m_pSocket = new BasicIncomingSocket(tcpPort); }
@@ -314,14 +334,72 @@ namespace Sysprogs
 		case cmake::AUTHOR_ERROR:
 		case cmake::DEPRECATION_ERROR:
 			ReportStopAndServeDebugRequests(TargetStopReason::Exception, 0, message, nullptr);
-			break;
+			return;
 		}
+
+		auto id = m_BreakpointManager.TryLocateEnabledDomainSpecificBreakpoint([&](BasicBreakpointManager::DomainSpecificBreakpointExtension *pBp) {
+			switch (static_cast<DomainSpecificBreakpoint *>(pBp)->Type)
+			{
+			case CMakeDomainSpecificBreakpointType::MessageSent:
+				if (message.find(static_cast<DomainSpecificBreakpoint *>(pBp)->StringArg) != std::string::npos)
+					return true;
+				break;
+			}
+
+			return false;
+		});
+
+		if (id)
+			ReportStopAndServeDebugRequests(TargetStopReason::Breakpoint, id, "", nullptr);
+	}
+
+	void HLDPServer::OnVariableAccessed(const std::string &variable, int access_type, const char *newValue, const cmMakefile *mf)
+	{
+		if (m_WatchedVariables.find(variable) == m_WatchedVariables.end())
+			return;
+
+		bool isRead = access_type == cmVariableWatch::VARIABLE_READ_ACCESS || access_type == cmVariableWatch::UNKNOWN_VARIABLE_READ_ACCESS;
+
+		auto id = m_BreakpointManager.TryLocateEnabledDomainSpecificBreakpoint([&](BasicBreakpointManager::DomainSpecificBreakpointExtension *pBp) {
+			switch (static_cast<DomainSpecificBreakpoint *>(pBp)->Type)
+			{
+			case CMakeDomainSpecificBreakpointType::VariableAccessed:
+			case CMakeDomainSpecificBreakpointType::VariableUpdated:
+				if (isRead == (static_cast<DomainSpecificBreakpoint *>(pBp)->Type == CMakeDomainSpecificBreakpointType::VariableAccessed) &&
+					variable == static_cast<DomainSpecificBreakpoint *>(pBp)->StringArg)
+					return true;
+				break;
+			}
+
+			return false;
+		});
+
+		if (id)
+			ReportStopAndServeDebugRequests(TargetStopReason::Breakpoint, id, "", nullptr);
+	}
+
+	void HLDPServer::OnTargetCreated(cmStateEnums::TargetType type, const std::string &targetName)
+	{
+		auto id = m_BreakpointManager.TryLocateEnabledDomainSpecificBreakpoint([&](BasicBreakpointManager::DomainSpecificBreakpointExtension *pBp) {
+			switch (static_cast<DomainSpecificBreakpoint *>(pBp)->Type)
+			{
+			case CMakeDomainSpecificBreakpointType::TargetCreated:
+				if (static_cast<DomainSpecificBreakpoint *>(pBp)->StringArg.empty() || targetName == static_cast<DomainSpecificBreakpoint *>(pBp)->StringArg)
+					return true;
+				break;
+			}
+
+			return false;
+		});
+
+		if (id)
+			ReportStopAndServeDebugRequests(TargetStopReason::Breakpoint, id, "", nullptr);
 	}
 
 	void HLDPServer::HandleBreakpointRelatedCommand(HLDPPacketType type, RequestReader &reader)
 	{
-		std::string file, func;
-		int line;
+		std::string file, stringArg;
+		int line, intArg1, intArg2;
 		ReplyBuilder builder;
 		BasicBreakpointManager::UniqueBreakpointID id;
 
@@ -350,15 +428,33 @@ namespace Sysprogs
 			}
 			break;
 		case HLDPPacketType::csCreateFunctionBreakpoint:
-			if (!reader.ReadString(&func))
+			if (!reader.ReadString(&stringArg))
 				SendErrorPacket("Invalid breakpoint request");
 			else
 			{
-				id = m_BreakpointManager.CreateBreakpoint(func);
+				id = m_BreakpointManager.CreateBreakpoint(stringArg);
 				if (!id)
-					SendErrorPacket("Failed to create a function breakpoint for " + func);
+					SendErrorPacket("Failed to create a function breakpoint for " + stringArg);
 				else
 				{
+					builder.AppendInt32(id);
+					SendReply(HLDPPacketType::scBreakpointCreated, builder);
+				}
+			}
+			break;
+		case HLDPPacketType::csCreateDomainSpecificBreakpoint:
+			if (!reader.ReadInt32(&intArg1) || !reader.ReadString(&stringArg) || !reader.ReadInt32(&intArg2))
+				SendErrorPacket("Invalid breakpoint request");
+			else
+			{
+				id = m_BreakpointManager.CreateDomainSpecificBreakpoint(std::make_unique<DomainSpecificBreakpoint>(stringArg, intArg1));
+				if (!id)
+					SendErrorPacket("Failed to create a CMake breakpoint");
+				else
+				{
+					if (intArg1 == (int)CMakeDomainSpecificBreakpointType::VariableAccessed || intArg1 == (int)CMakeDomainSpecificBreakpointType::VariableUpdated)
+						m_WatchedVariables.insert(stringArg);
+
 					builder.AppendInt32(id);
 					SendReply(HLDPPacketType::scBreakpointCreated, builder);
 				}

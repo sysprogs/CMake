@@ -52,6 +52,8 @@ namespace Sysprogs
 		void AdjustNextExecutedFunction(const std::vector<cmListFileFunction> &functions, size_t &i);
 
 		void OnMessageProduced(unsigned /*cmake::MessageType*/ type, const std::string &message);
+		void OnVariableAccessed(const std::string &variable, int access_type, const char *newValue, const cmMakefile *mf);
+		void OnTargetCreated(cmStateEnums::TargetType type, const std::string &targetName);
 
 	private:
 		void HandleBreakpointRelatedCommand(HLDPPacketType type, RequestReader &reader);
@@ -89,6 +91,8 @@ namespace Sysprogs
 		class TargetExpression;
 		class TargetPropertyListExpression;
 
+		class DomainSpecificBreakpoint;
+
 	private:
 		std::unique_ptr<ExpressionBase> CreateExpression(const std::string &text, const RAIIScope &scope);
 
@@ -97,11 +101,14 @@ namespace Sysprogs
 		bool m_BreakInPending = false;
 		bool m_EventsReported = false;
 		bool m_Detached = false;
-		int m_NextOneBasedLineToExecute = 0;	//Used with "Set next statement"
+		int m_NextOneBasedLineToExecute = 0; // Used with "Set next statement"
 
 		std::vector<RAIIScope *> m_CallStack;
 		std::map<UniqueExpressionID, std::unique_ptr<ExpressionBase>> m_ExpressionCache;
 		BasicBreakpointManager m_BreakpointManager;
+
+		//Set of variables that ever had watches created. This should reduce the delay when checking each variable access.
+		std::set<BasicBreakpointManager::CaseInsensitiveObjectName> m_WatchedVariables;
 
 		enum
 		{

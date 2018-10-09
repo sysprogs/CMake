@@ -1945,6 +1945,11 @@ cmTarget* cmMakefile::AddExecutable(const std::string& exeName,
 cmTarget* cmMakefile::AddNewTarget(cmStateEnums::TargetType type,
                                    const std::string& name)
 {
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  auto* pDebugServer = GetCMakeInstance()->GetDebugServer();
+  if (pDebugServer)
+    pDebugServer->OnTargetCreated(type, name);
+#endif
   cmTargets::iterator it =
     this->Targets
       .insert(cmTargets::value_type(

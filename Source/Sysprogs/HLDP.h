@@ -49,6 +49,7 @@ namespace Sysprogs
 		BeforeFirstBreakpointRelatedCommand,
 		csCreateBreakpoint,			// Payload: file:string, one-based line:string
 		csCreateFunctionBreakpoint, // Payload: function name:string
+		csCreateDomainSpecificBreakpoint,	//Payload: domain-specific (see below)
 		scBreakpointCreated,		// Payload: breakpoint ID:int32
 		csDeleteBreakpoint,			// Payload: breakpoint ID:int32
 		csUpdateBreakpoint,			// Payload: breakpoint ID:int32, updated field: int32, IntArg1: int32, IntArg2: int32, StringArg:string
@@ -101,5 +102,8 @@ namespace Sysprogs
 			* String := Array (see above) of UTF8 chars
 			* BacktraceEntry := Unique Frame ID:int32, Function:string,
 	   Arguments:string, Source File:string, One-based line:int32
+
+	   CMake domain-specific breakpoint payload:
+			type:int32 (CMakeDomainSpecificBreakpointType), StringArg:string, reserved:int32
 	*/
 } // namespace Sysprogs

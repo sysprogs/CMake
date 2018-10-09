@@ -7,7 +7,7 @@ Sysprogs::BasicBreakpointManager::BreakpointObject *Sysprogs::BasicBreakpointMan
 	auto it = m_BreakpointsByLocation.find(MakeCanonicalLocation(file, oneBasedLine));
 
 	if (it == m_BreakpointsByLocation.end() || it->second.empty())
-		return 0;
+		return nullptr;
 
 	return TryLookupBreakpointObject(*it->second.begin());
 }
@@ -17,7 +17,7 @@ Sysprogs::BasicBreakpointManager::BreakpointObject *Sysprogs::BasicBreakpointMan
 	auto it = m_BreakpointsByFunctionName.find(function);
 
 	if (it == m_BreakpointsByFunctionName.end() || it->second.empty())
-		return 0;
+		return nullptr;
 
 	return TryLookupBreakpointObject(*it->second.begin());
 }
@@ -27,7 +27,7 @@ Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointMa
 	auto id = m_NextID++;
 	auto location = MakeCanonicalLocation(file, oneBasedLine);
 	if (location.Path.empty())
-		return 0;
+		return InvalidBreakpointID;
 	m_BreakpointsByLocation[location].insert(id);
 	m_BreakpointsByID[id] = std::make_unique<BreakpointObject>(id, location);
 	return id;
@@ -36,9 +36,16 @@ Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointMa
 Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointManager::CreateBreakpoint(const std::string &function) 
 {
 	auto id = m_NextID++;
-	CaseInsensitiveFunctionName name = function;
+	CaseInsensitiveObjectName name = function;
 	m_BreakpointsByFunctionName[name].insert(id);
 	m_BreakpointsByID[id] = std::make_unique<BreakpointObject>(id, name);
+	return id;
+}
+
+Sysprogs::BasicBreakpointManager::UniqueBreakpointID Sysprogs::BasicBreakpointManager::CreateDomainSpecificBreakpoint(std::unique_ptr<DomainSpecificBreakpointExtension> &&extension)
+{
+	auto id = m_NextID++;
+	m_BreakpointsByID[id] = std::make_unique<BreakpointObject>(id, std::move(extension));
 	return id;
 }
 

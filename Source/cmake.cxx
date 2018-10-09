@@ -158,7 +158,7 @@ cmake::cmake(Role role)
   this->CurrentWorkingMode = NORMAL_MODE;
 
 #ifdef CMAKE_BUILD_WITH_CMAKE
-  this->VariableWatch = new cmVariableWatch;
+  this->VariableWatch = new cmVariableWatch(this);
 #endif
 
   this->AddDefaultGenerators();
