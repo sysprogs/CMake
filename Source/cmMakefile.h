@@ -27,7 +27,6 @@
 #include "cmake.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
-#  include "Sysprogs/HLDPServer.h"
 #  include "cmSourceGroup.h"
 #endif
 
@@ -228,8 +227,6 @@ public:
                        bool immediate);
 
   void Configure();
-  void StartDebugServer(unsigned port);
-  Sysprogs::HLDPServer* GetDebugServer() { return m_pDebugServer.get(); }
 
   /**
    * Configure a subdirectory
@@ -897,7 +894,6 @@ protected:
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   std::vector<cmSourceGroup> SourceGroups;
   size_t ObjectLibrariesSourceGroupIndex;
-  std::unique_ptr<Sysprogs::HLDPServer> m_pDebugServer;
 #endif
 
   std::vector<cmCommand*> FinalPassCommands;

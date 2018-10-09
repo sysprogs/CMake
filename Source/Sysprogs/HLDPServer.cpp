@@ -247,8 +247,10 @@ namespace Sysprogs
 		return std::move(pScope);
 	}
 
-	void HLDPServer::OnMessageProduced(cmake::MessageType type, const std::string &message)
+	void HLDPServer::OnMessageProduced(unsigned rawType, const std::string &message)
 	{
+		cmake::MessageType type = (cmake::MessageType)rawType;
+		
 		ReplyBuilder builder;
 		builder.AppendInt32(0);
 		builder.AppendString(message);

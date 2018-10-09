@@ -49,7 +49,7 @@ namespace Sysprogs
 	public: // Public interface for debugged code
 		bool WaitForClient();
 		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function);
-		void OnMessageProduced(cmake::MessageType type, const std::string &message);
+		void OnMessageProduced(unsigned /*cmake::MessageType*/ type, const std::string &message);
 
 	private:
 		void HandleBreakpointRelatedCommand(HLDPPacketType type, RequestReader &reader);

@@ -2375,6 +2375,8 @@ static bool cmakeCheckStampList(const char* stampList, bool verbose)
 void cmake::IssueMessage(cmake::MessageType t, std::string const& text,
                          cmListFileBacktrace const& backtrace) const
 {
+  if (m_pDebugServer)
+    m_pDebugServer->OnMessageProduced(t, text);
   this->Messenger->IssueMessage(t, text, backtrace);
 }
 
@@ -2671,6 +2673,25 @@ void cmake::SetDevWarningsAsErrors(bool b)
 bool cmake::GetDeprecatedWarningsAsErrors() const
 {
   return this->Messenger->GetDeprecatedWarningsAsErrors();
+}
+
+void cmake::StartDebugServerIfEnabled()
+{
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  if (!m_pDebugServer && DebugServerPort) {
+    m_pDebugServer.reset(new Sysprogs::HLDPServer(DebugServerPort));
+    if (!m_pDebugServer->WaitForClient()) {
+      cmSystemTools::Error("Failed to start debugging server. Aborting...");
+      cmSystemTools::SetFatalErrorOccured();
+    }
+  }
+#endif
+}
+
+void cmake::StopDebugServerIfNeeded()
+{
+  if (m_pDebugServer)
+    m_pDebugServer.reset(nullptr);
 }
 
 void cmake::SetDeprecatedWarningsAsErrors(bool b)

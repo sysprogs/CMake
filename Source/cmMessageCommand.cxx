@@ -6,6 +6,7 @@
 #include "cmMakefile.h"
 #include "cmMessenger.h"
 #include "cmSystemTools.h"
+#include "cmGlobalGenerator.h"
 #include "cmake.h"
 #include "Sysprogs/HLDPServer.h"
 
@@ -62,7 +63,8 @@ bool cmMessageCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   std::string message = cmJoin(cmMakeRange(i, args.end()), std::string());
-  Sysprogs::HLDPServer *pServer = Makefile->GetDebugServer();
+  Sysprogs::HLDPServer* pServer =
+    Makefile->GetGlobalGenerator()->GetCMakeInstance()->GetDebugServer();
   if (pServer)
     pServer->OnMessageProduced(type, message);
 
