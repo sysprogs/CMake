@@ -72,11 +72,18 @@ namespace Sysprogs
 			bool ChildrenRegistered = false;
 			virtual std::vector<std::unique_ptr<ExpressionBase>> CreateChildren() { return std::vector<std::unique_ptr<ExpressionBase>>(); }
 
+			virtual bool UpdateValue(const std::string &value, std::string &error)
+			{
+				error = "This expression cannot be edited.";
+				return false;
+			}
+
 		public:
 			virtual ~ExpressionBase() {}
 		};
 
 		class SimpleExpression;
+		class VariableExpression;
 		class TargetExpression;
 		class TargetPropertyListExpression;
 

@@ -1187,6 +1187,7 @@ cmServerResponse cmServerProtocol1::ProcessCompute(
 
   cmake* cm = this->CMakeInstance();
   int ret = cm->Generate();
+  cm->StopDebugServerIfNeeded();
 
   if (ret < 0) {
     return request.ReportError("Failed to compute build system.");

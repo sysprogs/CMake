@@ -37,9 +37,11 @@ namespace Sysprogs
 		// Expression commands can only be executed when the target is stopped.
 		// All expressions are automatically deleted once the target resumes or performs a step.
 		csCreateExpression,			 // Payload: Unique Frame ID:int32, Expression:string
-		scExpressionCreated,		 // Payload: ID:int32, value:string, type:string, ChildCount:int32 (ChildCount = -1 indicates that the exact count will be computed later)
+		scExpressionCreated,		 // Payload: ID:int32, name:string, type:string, value:string, Flags: int32, ChildCount:int32 (ChildCount = -1 indicates that the exact count will be computed later)
 		csQueryExpressionChildren,   // Payload: ID:int32
-		scExpressionChildrenQueried, // Payload: array of [ID:int32, name:string, type:string, value:string, ChildCount:int32]
+		scExpressionChildrenQueried, // Payload: array of [ID:int32, name:string, type:string, value:string, Flags: int32, ChildCount:int32]
+		csSetExpressionValue,		 // Payload: ID:int32, value:string
+		scExpressionUpdated,		 // No payload
 
 		// Breakpoint commands can be executed without stopping the target
 		BeforeFirstBreakpointRelatedCommand,

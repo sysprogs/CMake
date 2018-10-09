@@ -119,6 +119,35 @@ namespace Sysprogs
 		}
 	};
 
+	class HLDPServer::VariableExpression : public ExpressionBase
+	{
+	private:
+		const RAIIScope &m_Scope;
+
+	public:
+		VariableExpression(const RAIIScope &scope, const std::string &name, const char *pValue) : m_Scope(scope)
+		{
+			Name = name;
+			Type = "(CMake Expression)";
+			Value = pValue;
+		}
+
+		virtual bool UpdateValue(const std::string &value, std::string &error) override
+		{
+			auto &entry = cmDefinitions::GetInternal(Name, m_Scope.Position->Vars, m_Scope.Position->Root, false);
+			if (entry.Exists)
+			{
+				const_cast<cmDefinitions::Def &>(entry).assign(value);
+				return true;
+			}
+			else
+			{
+				error = "Unable to find variable: " + Name;
+				return false;
+			}
+		}
+	};
+
 	class HLDPServer::TargetExpression : public ExpressionBase
 	{
 	private:
@@ -250,7 +279,7 @@ namespace Sysprogs
 	void HLDPServer::OnMessageProduced(unsigned rawType, const std::string &message)
 	{
 		cmake::MessageType type = (cmake::MessageType)rawType;
-		
+
 		ReplyBuilder builder;
 		builder.AppendInt32(0);
 		builder.AppendString(message);
@@ -427,6 +456,7 @@ namespace Sysprogs
 			return;
 
 		int ID = 0;
+		std::string expression;
 
 		for (;;)
 		{
@@ -471,7 +501,6 @@ namespace Sysprogs
 				return;
 			case HLDPPacketType::csCreateExpression:
 			{
-				std::string expression;
 				if (!reader.ReadInt32(&ID) || !reader.ReadString(&expression))
 				{
 					SendErrorPacket("Invalid expression request");
@@ -489,8 +518,10 @@ namespace Sysprogs
 						pExpression->AssignedID = m_NextExpressionID++;
 
 						builder.AppendInt32(pExpression->AssignedID);
-						builder.AppendString(pExpression->Value);
+						builder.AppendString(pExpression->Name);
 						builder.AppendString(pExpression->Type);
+						builder.AppendString(pExpression->Value);
+						builder.AppendInt32(0);
 						builder.AppendInt32(pExpression->ChildCountOrMinusOneIfNotYetComputed);
 
 						m_ExpressionCache[pExpression->AssignedID] = std::move(pExpression);
@@ -542,6 +573,7 @@ namespace Sysprogs
 							builder.AppendString(it->second->Name);
 							builder.AppendString(it->second->Type);
 							builder.AppendString(it->second->Value);
+							builder.AppendInt32(0);
 							builder.AppendInt32(it->second->ChildCountOrMinusOneIfNotYetComputed);
 
 							(*childCount)++;
@@ -549,6 +581,27 @@ namespace Sysprogs
 
 						SendReply(HLDPPacketType::scExpressionChildrenQueried, builder);
 					}
+				}
+				break;
+			case HLDPPacketType::csSetExpressionValue:
+				if (!reader.ReadInt32(&ID) || !reader.ReadString(&expression))
+				{
+					SendErrorPacket("Invalid expression request");
+					continue;
+				}
+				else
+				{
+					auto it = m_ExpressionCache.find(ID);
+					if (it == m_ExpressionCache.end())
+					{
+						SendErrorPacket("Invalid expression ID");
+						continue;
+					}
+					std::string error;
+					if (it->second->UpdateValue(expression, error))
+						SendReply(HLDPPacketType::scExpressionUpdated, builder);
+					else
+						SendErrorPacket(error);
 				}
 				break;
 			default:
@@ -590,7 +643,7 @@ namespace Sysprogs
 	{
 		const char *pValue = cmDefinitions::Get(text, scope.Position->Vars, scope.Position->Root);
 		if (pValue)
-			return std::make_unique<SimpleExpression>(text, "(CMake Variable)", pValue);
+			return std::make_unique<VariableExpression>(scope, text, pValue);
 
 		cmTarget *pTarget = scope.Makefile->FindTargetToUse(text, false);
 		if (pTarget)
