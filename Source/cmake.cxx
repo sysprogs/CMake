@@ -2375,8 +2375,10 @@ static bool cmakeCheckStampList(const char* stampList, bool verbose)
 void cmake::IssueMessage(cmake::MessageType t, std::string const& text,
                          cmListFileBacktrace const& backtrace) const
 {
+#ifdef CMAKE_BUILD_WITH_CMAKE
   if (m_pDebugServer)
     m_pDebugServer->OnMessageProduced(t, text);
+#endif
   this->Messenger->IssueMessage(t, text, backtrace);
 }
 
@@ -2675,9 +2677,9 @@ bool cmake::GetDeprecatedWarningsAsErrors() const
   return this->Messenger->GetDeprecatedWarningsAsErrors();
 }
 
+#if defined(CMAKE_BUILD_WITH_CMAKE)
 void cmake::StartDebugServerIfEnabled()
 {
-#if defined(CMAKE_BUILD_WITH_CMAKE)
   if (!m_pDebugServer && DebugServerPort) {
     m_pDebugServer.reset(new Sysprogs::HLDPServer(DebugServerPort));
     if (!m_pDebugServer->WaitForClient()) {
@@ -2685,7 +2687,6 @@ void cmake::StartDebugServerIfEnabled()
       cmSystemTools::SetFatalErrorOccured();
     }
   }
-#endif
 }
 
 void cmake::StopDebugServerIfNeeded()
@@ -2693,6 +2694,7 @@ void cmake::StopDebugServerIfNeeded()
   if (m_pDebugServer)
     m_pDebugServer.reset(nullptr);
 }
+#endif
 
 void cmake::SetDeprecatedWarningsAsErrors(bool b)
 {

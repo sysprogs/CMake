@@ -6,6 +6,7 @@
 #include "cmSystemTools.h"
 #include "cmStatePrivate.h"
 #include "cmVariableWatch.h"
+#include "cmsys/String.h"
 
 namespace Sysprogs
 {
@@ -496,7 +497,7 @@ namespace Sysprogs
 
 	bool HLDPServer::SendReply(HLDPPacketType packetType, const ReplyBuilder &builder)
 	{
-		HLDPPacketHeader hdr = {(unsigned)packetType, builder.GetBuffer().size()};
+		HLDPPacketHeader hdr = {(unsigned)packetType, (unsigned)builder.GetBuffer().size()};
 
 		if (!m_pSocket->Write(&hdr, sizeof(hdr)))
 		{
@@ -645,7 +646,7 @@ namespace Sysprogs
 				{
 					std::string canonicalRequestedPath = cmsys::SystemTools::GetRealPath(expression);
 					std::string canonicalCurrentPath = cmsys::SystemTools::GetRealPath(m_CallStack[m_CallStack.size() - 1]->SourceFile);
-					if (stricmp(canonicalCurrentPath.c_str(), canonicalRequestedPath.c_str()) != 0)
+					if (cmsysString_strcasecmp(canonicalCurrentPath.c_str(), canonicalRequestedPath.c_str()) != 0)
 						SendErrorPacket("Cannot step to a different source file");
 					else
 					{

@@ -2,6 +2,8 @@
 #include <string>
 #include <set>
 #include <map>
+#include <memory>
+#include "cmsys/String.h"
 
 namespace Sysprogs
 {
@@ -23,7 +25,7 @@ namespace Sysprogs
 			{
 				if (OneBasedLine != right.OneBasedLine)
 					return OneBasedLine < right.OneBasedLine;
-				return stricmp(Path.c_str(), right.Path.c_str()) < 0;
+				return cmsysString_strcasecmp(Path.c_str(), right.Path.c_str()) < 0;
 			}
 
 			CanonicalFileLocation(const std::string &path = "", int line = 0) : Path(path), OneBasedLine(line) {}
@@ -39,7 +41,7 @@ namespace Sysprogs
 		{
 			std::string Name;
 
-			bool operator<(const CaseInsensitiveObjectName &right) const { return stricmp(Name.c_str(), right.Name.c_str()) < 0; }
+			bool operator<(const CaseInsensitiveObjectName &right) const { return cmsysString_strcasecmp(Name.c_str(), right.Name.c_str()) < 0; }
 
 			CaseInsensitiveObjectName(const std::string &name = "") : Name(name) {}
 		};

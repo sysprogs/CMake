@@ -1167,7 +1167,9 @@ void cmGlobalGenerator::Configure()
 
   // now do it
   this->ConfigureDoneCMP0026AndCMP0024 = false;
+#ifdef CMAKE_BUILD_WITH_CMAKE
   this->CMakeInstance->StartDebugServerIfEnabled();
+#endif
   dirMf->Configure();
   dirMf->EnforceDirectoryLevelRules();
 

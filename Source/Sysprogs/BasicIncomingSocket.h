@@ -2,9 +2,17 @@
 
 #ifdef _WIN32
 #  include <WinSock2.h>
+typedef int socklen_t;
 #else
 #  include <sys/socket.h>
+#  include <netinet/ip.h>
+typedef int SOCKET;
+static void closesocket(SOCKET socket)
+{
+	close(socket);
+}
 #endif
+
 
 /*
 	This is a very basic abstraction of the UNIX socket with blocking all-or-nothing I/O.
@@ -55,7 +63,7 @@ public:
     if (m_Socket < 0)
       return false;
     sockaddr_in addr;
-    int len = sizeof(addr);
+    socklen_t len = sizeof(addr);
     m_AcceptedSocket = accept(m_Socket, (struct sockaddr*)&addr, &len);
     if (m_AcceptedSocket < 0) {
       cmSystemTools::Error("Failed to accept a debugging connection.");
