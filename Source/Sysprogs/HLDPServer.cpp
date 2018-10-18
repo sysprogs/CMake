@@ -151,6 +151,55 @@ namespace Sysprogs
 		}
 	};
 
+	class HLDPServer::EnvironmentVariableExpression : public ExpressionBase
+	{
+	private:
+		std::string m_VarName;
+
+	public:
+		EnvironmentVariableExpression(const std::string &name, const std::string &value, bool fromEnvList = false) : m_VarName(name)
+		{
+			if (!fromEnvList)
+				Name = "ENV{" + name + "}";
+			else
+				Name = "[" + name + "]";
+
+			Type = "(Environment Variable)";
+			Value = value;
+		}
+
+		virtual bool UpdateValue(const std::string &value, std::string &error) override
+		{
+			cmSystemTools::PutEnv(m_VarName + "=" + value);
+			return true;
+		}
+	};
+
+	class HLDPServer::EnvironmentMetaExpression : public ExpressionBase
+	{
+	public:
+		EnvironmentMetaExpression()
+		{
+			Name = "$ENV";
+			Type = "(CMake Environment)";
+			Value = "<...>";
+			ChildCountOrMinusOneIfNotYetComputed = -1;
+		}
+
+		virtual std::vector<std::unique_ptr<ExpressionBase>> CreateChildren()
+		{
+			std::vector<std::unique_ptr<ExpressionBase>> result;
+			for (const auto &kv : cmSystemTools::GetEnvironmentVariables())
+			{
+				int idx = kv.find('=');
+				if (idx == std::string::npos)
+					continue;
+				result.push_back(std::make_unique<EnvironmentVariableExpression>(kv.substr(0, idx), kv.substr(idx + 1), true));
+			}
+			return std::move(result);
+		}
+	};
+
 	class HLDPServer::TargetExpression : public ExpressionBase
 	{
 	private:
@@ -165,7 +214,7 @@ namespace Sysprogs
 			ChildCountOrMinusOneIfNotYetComputed = -1;
 		}
 
-		virtual std::vector<std::unique_ptr<ExpressionBase>> CreateChildren()
+		virtual std::vector<std::unique_ptr<ExpressionBase>> CreateChildren() override
 		{
 			std::vector<std::unique_ptr<ExpressionBase>> result;
 			for (const auto &kv : m_pTarget->GetProperties())
@@ -807,6 +856,20 @@ namespace Sysprogs
 
 	std::unique_ptr<HLDPServer::ExpressionBase> HLDPServer::CreateExpression(const std::string &text, const RAIIScope &scope)
 	{
+		if (text == "ENV" || text == "$ENV")
+			return std::make_unique<EnvironmentMetaExpression>();
+		if (cmHasLiteralPrefix(text, "ENV{") && text.size() > 5)
+		{
+			std::string varName = text.substr(4, text.size() - 5);
+			std::string value;
+			if (cmSystemTools::GetEnv(varName, value))
+			{
+				return std::make_unique<EnvironmentVariableExpression>(varName, value);
+			}
+			else
+				return nullptr;
+		}
+
 		const char *pValue = cmDefinitions::Get(text, scope.Position->Vars, scope.Position->Root);
 		if (pValue)
 			return std::make_unique<VariableExpression>(scope, text, pValue);

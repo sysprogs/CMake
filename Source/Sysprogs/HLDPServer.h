@@ -88,8 +88,10 @@ namespace Sysprogs
 
 		class SimpleExpression;
 		class VariableExpression;
+		class EnvironmentVariableExpression;
 		class TargetExpression;
 		class TargetPropertyListExpression;
+		class EnvironmentMetaExpression;
 
 		class DomainSpecificBreakpoint;
 
