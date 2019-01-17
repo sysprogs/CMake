@@ -452,7 +452,7 @@ static Json::Value DumpBacktrace(const cmListFileBacktrace& backtrace)
   Json::Value result = Json::arrayValue;
 
   cmListFileBacktrace backtraceCopy = backtrace;
-  while (!backtraceCopy.Top().FilePath.empty()) {
+  while (!backtraceCopy.Empty()) {
     Json::Value entry = Json::objectValue;
     entry[kPATH_KEY] = backtraceCopy.Top().FilePath;
     if (backtraceCopy.Top().Line) {
