@@ -158,7 +158,7 @@ cmake::cmake(Role role)
   this->CurrentWorkingMode = NORMAL_MODE;
 
 #ifdef CMAKE_BUILD_WITH_CMAKE
-  this->VariableWatch = new cmVariableWatch;
+  this->VariableWatch = new cmVariableWatch(this);
 #endif
 
   this->AddDefaultGenerators();
@@ -772,6 +772,8 @@ void cmake::SetArgs(const std::vector<std::string>& args)
       }
       this->GeneratorToolset = value;
       haveToolset = true;
+    } else if (arg.find("--debug-server-port=", 0) == 0) {
+      DebugServerPort = atoi(arg.c_str() + 20);
     } else if (arg.find("-G", 0) == 0) {
       std::string value = arg.substr(2);
       if (value.empty()) {
@@ -2426,6 +2428,10 @@ static bool cmakeCheckStampList(const char* stampList, bool verbose)
 void cmake::IssueMessage(cmake::MessageType t, std::string const& text,
                          cmListFileBacktrace const& backtrace) const
 {
+#ifdef CMAKE_BUILD_WITH_CMAKE
+  if (m_pDebugServer)
+    m_pDebugServer->OnMessageProduced(t, text);
+#endif
   this->Messenger->IssueMessage(t, text, backtrace);
 }
 
@@ -2731,6 +2737,25 @@ bool cmake::GetDeprecatedWarningsAsErrors() const
 {
   return this->Messenger->GetDeprecatedWarningsAsErrors();
 }
+
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+void cmake::StartDebugServerIfEnabled()
+{
+  if (!m_pDebugServer && DebugServerPort) {
+    m_pDebugServer.reset(new Sysprogs::HLDPServer(DebugServerPort));
+    if (!m_pDebugServer->WaitForClient()) {
+      cmSystemTools::Error("Failed to start debugging server. Aborting...");
+      cmSystemTools::SetFatalErrorOccured();
+    }
+  }
+}
+
+void cmake::StopDebugServerIfNeeded()
+{
+  if (m_pDebugServer)
+    m_pDebugServer.reset(nullptr);
+}
+#endif
 
 void cmake::SetDeprecatedWarningsAsErrors(bool b)
 {

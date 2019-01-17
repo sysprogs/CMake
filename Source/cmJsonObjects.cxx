@@ -22,6 +22,7 @@
 #include "cmTarget.h"
 #include "cmTest.h"
 #include "cmake.h"
+#include "cmServerDictionary.h"
 
 #include <algorithm>
 #include <cassert>
@@ -446,6 +447,37 @@ Json::Value cmDumpCTestInfo(const cmake* cm)
   return result;
 }
 
+static Json::Value DumpBacktrace(const cmListFileBacktrace& backtrace)
+{
+  Json::Value result = Json::arrayValue;
+
+  cmListFileBacktrace backtraceCopy = backtrace;
+  while (!backtraceCopy.Top().FilePath.empty()) {
+    Json::Value entry = Json::objectValue;
+    entry[kPATH_KEY] = backtraceCopy.Top().FilePath;
+    if (backtraceCopy.Top().Line) {
+      entry[kLINE_NUMBER_KEY] = (int)backtraceCopy.Top().Line;
+    }
+    if (!backtraceCopy.Top().Name.empty()) {
+      entry[kNAME_KEY] = backtraceCopy.Top().Name;
+    }
+    result.append(std::move(entry));
+    backtraceCopy = backtraceCopy.Pop();
+  }
+  return result;
+}
+
+static void DumpBacktraceRange(Json::Value& result, const std::string& type,
+                               const cmBacktraceRange& range)
+{
+  for (const auto& bt : range) {
+    Json::Value obj = Json::objectValue;
+    obj[kTYPE_KEY] = type;
+    obj[kBACKTRACE_KEY] = DumpBacktrace(bt);
+    result.append(obj);
+  }
+}
+
 static Json::Value DumpTarget(cmGeneratorTarget* target,
                               const std::string& config)
 {
@@ -509,6 +541,22 @@ static Json::Value DumpTarget(cmGeneratorTarget* target,
 
     result[kINSTALL_PATHS] = installPaths;
   }
+
+  Json::Value crossRefs = Json::objectValue;
+  crossRefs[kBACKTRACE_KEY] = DumpBacktrace(target->Target->GetBacktrace());
+
+  Json::Value statements = Json::arrayValue;
+  DumpBacktraceRange(statements, "target_compile_definitions",
+                     target->Target->GetCompileDefinitionsBacktraces());
+  DumpBacktraceRange(statements, "target_include_directories",
+                     target->Target->GetIncludeDirectoriesBacktraces());
+  DumpBacktraceRange(statements, "target_compile_options",
+                     target->Target->GetCompileOptionsBacktraces());
+  DumpBacktraceRange(statements, "target_link_libraries",
+                     target->Target->GetLinkImplementationBacktraces());
+
+  crossRefs[kRELATED_STATEMENTS_KEY] = std::move(statements);
+  result[kTARGET_CROSS_REFERENCES_KEY] = std::move(crossRefs);
 
   if (target->HaveWellDefinedOutputFiles()) {
     Json::Value artifacts = Json::arrayValue;

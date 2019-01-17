@@ -2,6 +2,7 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmVariableWatch.h"
 
+#include "cmake.h"
 #include <memory>
 #include <utility>
 #include <vector>
@@ -19,7 +20,8 @@ const char* cmVariableWatch::GetAccessAsString(int access_type)
   return cmVariableWatchAccessStrings[access_type];
 }
 
-cmVariableWatch::cmVariableWatch()
+cmVariableWatch::cmVariableWatch(cmake* owner)
+  : m_pOwner(owner)
 {
 }
 
@@ -70,8 +72,12 @@ bool cmVariableWatch::VariableAccessed(const std::string& variable,
                                        int access_type, const char* newValue,
                                        const cmMakefile* mf) const
 {
-  cmVariableWatch::StringToVectorOfPairs::const_iterator mit =
-    this->WatchMap.find(variable);
+  auto* pDebugServer = m_pOwner->GetDebugServer();
+  if (pDebugServer)
+    pDebugServer->OnVariableAccessed(variable, access_type, newValue, mf);
+
+    cmVariableWatch::StringToVectorOfPairs::const_iterator mit =
+      this->WatchMap.find(variable);
   if (mit != this->WatchMap.end()) {
     // The strategy here is to copy the list of callbacks, and ignore
     // new callbacks that existing ones may add.

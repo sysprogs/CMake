@@ -11,6 +11,7 @@
 #include <vector>
 
 class cmMakefile;
+class cmake;
 
 /** \class cmVariableWatch
  * \brief Helper class for watching of variable accesses.
@@ -25,7 +26,7 @@ public:
                               const cmMakefile* mf);
   typedef void (*DeleteData)(void* client_data);
 
-  cmVariableWatch();
+  cmVariableWatch(cmake *owner);
   ~cmVariableWatch();
 
   /**
@@ -84,6 +85,7 @@ protected:
   typedef std::map<std::string, VectorOfPairs> StringToVectorOfPairs;
 
   StringToVectorOfPairs WatchMap;
+  cmake* m_pOwner;
 };
 
 #endif

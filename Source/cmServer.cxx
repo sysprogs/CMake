@@ -227,7 +227,11 @@ cmServerResponse cmServer::SetProtocolVersion(const cmServerRequest& request)
     return request.ReportError("Failed to activate protocol version: " +
                                errorMessage);
   }
-  return request.Reply(Json::objectValue);
+
+  Json::Value result = Json::objectValue;
+  result["sysprogsExtensionsLevel"] = 2;
+
+  return request.Reply(result);
 }
 
 bool cmServer::Serve(std::string* errorMessage)

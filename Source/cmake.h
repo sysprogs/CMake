@@ -17,6 +17,7 @@
 #include "cmStateTypes.h"
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
+#  include "Sysprogs/HLDPServer.h"
 #  include "cm_jsoncpp_value.h"
 #endif
 
@@ -150,6 +151,12 @@ public:
   void SetHomeOutputDirectory(const std::string& dir);
   std::string const& GetHomeOutputDirectory() const;
   //@}
+
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  void StartDebugServerIfEnabled();
+  void StopDebugServerIfNeeded();
+  Sysprogs::HLDPServer* GetDebugServer() { return m_pDebugServer.get(); }
+#endif
 
   /**
    * Handle a command line invocation of cmake.
@@ -444,6 +451,8 @@ public:
 
   void UnwatchUnusedCli(const std::string& var);
   void WatchUnusedCli(const std::string& var);
+  unsigned GetDebugServerPort() const { return DebugServerPort; }
+  void SetDebugServerPort(unsigned port) { DebugServerPort = port; }
 
   cmState* GetState() const { return this->State; }
   void SetCurrentSnapshot(cmStateSnapshot const& snapshot)
@@ -472,6 +481,11 @@ protected:
   std::string GeneratorInstance;
   std::string GeneratorPlatform;
   std::string GeneratorToolset;
+  unsigned DebugServerPort = 0;
+
+#if defined(CMAKE_BUILD_WITH_CMAKE)
+  std::unique_ptr<Sysprogs::HLDPServer> m_pDebugServer;
+#endif
 
   ///! read in a cmake list file to initialize the cache
   void ReadListFile(const std::vector<std::string>& args, const char* path);

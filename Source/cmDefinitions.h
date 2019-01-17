@@ -11,6 +11,11 @@
 
 #include "cmLinkedTree.h"
 
+namespace Sysprogs
+{
+class HLDPServer;
+}
+
 /** \class cmDefinitions
  * \brief Store a scope of variable definitions for CMake language.
  *
@@ -21,6 +26,7 @@
 class cmDefinitions
 {
   typedef cmLinkedTree<cmDefinitions>::iterator StackIter;
+  friend class Sysprogs::HLDPServer;
 
 public:
   static const std::string* Get(const std::string& key, StackIter begin,
