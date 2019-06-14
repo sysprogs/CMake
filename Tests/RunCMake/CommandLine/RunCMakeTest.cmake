@@ -18,11 +18,17 @@ run_cmake_command(Uno-src ${CMAKE_COMMAND} -B DummyBuildDir -UVAR)
 run_cmake_command(E-no-arg ${CMAKE_COMMAND} -E)
 run_cmake_command(E_capabilities ${CMAKE_COMMAND} -E capabilities)
 run_cmake_command(E_capabilities-arg ${CMAKE_COMMAND} -E capabilities --extra-arg)
+run_cmake_command(E_compare_files-different-eol ${CMAKE_COMMAND} -E compare_files ${RunCMake_SOURCE_DIR}/compare_files/lf ${RunCMake_SOURCE_DIR}/compare_files/crlf)
+run_cmake_command(E_compare_files-ignore-eol-same ${CMAKE_COMMAND} -E compare_files --ignore-eol ${RunCMake_SOURCE_DIR}/compare_files/lf ${RunCMake_SOURCE_DIR}/compare_files/crlf)
+run_cmake_command(E_compare_files-ignore-eol-empty ${CMAKE_COMMAND} -E compare_files --ignore-eol ${RunCMake_SOURCE_DIR}/compare_files/empty1 ${RunCMake_SOURCE_DIR}/compare_files/empty2)
+run_cmake_command(E_compare_files-ignore-eol-nonexistent ${CMAKE_COMMAND} -E compare_files --ignore-eol nonexistent_a nonexistent_b)
 run_cmake_command(E_echo_append ${CMAKE_COMMAND} -E echo_append)
 run_cmake_command(E_rename-no-arg ${CMAKE_COMMAND} -E rename)
 run_cmake_command(E_server-arg ${CMAKE_COMMAND} -E server --extra-arg)
 run_cmake_command(E_server-pipe ${CMAKE_COMMAND} -E server --pipe=)
+
 run_cmake_command(E_touch_nocreate-no-arg ${CMAKE_COMMAND} -E touch_nocreate)
+run_cmake_command(E_touch-nonexistent-dir ${CMAKE_COMMAND} -E touch "${RunCMake_BINARY_DIR}/touch-nonexistent-dir/foo")
 
 run_cmake_command(E_time ${CMAKE_COMMAND} -E time ${CMAKE_COMMAND} -E echo "hello  world")
 run_cmake_command(E_time-no-arg ${CMAKE_COMMAND} -E time)
@@ -54,12 +60,22 @@ run_cmake_command(cache-empty-entry
   ${CMAKE_COMMAND} --build ${RunCMake_SOURCE_DIR}/cache-empty-entry/)
 
 function(run_ExplicitDirs)
+  set(source_dir ${RunCMake_BINARY_DIR}/ExplicitDirsMissing)
+
+  file(REMOVE_RECURSE "${source_dir}")
+  file(MAKE_DIRECTORY "${source_dir}")
+  file(WRITE ${source_dir}/CMakeLists.txt [=[
+cmake_minimum_required(VERSION 3.13)
+project(ExplicitDirsMissing LANGUAGES NONE)
+]=])
+  run_cmake_command(no-S-B ${CMAKE_COMMAND} -E chdir ${source_dir}
+    ${CMAKE_COMMAND} -DFOO=BAR)
+
   set(source_dir ${RunCMake_SOURCE_DIR}/ExplicitDirs)
   set(binary_dir ${RunCMake_BINARY_DIR}/ExplicitDirs-build)
 
   file(REMOVE_RECURSE "${binary_dir}")
   file(MAKE_DIRECTORY "${binary_dir}")
-  run_cmake_command(no-S-B ${CMAKE_COMMAND} -DFOO=BAR)
   run_cmake_command(S-arg ${CMAKE_COMMAND} -S ${source_dir} ${binary_dir})
   run_cmake_command(S-arg-reverse-order ${CMAKE_COMMAND} ${binary_dir} -S${source_dir} )
   run_cmake_command(S-no-arg ${CMAKE_COMMAND} -S )
@@ -103,6 +119,19 @@ function(run_BuildDir)
     ${CMAKE_COMMAND} --build BuildDir-build --parallel 2)
   run_cmake_command(BuildDir--build--parallel-good-number-trailing--target ${CMAKE_COMMAND} -E chdir ..
     ${CMAKE_COMMAND} --build BuildDir-build --parallel 2 --target CustomTarget)
+  run_cmake_command(BuildDir--build-jobs-no-space-bad-number ${CMAKE_COMMAND} -E chdir ..
+    ${CMAKE_COMMAND} --build BuildDir-build -j12ab)
+  run_cmake_command(BuildDir--build-jobs-no-space-good-number ${CMAKE_COMMAND} -E chdir ..
+    ${CMAKE_COMMAND} --build BuildDir-build -j2)
+  run_cmake_command(BuildDir--build-jobs-no-space-good-number-trailing--target ${CMAKE_COMMAND} -E chdir ..
+    ${CMAKE_COMMAND} --build BuildDir-build -j2 --target CustomTarget)
+  run_cmake_command(BuildDir--build--parallel-no-space-bad-number ${CMAKE_COMMAND} -E chdir ..
+    ${CMAKE_COMMAND} --build BuildDir-build --parallel12ab)
+  run_cmake_command(BuildDir--build--parallel-no-space-good-number ${CMAKE_COMMAND} -E chdir ..
+    ${CMAKE_COMMAND} --build BuildDir-build --parallel2)
+  run_cmake_command(BuildDir--build--parallel-no-space-good-number-trailing--target ${CMAKE_COMMAND} -E chdir ..
+    ${CMAKE_COMMAND} --build BuildDir-build --parallel2 --target CustomTarget)
+
   # No default jobs for Xcode and FreeBSD build command
   if(NOT RunCMake_GENERATOR MATCHES "Xcode" AND NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
     run_cmake_command(BuildDir--build-jobs-no-number ${CMAKE_COMMAND} -E chdir ..
@@ -347,6 +376,10 @@ unset(RunCMake_TEST_OPTIONS)
 
 set(RunCMake_TEST_OPTIONS --trace-expand --warn-uninitialized)
 run_cmake(trace-expand-warn-uninitialized)
+unset(RunCMake_TEST_OPTIONS)
+
+set(RunCMake_TEST_OPTIONS -Wno-deprecated --warn-uninitialized)
+run_cmake(warn-uninitialized)
 unset(RunCMake_TEST_OPTIONS)
 
 set(RunCMake_TEST_OPTIONS --trace-source=trace-only-this-file.cmake)

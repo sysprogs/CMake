@@ -18,12 +18,7 @@ public:
     : CTest(ctest)
     , Coverage(cont)
   {
-    this->FilePath.clear();
-    this->PackagePath.clear();
-    this->PackageName.clear();
   }
-
-  ~XMLParser() override {}
 
 protected:
   void EndElement(const std::string& /*name*/) override {}
@@ -34,6 +29,7 @@ protected:
       this->PackageName = atts[1];
       this->PackagePath.clear();
     } else if (name == "sourcefile") {
+      this->FilePath.clear();
       std::string fileName = atts[1];
 
       if (this->PackagePath.empty()) {

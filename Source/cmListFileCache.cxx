@@ -3,16 +3,16 @@
 #include "cmListFileCache.h"
 
 #include "cmListFileLexer.h"
+#include "cmMessageType.h"
 #include "cmMessenger.h"
-#include "cmOutputConverter.h"
 #include "cmState.h"
+#include "cmStateDirectory.h"
 #include "cmSystemTools.h"
-#include "cmake.h"
 
-#include <algorithm>
 #include <assert.h>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 cmCommandContext::cmCommandName& cmCommandContext::cmCommandName::operator=(
   std::string const& name)
@@ -24,7 +24,7 @@ cmCommandContext::cmCommandName& cmCommandContext::cmCommandName::operator=(
 
 struct cmListFileParser
 {
-  cmListFileParser(cmListFile* lf, cmListFileBacktrace const& lfbt,
+  cmListFileParser(cmListFile* lf, cmListFileBacktrace lfbt,
                    cmMessenger* messenger, const char* filename);
   ~cmListFileParser();
   void IssueFileOpenError(std::string const& text) const;
@@ -47,12 +47,11 @@ struct cmListFileParser
   } Separation;
 };
 
-cmListFileParser::cmListFileParser(cmListFile* lf,
-                                   cmListFileBacktrace const& lfbt,
+cmListFileParser::cmListFileParser(cmListFile* lf, cmListFileBacktrace lfbt,
                                    cmMessenger* messenger,
                                    const char* filename)
   : ListFile(lf)
-  , Backtrace(lfbt)
+  , Backtrace(std::move(lfbt))
   , Messenger(messenger)
   , FileName(filename)
   , Lexer(cmListFileLexer_New())
@@ -66,7 +65,8 @@ cmListFileParser::~cmListFileParser()
 
 void cmListFileParser::IssueFileOpenError(const std::string& text) const
 {
-  this->Messenger->IssueMessage(cmake::FATAL_ERROR, text, this->Backtrace);
+  this->Messenger->IssueMessage(MessageType::FATAL_ERROR, text,
+                                this->Backtrace);
 }
 
 void cmListFileParser::IssueError(const std::string& text) const
@@ -76,7 +76,7 @@ void cmListFileParser::IssueError(const std::string& text) const
   lfc.Line = cmListFileLexer_GetCurrentLine(this->Lexer);
   cmListFileBacktrace lfbt = this->Backtrace;
   lfbt = lfbt.Push(lfc);
-  this->Messenger->IssueMessage(cmake::FATAL_ERROR, text, lfbt);
+  this->Messenger->IssueMessage(MessageType::FATAL_ERROR, text, lfbt);
   cmSystemTools::SetFatalErrorOccured();
 }
 
@@ -193,8 +193,9 @@ bool cmListFileParser::ParseFunction(const char* name, long line)
   unsigned long lastLine;
   unsigned long parenDepth = 0;
   this->Separation = SeparationOkay;
-  while ((lastLine = cmListFileLexer_GetCurrentLine(this->Lexer),
-          token = cmListFileLexer_Scan(this->Lexer))) {
+  while (
+    (static_cast<void>(lastLine = cmListFileLexer_GetCurrentLine(this->Lexer)),
+     token = cmListFileLexer_Scan(this->Lexer))) {
     if (token->type == cmListFileLexer_Token_Space ||
         token->type == cmListFileLexer_Token_Newline) {
       this->Separation = SeparationOkay;
@@ -254,7 +255,7 @@ bool cmListFileParser::ParseFunction(const char* name, long line)
   lfbt = lfbt.Push(lfc);
   error << "Parse error.  Function missing ending \")\".  "
         << "End of file reached.";
-  this->Messenger->IssueMessage(cmake::FATAL_ERROR, error.str(), lfbt);
+  this->Messenger->IssueMessage(MessageType::FATAL_ERROR, error.str(), lfbt);
   return false;
 }
 
@@ -279,10 +280,10 @@ bool cmListFileParser::AddArgument(cmListFileLexer_Token* token,
     << "Argument not separated from preceding token by whitespace.";
   /* clang-format on */
   if (isError) {
-    this->Messenger->IssueMessage(cmake::FATAL_ERROR, m.str(), lfbt);
+    this->Messenger->IssueMessage(MessageType::FATAL_ERROR, m.str(), lfbt);
     return false;
   }
-  this->Messenger->IssueMessage(cmake::AUTHOR_WARNING, m.str(), lfbt);
+  this->Messenger->IssueMessage(MessageType::AUTHOR_WARNING, m.str(), lfbt);
   return true;
 }
 
@@ -389,9 +390,8 @@ void cmListFileBacktrace::PrintTitle(std::ostream& out) const
   }
   cmListFileContext lfc = this->TopEntry->Context;
   cmStateSnapshot bottom = this->GetBottom();
-  cmOutputConverter converter(bottom);
   if (!bottom.GetState()->GetIsInTryCompile()) {
-    lfc.FilePath = converter.ConvertToRelativePath(
+    lfc.FilePath = bottom.GetDirectory().ConvertToRelPathIfNotContained(
       bottom.GetState()->GetSourceDirectory(), lfc.FilePath);
   }
   out << (lfc.Line ? " at " : " in ") << lfc;
@@ -408,7 +408,6 @@ void cmListFileBacktrace::PrintCallStack(std::ostream& out) const
 
   bool first = true;
   cmStateSnapshot bottom = this->GetBottom();
-  cmOutputConverter converter(bottom);
   for (Entry const* cur = this->TopEntry->Parent.get(); !cur->IsBottom();
        cur = cur->Parent.get()) {
     if (cur->Context.Name.empty()) {
@@ -422,7 +421,7 @@ void cmListFileBacktrace::PrintCallStack(std::ostream& out) const
     }
     cmListFileContext lfc = cur->Context;
     if (!bottom.GetState()->GetIsInTryCompile()) {
-      lfc.FilePath = converter.ConvertToRelativePath(
+      lfc.FilePath = bottom.GetDirectory().ConvertToRelPathIfNotContained(
         bottom.GetState()->GetSourceDirectory(), lfc.FilePath);
     }
     out << "  " << lfc << "\n";
@@ -473,4 +472,22 @@ bool operator==(const cmListFileContext& lhs, const cmListFileContext& rhs)
 bool operator!=(const cmListFileContext& lhs, const cmListFileContext& rhs)
 {
   return !(lhs == rhs);
+}
+
+std::ostream& operator<<(std::ostream& os, BT<std::string> const& s)
+{
+  return os << s.Value;
+}
+
+std::vector<BT<std::string>> ExpandListWithBacktrace(
+  std::string const& list, cmListFileBacktrace const& bt)
+{
+  std::vector<BT<std::string>> result;
+  std::vector<std::string> tmp;
+  cmSystemTools::ExpandListArgument(list, tmp);
+  result.reserve(tmp.size());
+  for (std::string& i : tmp) {
+    result.emplace_back(std::move(i), bt);
+  }
+  return result;
 }

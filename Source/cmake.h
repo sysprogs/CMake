@@ -5,7 +5,9 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include <functional>
 #include <map>
+#include <memory> // IWYU pragma: keep
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -13,6 +15,8 @@
 
 #include "cmInstalledFile.h"
 #include "cmListFileCache.h"
+#include "cmMessageType.h"
+#include "cmState.h"
 #include "cmStateSnapshot.h"
 #include "cmStateTypes.h"
 
@@ -22,12 +26,12 @@
 #endif
 
 class cmExternalMakefileProjectGeneratorFactory;
+class cmFileAPI;
 class cmFileTimeComparison;
 class cmGlobalGenerator;
 class cmGlobalGeneratorFactory;
 class cmMakefile;
 class cmMessenger;
-class cmState;
 class cmVariableWatch;
 struct cmDocumentationEntry;
 
@@ -57,27 +61,12 @@ struct cmDocumentationEntry;
 
 class cmake
 {
-  CM_DISABLE_COPY(cmake)
-
 public:
   enum Role
   {
     RoleInternal, // no commands
     RoleScript,   // script commands
     RoleProject   // all commands
-  };
-
-  enum MessageType
-  {
-    AUTHOR_WARNING,
-    AUTHOR_ERROR,
-    FATAL_ERROR,
-    INTERNAL_ERROR,
-    MESSAGE,
-    WARNING,
-    LOG,
-    DEPRECATION_ERROR,
-    DEPRECATION_WARNING
   };
 
   enum DiagLevel
@@ -115,6 +104,8 @@ public:
     std::string extraName;
     bool supportsToolset;
     bool supportsPlatform;
+    std::vector<std::string> supportedPlatforms;
+    std::string defaultPlatform;
     bool isAlias;
   };
 
@@ -124,21 +115,18 @@ public:
   static const int DEFAULT_BUILD_PARALLEL_LEVEL = 0;
 
   /// Default constructor
-  cmake(Role role);
+  cmake(Role role, cmState::Mode mode);
   /// Destructor
   ~cmake();
+
+  cmake(cmake const&) = delete;
+  cmake& operator=(cmake const&) = delete;
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   Json::Value ReportVersionJson() const;
   Json::Value ReportCapabilitiesJson(bool haveServerMode) const;
 #endif
   std::string ReportCapabilities(bool haveServerMode) const;
-
-  static const char* GetCMakeFilesDirectory() { return "/CMakeFiles"; }
-  static const char* GetCMakeFilesDirectoryPostSlash()
-  {
-    return "CMakeFiles/";
-  }
 
   //@{
   /**
@@ -213,7 +201,8 @@ public:
   void SetGlobalGenerator(cmGlobalGenerator*);
 
   ///! Get the names of the current registered generators
-  void GetRegisteredGenerators(std::vector<GeneratorInfo>& generators) const;
+  void GetRegisteredGenerators(std::vector<GeneratorInfo>& generators,
+                               bool includeNamesWithPlatform = true) const;
 
   ///! Set the name of the selected generator-specific instance.
   void SetGeneratorInstance(std::string const& instance)
@@ -291,7 +280,7 @@ public:
   ///! Parse command line arguments that might set cache values
   bool SetCacheArgs(const std::vector<std::string>&);
 
-  typedef void (*ProgressCallbackType)(const char* msg, float progress, void*);
+  using ProgressCallbackType = std::function<void(const char*, float)>;
   /**
    *  Set the function used by GUIs to receive progress updates
    *  Function gets passed: message as a const char*, a progress
@@ -299,7 +288,7 @@ public:
    *  number provided may be negative in cases where a message is
    *  to be displayed without any progress percentage.
    */
-  void SetProgressCallback(ProgressCallbackType f, void* clientData = nullptr);
+  void SetProgressCallback(ProgressCallbackType f);
 
   ///! this is called by generators to update the progress
   void UpdateProgress(const char* msg, float prog);
@@ -309,7 +298,7 @@ public:
   cmVariableWatch* GetVariableWatch() { return this->VariableWatch; }
 #endif
 
-  void GetGeneratorDocumentation(std::vector<cmDocumentationEntry>&);
+  std::vector<cmDocumentationEntry> GetGeneratorsDocumentation();
 
   ///! Set/Get a property of this target file
   void SetProperty(const std::string& prop, const char* value);
@@ -438,13 +427,14 @@ public:
 
   /** Display a message to the user.  */
   void IssueMessage(
-    cmake::MessageType t, std::string const& text,
+    MessageType t, std::string const& text,
     cmListFileBacktrace const& backtrace = cmListFileBacktrace()) const;
 
   ///! run the --build option
   int Build(int jobs, const std::string& dir, const std::string& target,
             const std::string& config,
-            const std::vector<std::string>& nativeOptions, bool clean);
+            const std::vector<std::string>& nativeOptions, bool clean,
+            bool verbose);
 
   ///! run the --open option
   bool Open(const std::string& dir, bool dryRun);
@@ -463,7 +453,6 @@ public:
 
 protected:
   void RunCheckForUnusedVariables();
-  void InitializeProperties();
   int HandleDeleteCacheVariables(const std::string& var);
 
   typedef std::vector<cmGlobalGeneratorFactory*> RegisteredGeneratorsVector;
@@ -488,7 +477,8 @@ protected:
 #endif
 
   ///! read in a cmake list file to initialize the cache
-  void ReadListFile(const std::vector<std::string>& args, const char* path);
+  void ReadListFile(const std::vector<std::string>& args,
+                    const std::string& path);
   bool FindPackage(const std::vector<std::string>& args);
 
   ///! Check if CMAKE_CACHEFILE_DIR is set. If it is not, delete the log file.
@@ -511,8 +501,6 @@ protected:
 
 private:
   ProgressCallbackType ProgressCallback;
-  void* ProgressCallbackClientData;
-  bool InTryCompile;
   WorkingMode CurrentWorkingMode;
   bool DebugOutput;
   bool Trace;
@@ -541,6 +529,7 @@ private:
 
 #if defined(CMAKE_BUILD_WITH_CMAKE)
   cmVariableWatch* VariableWatch;
+  std::unique_ptr<cmFileAPI> FileAPI;
 #endif
 
   cmState* State;
@@ -554,19 +543,11 @@ private:
   // Print a list of valid generators to stderr.
   void PrintGeneratorList();
 
+  std::unique_ptr<cmGlobalGenerator> EvaluateDefaultGlobalGenerator();
   void CreateDefaultGlobalGenerator();
 
-  /**
-   * Convert a message type between a warning and an error, based on the state
-   * of the error output CMake variables, in the cache.
-   */
-  cmake::MessageType ConvertMessageType(cmake::MessageType t) const;
-
-  /*
-   * Check if messages of this type should be output, based on the state of the
-   * warning and error output CMake variables, in the cache.
-   */
-  bool IsMessageTypeVisible(cmake::MessageType t) const;
+  void AppendGlobalGeneratorsDocumentation(std::vector<cmDocumentationEntry>&);
+  void AppendExtraGeneratorsDocumentation(std::vector<cmDocumentationEntry>&);
 };
 
 #define CMAKE_STANDARD_OPTIONS_TABLE                                          \

@@ -1,31 +1,32 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-#.rst:
-# FindSWIG
-# --------
-#
-# Find SWIG
-#
-# This module finds an installed SWIG.  It sets the following variables:
-#
-# ::
-#
-#   SWIG_FOUND - set to true if SWIG is found
-#   SWIG_DIR - the directory where swig is installed
-#   SWIG_EXECUTABLE - the path to the swig executable
-#   SWIG_VERSION   - the version number of the swig executable
-#
-#
-#
-# The minimum required version of SWIG can be specified using the
-# standard syntax, e.g.  find_package(SWIG 1.1)
-#
-# All information is collected from the SWIG_EXECUTABLE so the version
-# to be found can be changed from the command line by means of setting
-# SWIG_EXECUTABLE
+#[=======================================================================[.rst:
+FindSWIG
+--------
 
-find_program(SWIG_EXECUTABLE NAMES swig3.0 swig2.0 swig)
+Find SWIG
+
+This module finds an installed SWIG.  It sets the following variables:
+
+::
+
+  SWIG_FOUND - set to true if SWIG is found
+  SWIG_DIR - the directory where swig is installed
+  SWIG_EXECUTABLE - the path to the swig executable
+  SWIG_VERSION   - the version number of the swig executable
+
+
+
+The minimum required version of SWIG can be specified using the
+standard syntax, e.g.  find_package(SWIG 1.1)
+
+All information is collected from the SWIG_EXECUTABLE so the version
+to be found can be changed from the command line by means of setting
+SWIG_EXECUTABLE
+#]=======================================================================]
+
+find_program(SWIG_EXECUTABLE NAMES swig4.0 swig3.0 swig2.0 swig)
 
 if(SWIG_EXECUTABLE)
   execute_process(COMMAND ${SWIG_EXECUTABLE} -swiglib

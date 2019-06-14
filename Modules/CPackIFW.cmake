@@ -518,7 +518,7 @@ macro(_cpack_ifw_resolve_script _variable)
     get_filename_component(${_ifw_script_macro} ${_ifw_script_file} ABSOLUTE)
     set(_ifw_script_file ${${_ifw_script_macro}})
     if(NOT EXISTS ${_ifw_script_file})
-      message(WARNING "CPack IFW: script file \"${_ifw_script_file}\" is not exists")
+      message(WARNING "CPack IFW: script file \"${_ifw_script_file}\" does not exist")
       set(${_ifw_script_macro})
     endif()
   endif()
@@ -615,6 +615,12 @@ macro(cpack_ifw_configure_component_group grpname)
   _cpack_ifw_resolve_file_list(CPACK_IFW_COMPONENT_GROUP_${_CPACK_IFWGRP_UNAME}_TRANSLATIONS)
 
   set(_CPACK_IFWGRP_STR "\n# Configuration for IFW component group \"${grpname}\"\n")
+
+  foreach(_IFW_ARG_NAME ${_IFW_OPT})
+  cpack_append_option_set_command(
+    CPACK_IFW_COMPONENT_GROUP_${_CPACK_IFWGRP_UNAME}_${_IFW_ARG_NAME}
+    _CPACK_IFWGRP_STR)
+  endforeach()
 
   foreach(_IFW_ARG_NAME ${_IFW_ARGS})
   cpack_append_string_variable_set_command(

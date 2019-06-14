@@ -9,6 +9,7 @@
 #include <memory> // IWYU pragma: keep
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "cmAlgorithms.h"
 #include "cmCustomCommandGenerator.h"
@@ -30,20 +31,13 @@
 #include "cmStateSnapshot.h"
 #include "cmStateTypes.h"
 #include "cmSystemTools.h"
-#include "cmake.h"
 
 class cmCustomCommand;
 
 cmNinjaNormalTargetGenerator::cmNinjaNormalTargetGenerator(
   cmGeneratorTarget* target)
   : cmNinjaTargetGenerator(target)
-  , TargetNameOut()
-  , TargetNameSO()
-  , TargetNameReal()
-  , TargetNameImport()
-  , TargetNamePDB()
   , TargetLinkLanguage("")
-  , DeviceLinkObject()
 {
   this->TargetLinkLanguage = target->GetLinkerLanguage(this->GetConfigName());
   if (target->GetType() == cmStateEnums::EXECUTABLE) {
@@ -382,7 +376,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile)
     cmEraseIf(linkCmds, cmNinjaRemoveNoOpCommands());
 
     linkCmds.insert(linkCmds.begin(), "$PRE_LINK");
-    linkCmds.push_back("$POST_BUILD");
+    linkCmds.emplace_back("$POST_BUILD");
     std::string linkCmd =
       this->GetLocalGenerator()->BuildCommandLine(linkCmds);
 
@@ -410,7 +404,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile)
       std::vector<std::string> commandLines;
       commandLines.push_back(cmakeCommand +
                              " -E cmake_symlink_executable $in $out");
-      commandLines.push_back("$POST_BUILD");
+      commandLines.emplace_back("$POST_BUILD");
 
       this->GetGlobalGenerator()->AddRule(
         "CMAKE_SYMLINK_EXECUTABLE",
@@ -428,7 +422,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile)
       std::vector<std::string> commandLines;
       commandLines.push_back(cmakeCommand +
                              " -E cmake_symlink_library $in $SONAME $out");
-      commandLines.push_back("$POST_BUILD");
+      commandLines.emplace_back("$POST_BUILD");
 
       this->GetGlobalGenerator()->AddRule(
         "CMAKE_SYMLINK_LIBRARY",
@@ -506,7 +500,6 @@ std::vector<std::string> cmNinjaNormalTargetGenerator::ComputeLinkCmd()
           gt.GetFullPath(cfgName, cmStateEnums::RuntimeBinaryArtifact,
                          /*realname=*/true));
         cmakeCommand += targetOutputReal;
-        cmakeCommand += " || true";
         linkCmds.push_back(std::move(cmakeCommand));
       }
       return linkCmds;
@@ -544,6 +537,20 @@ std::vector<std::string> cmNinjaNormalTargetGenerator::ComputeLinkCmd()
         std::string const& linkCmd = mf->GetRequiredDefinition(linkCmdVar);
         cmSystemTools::ExpandListArgument(linkCmd, linkCmds);
       }
+#ifdef __APPLE__
+      // On macOS ranlib truncates the fractional part of the static archive
+      // file modification time.  If the archive and at least one contained
+      // object file were created within the same second this will make look
+      // the archive older than the object file. On subsequent ninja runs this
+      // leads to re-achiving and updating dependent targets.
+      // As a work-around we touch the archive after ranlib (see #19222).
+      {
+        std::string cmakeCommand =
+          this->GetLocalGenerator()->ConvertToOutputFormat(
+            cmSystemTools::GetCMakeCommand(), cmOutputConverter::SHELL);
+        linkCmds.push_back(cmakeCommand + " -E touch $TARGET_FILE");
+      }
+#endif
       return linkCmds;
     }
     case cmStateEnums::SHARED_LIBRARY:
@@ -573,22 +580,23 @@ void cmNinjaNormalTargetGenerator::WriteDeviceLinkStatement()
     (std::find(closure->Languages.begin(), closure->Languages.end(),
                cuda_lang) != closure->Languages.end());
 
-  bool shouldHaveDeviceLinking = false;
-  switch (genTarget.GetType()) {
-    case cmStateEnums::SHARED_LIBRARY:
-    case cmStateEnums::MODULE_LIBRARY:
-    case cmStateEnums::EXECUTABLE:
-      shouldHaveDeviceLinking = true;
-      break;
-    case cmStateEnums::STATIC_LIBRARY:
-      shouldHaveDeviceLinking =
-        genTarget.GetPropertyAsBool("CUDA_RESOLVE_DEVICE_SYMBOLS");
-      break;
-    default:
-      break;
+  bool doDeviceLinking = false;
+  if (const char* resolveDeviceSymbols =
+        genTarget.GetProperty("CUDA_RESOLVE_DEVICE_SYMBOLS")) {
+    doDeviceLinking = cmSystemTools::IsOn(resolveDeviceSymbols);
+  } else {
+    switch (genTarget.GetType()) {
+      case cmStateEnums::SHARED_LIBRARY:
+      case cmStateEnums::MODULE_LIBRARY:
+      case cmStateEnums::EXECUTABLE:
+        doDeviceLinking = true;
+        break;
+      default:
+        break;
+    }
   }
 
-  if (!(shouldHaveDeviceLinking && hasCUDA)) {
+  if (!(doDeviceLinking && hasCUDA)) {
     return;
   }
 
@@ -724,8 +732,7 @@ void cmNinjaNormalTargetGenerator::WriteDeviceLinkStatement()
     globalGen.GetRuleCmdLength(this->LanguageLinkerDeviceRule());
 
   const std::string rspfile = this->ConvertToNinjaPath(
-    std::string(cmake::GetCMakeFilesDirectoryPostSlash()) +
-    genTarget.GetName() + ".rsp");
+    std::string("CMakeFiles/") + genTarget.GetName() + ".rsp");
 
   // Gather order-only dependencies.
   cmNinjaDeps orderOnlyDeps;
@@ -1010,8 +1017,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement()
   }
 
   const std::string rspfile = this->ConvertToNinjaPath(
-    std::string(cmake::GetCMakeFilesDirectoryPostSlash()) + gt.GetName() +
-    ".rsp");
+    std::string("CMakeFiles/") + gt.GetName() + ".rsp");
 
   // Gather order-only dependencies.
   cmNinjaDeps orderOnlyDeps;

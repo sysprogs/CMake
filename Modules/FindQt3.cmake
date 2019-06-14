@@ -1,37 +1,38 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-#.rst:
-# FindQt3
-# -------
-#
-# Locate Qt include paths and libraries
-#
-# This module defines:
-#
-# ::
-#
-#   QT_INCLUDE_DIR    - where to find qt.h, etc.
-#   QT_LIBRARIES      - the libraries to link against to use Qt.
-#   QT_DEFINITIONS    - definitions to use when
-#                       compiling code that uses Qt.
-#   QT_FOUND          - If false, don't try to use Qt.
-#   QT_VERSION_STRING - the version of Qt found
-#
-#
-#
-# If you need the multithreaded version of Qt, set QT_MT_REQUIRED to
-# TRUE
-#
-# Also defined, but not for general use are:
-#
-# ::
-#
-#   QT_MOC_EXECUTABLE, where to find the moc tool.
-#   QT_UIC_EXECUTABLE, where to find the uic tool.
-#   QT_QT_LIBRARY, where to find the Qt library.
-#   QT_QTMAIN_LIBRARY, where to find the qtmain
-#    library. This is only required by Qt3 on Windows.
+#[=======================================================================[.rst:
+FindQt3
+-------
+
+Locate Qt include paths and libraries
+
+This module defines:
+
+::
+
+  QT_INCLUDE_DIR    - where to find qt.h, etc.
+  QT_LIBRARIES      - the libraries to link against to use Qt.
+  QT_DEFINITIONS    - definitions to use when
+                      compiling code that uses Qt.
+  QT_FOUND          - If false, don't try to use Qt.
+  QT_VERSION_STRING - the version of Qt found
+
+
+
+If you need the multithreaded version of Qt, set QT_MT_REQUIRED to
+TRUE
+
+Also defined, but not for general use are:
+
+::
+
+  QT_MOC_EXECUTABLE, where to find the moc tool.
+  QT_UIC_EXECUTABLE, where to find the uic tool.
+  QT_QT_LIBRARY, where to find the Qt library.
+  QT_QTMAIN_LIBRARY, where to find the qtmain
+   library. This is only required by Qt3 on Windows.
+#]=======================================================================]
 
 # These are around for backwards compatibility
 # they will be set
@@ -100,7 +101,7 @@ if (QT_MT_REQUIRED)
       /usr/share/qt3
       C:/Progra~1/qt
     PATH_SUFFIXES
-      lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
+      lib lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
     )
 
 else ()
@@ -118,7 +119,7 @@ else ()
       /usr/share/qt3
       C:/Progra~1/qt/lib
     PATH_SUFFIXES
-      lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
+      lib lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
     )
 endif ()
 
@@ -134,7 +135,7 @@ find_library(QT_QASSISTANTCLIENT_LIBRARY
     /usr/share/qt3
     C:/Progra~1/qt
   PATH_SUFFIXES
-    lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
+    lib lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
   )
 
 # Qt 3 should prefer QTDIR over the PATH
@@ -150,7 +151,7 @@ find_program(QT_MOC_EXECUTABLE
     /usr/share/qt3
     C:/Progra~1/qt
   PATH_SUFFIXES
-    lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
+    bin lib/qt lib/qt3 qt qt3 qt/bin qt3/bin lib/qt/bin lib/qt3/bin
   )
 
 if(QT_MOC_EXECUTABLE)
@@ -170,7 +171,7 @@ find_program(QT_UIC_EXECUTABLE
     /usr/share/qt3
     C:/Progra~1/qt
   PATH_SUFFIXES
-    lib/qt lib/qt3 qt qt3 qt/lib qt3/lib
+    bin lib/qt lib/qt3 qt qt3 qt/bin qt3/bin lib/qt/bin lib/qt3/bin
   )
 
 if(QT_UIC_EXECUTABLE)
@@ -187,6 +188,8 @@ if (WIN32)
     PATHS
       "$ENV{ProgramFiles}/qt"
       "C:/Program Files/qt"
+    PATH_SUFFIXES
+      lib
     DOC "This Library is only needed by and included with Qt3 on MSWindows. It should be NOTFOUND, undefined or IGNORE otherwise."
     )
 endif ()

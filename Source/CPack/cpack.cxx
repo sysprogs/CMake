@@ -21,8 +21,10 @@
 #include "cmCPackLog.h"
 #include "cmDocumentation.h"
 #include "cmDocumentationEntry.h"
+#include "cmDocumentationFormatter.h"
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
+#include "cmState.h"
 #include "cmStateSnapshot.h"
 #include "cmSystemTools.h"
 #include "cmake.h"
@@ -88,12 +90,8 @@ int cpackDefinitionArgument(const char* argument, const char* cValue,
   return 1;
 }
 
-static void cpackProgressCallback(const char* message, float progress,
-                                  void* clientdata)
+static void cpackProgressCallback(const char* message, float /*unused*/)
 {
-  (void)progress;
-  (void)clientdata;
-
   std::cout << "-- " << message << std::endl;
 }
 
@@ -207,10 +205,10 @@ int main(int argc, char const* const* argv)
   cmCPack_Log(&log, cmCPackLog::LOG_VERBOSE,
               "Read CPack config file: " << cpackConfigFile << std::endl);
 
-  cmake cminst(cmake::RoleScript);
+  cmake cminst(cmake::RoleScript, cmState::CPack);
   cminst.SetHomeDirectory("");
   cminst.SetHomeOutputDirectory("");
-  cminst.SetProgressCallback(cpackProgressCallback, nullptr);
+  cminst.SetProgressCallback(cpackProgressCallback);
   cminst.GetCurrentSnapshot().SetDefaultDefinitions();
   cmGlobalGenerator cmgg(&cminst);
   cmMakefile globalMF(&cmgg, cminst.GetCurrentSnapshot());
@@ -254,7 +252,7 @@ int main(int argc, char const* const* argv)
     // paths, so FIND_XXX() commands can be used in scripts
     std::string systemFile =
       globalMF.GetModulesFile("CMakeDetermineSystem.cmake");
-    if (!globalMF.ReadListFile(systemFile.c_str())) {
+    if (!globalMF.ReadListFile(systemFile)) {
       cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
                   "Error reading CMakeDetermineSystem.cmake" << std::endl);
       return 1;
@@ -262,7 +260,7 @@ int main(int argc, char const* const* argv)
 
     systemFile =
       globalMF.GetModulesFile("CMakeSystemSpecificInformation.cmake");
-    if (!globalMF.ReadListFile(systemFile.c_str())) {
+    if (!globalMF.ReadListFile(systemFile)) {
       cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
                   "Error reading CMakeSystemSpecificInformation.cmake"
                     << std::endl);
@@ -278,7 +276,7 @@ int main(int argc, char const* const* argv)
       cmCPack_Log(&log, cmCPackLog::LOG_VERBOSE,
                   "Read CPack configuration file: " << cpackConfigFile
                                                     << std::endl);
-      if (!globalMF.ReadListFile(cpackConfigFile.c_str())) {
+      if (!globalMF.ReadListFile(cpackConfigFile)) {
         cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
                     "Problem reading CPack config file: \""
                       << cpackConfigFile << "\"" << std::endl);
@@ -368,8 +366,21 @@ int main(int argc, char const* const* argv)
             cpackGenerator->SetTraceExpand(traceExpand);
           } else {
             cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
-                        "Cannot initialize CPack generator: " << gen
-                                                              << std::endl);
+                        "Could not create CPack generator: " << gen
+                                                             << std::endl);
+            // Print out all the valid generators
+            cmDocumentation generatorDocs;
+            std::vector<cmDocumentationEntry> v;
+            for (auto const& g : generators.GetGeneratorsList()) {
+              cmDocumentationEntry e;
+              e.Name = g.first;
+              e.Brief = g.second;
+              v.push_back(std::move(e));
+            }
+            generatorDocs.SetSection("Generators", v);
+            std::cerr << "\n";
+            generatorDocs.PrintDocumentation(cmDocumentation::ListGenerators,
+                                             std::cerr);
             parsed = 0;
           }
 

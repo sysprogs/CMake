@@ -27,8 +27,6 @@ class cmCTestRunTest
 public:
   explicit cmCTestRunTest(cmCTestMultiProcessHandler& multiHandler);
 
-  ~cmCTestRunTest() = default;
-
   void SetNumberOfRuns(int n) { this->NumberOfRunsLeft = n; }
   void SetRunUntilFailOn() { this->RunUntilFail = true; }
   void SetTestProperties(cmCTestTestHandler::cmCTestTestProperties* prop)
@@ -77,6 +75,10 @@ public:
   void StartFailure(std::string const& output);
 
   cmCTest* GetCTest() const { return this->CTest; }
+
+  std::string& GetActualCommand() { return this->ActualCommand; }
+
+  const std::vector<std::string>& GetArguments() { return this->Arguments; }
 
   void FinalizeTest();
 
