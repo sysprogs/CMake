@@ -6,8 +6,9 @@
 #include "cmSystemTools.h"
 #include "cmStatePrivate.h"
 #include "cmVariableWatch.h"
-#include "cmMakefile.h"
+#include "cmake.h"
 #include "cmMessageType.h"
+#include "cmCacheManager.h"
 #include "cmsys/String.h"
 
 namespace Sysprogs
@@ -150,6 +151,22 @@ namespace Sysprogs
 				error = "Unable to find variable: " + Name;
 				return false;
 			}
+		}
+	};
+
+	class HLDPServer::CacheEntryExpression : public ExpressionBase
+	{
+	public:
+		CacheEntryExpression(const std::string &name, const char *pValue)
+		{
+			Name = name;
+			Type = "(CMake Expression)";
+			Value = pValue;
+		}
+
+		virtual bool UpdateValue(const std::string &value, std::string &error) override
+		{ 
+			return false;
 		}
 	};
 
@@ -877,6 +894,12 @@ namespace Sysprogs
 		cmTarget *pTarget = scope.Makefile->FindTargetToUse(text, false);
 		if (pTarget)
 			return std::make_unique<TargetExpression>(pTarget);
+
+		const char *pCacheValue = scope.Makefile->GetState()->GetCacheEntryValue(text);
+		if (pCacheValue)
+		{
+			return std::make_unique<CacheEntryExpression>(text, pCacheValue);
+		}
 
 		return nullptr;
 	}

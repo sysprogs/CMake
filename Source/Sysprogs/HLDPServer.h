@@ -89,6 +89,7 @@ namespace Sysprogs
 
 		class SimpleExpression;
 		class VariableExpression;
+		class CacheEntryExpression;
 		class EnvironmentVariableExpression;
 		class TargetExpression;
 		class TargetPropertyListExpression;
