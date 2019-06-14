@@ -7,6 +7,7 @@
 class cmCommand;
 class BasicIncomingSocket;
 struct cmListFileFunction;
+enum class MessageType;
 
 namespace Sysprogs
 {
@@ -51,7 +52,7 @@ namespace Sysprogs
 		std::unique_ptr<RAIIScope> OnExecutingInitialPass(cmCommand *pCommand, cmMakefile *pMakefile, const cmListFileFunction &function, bool &skipThisInstruction);
 		void AdjustNextExecutedFunction(const std::vector<cmListFileFunction> &functions, size_t &i);
 
-		void OnMessageProduced(unsigned /*cmake::MessageType*/ type, const std::string &message);
+		void OnMessageProduced(MessageType type, const std::string &message);
 		void OnVariableAccessed(const std::string &variable, int access_type, const char *newValue, const cmMakefile *mf);
 		void OnTargetCreated(cmStateEnums::TargetType type, const std::string &targetName);
 

@@ -6,6 +6,8 @@
 #include "cmSystemTools.h"
 #include "cmStatePrivate.h"
 #include "cmVariableWatch.h"
+#include "cmMakefile.h"
+#include "cmMessageType.h"
 #include "cmsys/String.h"
 
 namespace Sysprogs
@@ -368,10 +370,8 @@ namespace Sysprogs
 		}
 	}
 
-	void HLDPServer::OnMessageProduced(unsigned rawType, const std::string &message)
+	void HLDPServer::OnMessageProduced(MessageType type, const std::string &message)
 	{
-		cmake::MessageType type = (cmake::MessageType)rawType;
-
 		ReplyBuilder builder;
 		builder.AppendInt32(0);
 		builder.AppendString(message);
@@ -379,10 +379,10 @@ namespace Sysprogs
 
 		switch (type)
 		{
-		case cmake::FATAL_ERROR:
-		case cmake::INTERNAL_ERROR:
-		case cmake::AUTHOR_ERROR:
-		case cmake::DEPRECATION_ERROR:
+		case MessageType::FATAL_ERROR:
+		case MessageType::INTERNAL_ERROR:
+		case MessageType::AUTHOR_ERROR:
+		case MessageType::DEPRECATION_ERROR:
 			ReportStopAndServeDebugRequests(TargetStopReason::Exception, 0, message, nullptr);
 			return;
 		}

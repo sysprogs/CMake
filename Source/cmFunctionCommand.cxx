@@ -9,6 +9,8 @@
 #include "cmMakefile.h"
 #include "cmPolicies.h"
 #include "cmState.h"
+#include "cmake.h"
+#include "cmMakefile.h"
 
 // define the class for function commands
 class cmFunctionHelperCommand : public cmCommand

@@ -12,6 +12,8 @@
 #include "cmPolicies.h"
 #include "cmState.h"
 #include "cmSystemTools.h"
+#include "cmake.h"
+#include "cmMakefile.h"
 
 // define the class for macro commands
 class cmMacroHelperCommand : public cmCommand

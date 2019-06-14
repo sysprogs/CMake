@@ -3,6 +3,7 @@
 #include "cmMessageCommand.h"
 
 #include "cmAlgorithms.h"
+#include "cmake.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmMessenger.h"
