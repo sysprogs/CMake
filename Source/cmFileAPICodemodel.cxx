@@ -235,6 +235,7 @@ struct CompileData
   std::string Language;
   std::string Sysroot;
   std::vector<BT<std::string>> Flags;
+  std::vector<BT<std::string>> TraceableFlags;
   std::vector<BT<std::string>> Defines;
   std::vector<IncludeEntry> Includes;
 };
@@ -722,6 +723,9 @@ void Target::ProcessLanguage(std::string const& lang)
     std::string flags;
     lg->GetTargetCompileFlags(this->GT, this->Config, lang, flags);
     cd.Flags.emplace_back(std::move(flags), cmListFileBacktrace());
+
+    for (auto& entry : this->GT->GetCompileOptions(this->Config, lang))
+      cd.TraceableFlags.push_back(entry);
   }
   std::set<BT<std::string>> defines =
     lg->GetTargetDefines(this->GT, this->Config, lang);
@@ -766,6 +770,7 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
                                                     fd.Language);
 
   fd.Flags = cd.Flags;
+  fd.TraceableFlags = cd.TraceableFlags;
   const std::string COMPILE_FLAGS("COMPILE_FLAGS");
   if (const char* cflags = sf->GetProperty(COMPILE_FLAGS)) {
     std::string flags = genexInterpreter.Evaluate(cflags, COMPILE_FLAGS);
@@ -926,6 +931,10 @@ Json::Value Target::DumpCompileData(CompileData cd)
   }
   if (!cd.Flags.empty()) {
     result["compileCommandFragments"] = this->DumpCommandFragments(cd.Flags);
+  }
+  if (!cd.TraceableFlags.empty()) {
+    result["traceableCompileCommandFragments"] =
+      this->DumpCommandFragments(cd.TraceableFlags);
   }
   if (!cd.Includes.empty()) {
     Json::Value includes = Json::arrayValue;
@@ -1105,6 +1114,21 @@ Json::Value Target::DumpLink()
     Json::Value commandFragments = this->DumpLinkCommandFragments();
     if (!commandFragments.empty()) {
       link["commandFragments"] = std::move(commandFragments);
+    }
+
+    if (cmLinkImplementation const* impl =
+          this->GT->GetLinkImplementation(this->Config)) {
+
+      Json::Value fragments;
+
+      for (const cmLinkImplItem& fragment : impl->Libraries) {
+        Json::Value obj;
+        obj["fragment"] = fragment.AsStr();
+        this->AddBacktrace(obj, fragment.Backtrace);
+        fragments.append(obj);
+      }
+
+	  link["traceableCommandFragments"] = fragments;
     }
   }
   if (const char* sysrootLink =
