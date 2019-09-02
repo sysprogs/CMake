@@ -10,6 +10,7 @@
 #include "cmExecutionStatus.h"
 #include "cmMakefile.h"
 #include "cmPolicies.h"
+#include "cmRange.h"
 #include "cmState.h"
 #include "cmSystemTools.h"
 #include "cmake.h"
@@ -225,7 +226,7 @@ bool cmMacroCommand::InitialPass(std::vector<std::string> const& args,
 
   // create a function blocker
   cmMacroFunctionBlocker* f = new cmMacroFunctionBlocker();
-  f->Args.insert(f->Args.end(), args.begin(), args.end());
+  cmAppend(f->Args, args);
   this->Makefile->AddFunctionBlocker(f);
   return true;
 }

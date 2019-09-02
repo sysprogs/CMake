@@ -63,23 +63,20 @@ bool rootIsPrefix(const std::string& root,
   return true;
 }
 
-std::string prepareFilePathForTree(const std::string& path,
-                                   const std::string& currentSourceDir)
-{
-  if (!cmSystemTools::FileIsFullPath(path)) {
-    return cmSystemTools::CollapseFullPath(currentSourceDir + "/" + path);
-  }
-  return cmSystemTools::CollapseFullPath(path);
-}
-
 std::vector<std::string> prepareFilesPathsForTree(
   const std::vector<std::string>& filesPaths,
   const std::string& currentSourceDir)
 {
   std::vector<std::string> prepared;
+  prepared.reserve(filesPaths.size());
 
   for (auto const& filePath : filesPaths) {
-    prepared.push_back(prepareFilePathForTree(filePath, currentSourceDir));
+    std::string fullPath =
+      cmSystemTools::CollapseFullPath(filePath, currentSourceDir);
+    // If provided file path is actually not a file, silently ignore it.
+    if (cmSystemTools::FileExists(fullPath, /*isFile=*/true)) {
+      prepared.emplace_back(std::move(fullPath));
+    }
   }
 
   return prepared;

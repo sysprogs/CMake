@@ -57,6 +57,7 @@ function(compiler_id_detection outvar lang)
       HP
       Compaq
       zOS
+      XLClang
       XL
       VisualAge
       PGI
@@ -75,6 +76,7 @@ function(compiler_id_detection outvar lang)
       SCO
       ARMCC
       AppleClang
+      ARMClang
       Clang
       GNU
       MSVC
@@ -86,8 +88,6 @@ function(compiler_id_detection outvar lang)
         SDCC
       )
     endif()
-    list(APPEND ordered_compilers
-      MIPSpro)
 
     #Currently the only CUDA compilers are NVIDIA
     if(lang STREQUAL CUDA)
@@ -98,6 +98,8 @@ function(compiler_id_detection outvar lang)
       foreach(Id ${ordered_compilers})
         string(APPEND CMAKE_${lang}_COMPILER_ID_CONTENT "# define ${CID_PREFIX}COMPILER_IS_${Id} 0\n")
       endforeach()
+      # Hard-code definitions for compilers that are no longer supported.
+      string(APPEND CMAKE_${lang}_COMPILER_ID_CONTENT "# define ${CID_PREFIX}COMPILER_IS_MIPSpro 0\n")
     endif()
 
     set(pp_if "#if")
