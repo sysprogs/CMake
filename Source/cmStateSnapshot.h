@@ -16,6 +16,7 @@
 
 class cmState;
 class cmStateDirectory;
+class cmDefinitions;
 
 class cmStateSnapshot
 {
@@ -68,6 +69,8 @@ public:
 
   void SetDirectoryDefinitions();
   void SetDefaultDefinitions();
+  
+  const cmStateDetail::PositionType GetPositionForDebugging() const { return Position; }  
 
 private:
   friend bool operator==(const cmStateSnapshot& lhs,

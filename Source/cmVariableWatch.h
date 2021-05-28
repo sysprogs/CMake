@@ -4,12 +4,14 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include "cmake.h"
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 class cmMakefile;
+class cmake;
 
 /** \class cmVariableWatch
  * \brief Helper class for watching of variable accesses.
@@ -23,7 +25,7 @@ public:
                                const cmMakefile*);
   using DeleteData = void (*)(void*);
 
-  cmVariableWatch();
+  cmVariableWatch(cmake* owner);
   ~cmVariableWatch();
 
   /**
@@ -79,4 +81,5 @@ protected:
   using StringToVectorOfPairs = std::map<std::string, VectorOfPairs>;
 
   StringToVectorOfPairs WatchMap;
+  cmake* m_pOwner;  
 };

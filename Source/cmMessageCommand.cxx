@@ -16,6 +16,9 @@
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmake.h"
+#include "cmake.h"
+#include "cmGlobalGenerator.h"
+#include "Sysprogs/HLDPServer.h"
 
 namespace {
 
@@ -176,6 +179,13 @@ bool cmMessageCommand(std::vector<std::string> const& args,
   }
 
   auto message = cmJoin(cmMakeRange(i, args.cend()), "");
+
+#ifndef CMAKE_BOOTSTRAP
+  Sysprogs::HLDPServer* pServer =
+    mf.GetGlobalGenerator()->GetCMakeInstance()->GetDebugServer();
+  if (pServer)
+    pServer->OnMessageProduced(type, message);
+#endif
 
   switch (level) {
     case cmake::LogLevel::LOG_ERROR:
