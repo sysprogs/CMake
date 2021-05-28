@@ -1403,6 +1403,21 @@ Json::Value Target::DumpLink()
     if (!commandFragments.empty()) {
       link["commandFragments"] = std::move(commandFragments);
     }
+
+    if (cmLinkImplementation const* impl =
+          this->GT->GetLinkImplementation(this->Config)) {
+
+      Json::Value fragments;
+
+      for (const cmLinkImplItem& fragment : impl->Libraries) {
+        Json::Value obj;
+        obj["fragment"] = fragment.AsStr();
+        this->AddBacktrace(obj, fragment.Backtrace);
+        fragments.append(obj);
+      }
+
+	  link["traceableCommandFragments"] = fragments;	  
+    }
   }
   if (cmProp sysrootLink =
         this->GT->Makefile->GetDefinition("CMAKE_SYSROOT_LINK")) {
