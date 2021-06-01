@@ -1587,7 +1587,7 @@ bool processSources(cmGeneratorTarget const* tgt,
 }
 
 std::vector<BT<std::string>> cmGeneratorTarget::GetSourceFilePaths(
-  std::string const& config) const
+  std::string const& config, bool getObjectsForObjectLibraries) const
 {
   std::vector<BT<std::string>> files;
 
@@ -1644,7 +1644,7 @@ std::vector<BT<std::string>> cmGeneratorTarget::GetSourceFilePaths(
   // Collect TARGET_OBJECTS of direct object link-dependencies.
   bool contextDependentObjects = false;
   std::vector<std::string>::size_type numFilesBefore2 = files.size();
-  if (this->GetType() != cmStateEnums::OBJECT_LIBRARY) {
+  if (this->GetType() != cmStateEnums::OBJECT_LIBRARY || getObjectsForObjectLibraries) {
     EvaluatedTargetPropertyEntries linkObjectsEntries;
     AddObjectEntries(this, config, &dagChecker, linkObjectsEntries);
     contextDependentObjects = processSources(this, linkObjectsEntries, files,
@@ -1766,7 +1766,7 @@ void cmGeneratorTarget::ComputeKindedSources(KindedSources& files,
                                              std::string const& config) const
 {
   // Get the source file paths by string.
-  std::vector<BT<std::string>> srcs = this->GetSourceFilePaths(config);
+  std::vector<BT<std::string>> srcs = this->GetSourceFilePaths(config, true);
 
   cmsys::RegularExpression header_regex(CM_HEADER_REGEX);
   std::vector<cmSourceFile*> badObjLib;

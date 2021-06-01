@@ -1039,7 +1039,7 @@ private:
                        std::vector<cmLinkItem>& items) const;
 
   std::vector<BT<std::string>> GetSourceFilePaths(
-    std::string const& config) const;
+    std::string const& config, bool getObjectsForObjectLibraries = false) const;
   std::vector<BT<cmSourceFile*>> GetSourceFilesWithoutObjectLibraries(
     std::string const& config) const;
   void GetSourceFilesWithoutObjectLibraries(std::vector<cmSourceFile*>& files,
