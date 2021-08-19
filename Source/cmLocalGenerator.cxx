@@ -3401,6 +3401,13 @@ static bool cmLocalGeneratorShortenObjectName(std::string& objName,
 
     // The object name is now short enough.
     return true;
+  } else if (max_len >= 32) {
+    //We cannot shorten it to <md5>/original_name.ext.o, but just <md5> is still an option.
+    cmCryptoHash md5(cmCryptoHash::AlgoMD5);
+    std::string md5name = md5.HashString(objName.substr(0, pos));
+    objName = md5name;
+
+    return true;
   }
   // The object name could not be shortened enough.
   return false;
