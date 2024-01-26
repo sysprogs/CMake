@@ -2,15 +2,24 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmLocalVisualStudioGenerator.h"
 
+#include <utility>
+
+#include <cm/memory>
+#include <cmext/string_view>
+
 #include "windows.h"
 
 #include "cmCustomCommand.h"
 #include "cmCustomCommandGenerator.h"
+#include "cmCustomCommandLines.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
+#include "cmOutputConverter.h"
 #include "cmSourceFile.h"
+#include "cmStateTypes.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 cmLocalVisualStudioGenerator::cmLocalVisualStudioGenerator(
   cmGlobalGenerator* gg, cmMakefile* mf)
@@ -18,9 +27,7 @@ cmLocalVisualStudioGenerator::cmLocalVisualStudioGenerator(
 {
 }
 
-cmLocalVisualStudioGenerator::~cmLocalVisualStudioGenerator()
-{
-}
+cmLocalVisualStudioGenerator::~cmLocalVisualStudioGenerator() = default;
 
 cmGlobalVisualStudioGenerator::VSVersion
 cmLocalVisualStudioGenerator::GetVersion() const
@@ -99,15 +106,11 @@ cmLocalVisualStudioGenerator::MaybeCreateImplibDir(cmGeneratorTarget* target,
   }
 
   // Add a pre-build event to create the directory.
-  std::vector<std::string> no_output;
-  std::vector<std::string> no_byproducts;
-  std::vector<std::string> no_depends;
-  bool stdPipesUTF8 = true;
   cmCustomCommandLines commands = cmMakeSingleCommandLine(
     { cmSystemTools::GetCMakeCommand(), "-E", "make_directory", impDir });
-  pcc.reset(new cmCustomCommand(no_output, no_byproducts, no_depends, commands,
-                                cmListFileBacktrace(), nullptr, nullptr,
-                                stdPipesUTF8));
+  pcc = cm::make_unique<cmCustomCommand>();
+  pcc->SetCommandLines(commands);
+  pcc->SetStdPipesUTF8(true);
   pcc->SetEscapeOldStyle(false);
   pcc->SetEscapeAllowMakeVars(true);
   return pcc;
@@ -171,8 +174,9 @@ std::string cmLocalVisualStudioGenerator::ConstructScript(
 
   // for visual studio IDE add extra stuff to the PATH
   // if CMAKE_MSVCIDE_RUN_PATH is set.
-  if (this->Makefile->GetDefinition("MSVC_IDE")) {
-    cmProp extraPath = this->Makefile->GetDefinition("CMAKE_MSVCIDE_RUN_PATH");
+  if (this->GetGlobalGenerator()->IsVisualStudio()) {
+    cmValue extraPath =
+      this->Makefile->GetDefinition("CMAKE_MSVCIDE_RUN_PATH");
     if (extraPath) {
       script += newline;
       newline = newline_text;
@@ -201,16 +205,14 @@ std::string cmLocalVisualStudioGenerator::ConstructScript(
     std::string suffix;
     if (cmd.size() > 4) {
       suffix = cmSystemTools::LowerCase(cmd.substr(cmd.size() - 4));
-      if (suffix == ".bat" || suffix == ".cmd") {
+      if (suffix == ".bat"_s || suffix == ".cmd"_s) {
         script += "call ";
       }
     }
 
     if (workingDirectory.empty()) {
-      script +=
-        this->ConvertToOutputFormat(this->MaybeConvertToRelativePath(
-                                      this->GetCurrentBinaryDirectory(), cmd),
-                                    cmOutputConverter::SHELL);
+      script += this->ConvertToOutputFormat(
+        this->MaybeRelativeToCurBinDir(cmd), cmOutputConverter::SHELL);
     } else {
       script += this->ConvertToOutputFormat(cmd.c_str(), SHELL);
     }
@@ -237,6 +239,23 @@ std::string cmLocalVisualStudioGenerator::ConstructScript(
     script += ":cmDone";
     script += newline;
     script += "if %errorlevel% neq 0 goto ";
+    script += this->GetReportErrorLabel();
+  }
+
+  return script;
+}
+
+std::string cmLocalVisualStudioGenerator::FinishConstructScript(
+  VsProjectType projectType, const std::string& newline)
+{
+  bool useLocal = this->CustomCommandUseLocal();
+
+  // Store the script in a string.
+  std::string script;
+
+  if (useLocal && projectType != VsProjectType::vcxproj) {
+    // This label is not provided by MSBuild for C# projects.
+    script += newline;
     script += this->GetReportErrorLabel();
   }
 

@@ -4,54 +4,12 @@
 # To ensure maximum portability across various compilers and platforms
 # deactivate any compiler extensions.  Skip this for QNX, where additional
 # work is needed to build without compiler extensions.
-if (NOT CMAKE_SYSTEM_NAME STREQUAL "QNX")
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "QNX")
   set(CMAKE_C_EXTENSIONS FALSE)
   set(CMAKE_CXX_EXTENSIONS FALSE)
 endif()
 
 include(CheckIncludeFile)
-# Check if we can build support for ELF parsing.
-if(WIN32)
-  set(HAVE_ELF_H 0)
-elseif(CMAKE_CXX_PLATFORM_ID MATCHES "OpenBSD")
-  CHECK_INCLUDE_FILES("stdint.h;elf_abi.h" HAVE_ELF_H)
-else()
-  CHECK_INCLUDE_FILE("elf.h" HAVE_ELF_H)
-endif()
-if(HAVE_ELF_H)
-  set(CMake_USE_ELF_PARSER 1)
-elseif(HAIKU)
-  # On Haiku, we need to include elf32.h from the private headers
-  set(CMake_HAIKU_INCLUDE_DIRS
-    /boot/system/develop/headers/private/system
-    /boot/system/develop/headers/private/system/arch/x86
-    )
-
-  set(CMAKE_REQUIRED_INCLUDES ${CMake_HAIKU_INCLUDE_DIRS})
-  CHECK_INCLUDE_FILE("elf32.h" HAVE_ELF32_H)
-  unset(CMAKE_REQUIRED_INCLUDES)
-
-  if(HAVE_ELF32_H)
-    set(CMake_USE_ELF_PARSER 1)
-  else()
-    unset(CMake_HAIKU_INCLUDE_DIRS)
-    set(CMake_USE_ELF_PARSER)
-  endif()
-else()
-  set(CMake_USE_ELF_PARSER)
-endif()
-
-if(NOT CMake_DEFAULT_RECURSION_LIMIT)
-  if(DEFINED ENV{DASHBOARD_TEST_FROM_CTEST})
-    set(CMake_DEFAULT_RECURSION_LIMIT 100)
-  elseif(MINGW)
-    set(CMake_DEFAULT_RECURSION_LIMIT 400)
-  elseif(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM")
-    set(CMake_DEFAULT_RECURSION_LIMIT 600)
-  else()
-    set(CMake_DEFAULT_RECURSION_LIMIT 1000)
-  endif()
-endif()
 
 if(APPLE)
   set(CMake_USE_MACH_PARSER 1)
@@ -61,75 +19,48 @@ if(CMAKE_SYSTEM_NAME STREQUAL "AIX")
   set(CMake_USE_XCOFF_PARSER 1)
 endif()
 
+# Watcom support
+if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  set(CMAKE_USE_WMAKE 1)
+endif()
+
+set(CMake_STAT_HAS_ST_MTIM ${KWSYS_CXX_STAT_HAS_ST_MTIM_COMPILED})
+set(CMake_STAT_HAS_ST_MTIMESPEC ${KWSYS_CXX_STAT_HAS_ST_MTIMESPEC_COMPILED})
+
 set(EXECUTABLE_OUTPUT_PATH ${CMake_BIN_DIR})
 
 if(WIN32)
   # ensure Unicode friendly APIs are used on Windows
-  add_definitions(-DUNICODE -D_UNICODE)
+  add_compile_definitions(UNICODE _UNICODE)
 
   # minimize windows.h content
-  add_definitions(-DWIN32_LEAN_AND_MEAN)
+  add_compile_definitions(WIN32_LEAN_AND_MEAN)
 endif()
 
 # configure the .dox.in file
 if(CMake_BUILD_DEVELOPER_REFERENCE)
-  configure_file(
-    "${CMake_SOURCE_DIR}/Source/dir.dox.in"
-    "${CMake_BINARY_DIR}/Source/dir.dox"
-    @ONLY
-    )
+  configure_file(dir.dox.in dir.dox @ONLY)
 endif()
 
 # configure the .h file
-configure_file(
-  "${CMake_SOURCE_DIR}/Source/cmConfigure.cmake.h.in"
-  "${CMake_BINARY_DIR}/Source/cmConfigure.h"
-  )
-configure_file(
-  "${CMake_SOURCE_DIR}/Source/cmVersionConfig.h.in"
-  "${CMake_BINARY_DIR}/Source/cmVersionConfig.h"
-  )
-configure_file(
-  "${CMake_SOURCE_DIR}/Source/CPack/cmCPackConfigure.h.in"
-  "${CMake_BINARY_DIR}/Source/CPack/cmCPackConfigure.h"
-  )
+configure_file(cmConfigure.cmake.h.in cmConfigure.h)
+configure_file(cmVersionConfig.h.in cmVersionConfig.h)
 
 # Tell CMake executable in the build tree where to find the source tree.
 configure_file(
-  "${CMake_SOURCE_DIR}/Source/CMakeSourceDir.txt.in"
-  "${CMake_BINARY_DIR}/CMakeFiles/CMakeSourceDir.txt" @ONLY
+  CMakeSourceDir.txt.in
+  "${CMake_BINARY_DIR}/CMakeFiles/CMakeSourceDir.txt"
+  @ONLY
   )
 
-# add the include path to find the .h
-include_directories(
-  "${CMake_BINARY_DIR}/Source"
-  "${CMake_SOURCE_DIR}/Source"
-  "${CMake_SOURCE_DIR}/Source/LexerParser"
-  ${CMAKE_ZLIB_INCLUDES}
-  ${CMAKE_EXPAT_INCLUDES}
-  ${CMAKE_TAR_INCLUDES}
-  ${CMake_HAIKU_INCLUDE_DIRS}
-  )
-
-# Check if we can build the ELF parser.
-if(CMake_USE_ELF_PARSER)
-  set(ELF_SRCS cmELF.h cmELF.cxx)
-endif()
-
-# Check if we can build the Mach-O parser.
-if(CMake_USE_MACH_PARSER)
-  set(MACH_SRCS cmMachO.h cmMachO.cxx)
-endif()
-
-# Check if we can build the XCOFF parser.
-if(CMake_USE_XCOFF_PARSER)
-  set(XCOFF_SRCS cmXCOFF.h cmXCOFF.cxx)
-endif()
+# Add a dummy library and add sources later depends on condition
+add_library(ManifestLib INTERFACE)
 
 #
-# Sources for CMakeLib
+# create a library used by the command line and the GUI
 #
-set(SRCS
+add_library(
+  CMakeLib
   # Lexers/Parsers
   LexerParser/cmCommandArgumentLexer.cxx
   LexerParser/cmCommandArgumentLexer.h
@@ -190,14 +121,24 @@ set(SRCS
   cmBinUtilsWindowsPELinker.h
   cmBinUtilsWindowsPEObjdumpGetRuntimeDependenciesTool.cxx
   cmBinUtilsWindowsPEObjdumpGetRuntimeDependenciesTool.h
+  cmBuildOptions.h
   cmCacheManager.cxx
   cmCacheManager.h
   cmCLocaleEnvironmentScope.h
   cmCLocaleEnvironmentScope.cxx
   cmCMakePath.h
   cmCMakePath.cxx
-  cmCMakePresetsFile.cxx
-  cmCMakePresetsFile.h
+  cmCMakePresetsErrors.cxx
+  cmCMakePresetsErrors.h
+  cmCMakePresetsGraph.cxx
+  cmCMakePresetsGraph.h
+  cmCMakePresetsGraphInternal.h
+  cmCMakePresetsGraphReadJSON.cxx
+  cmCMakePresetsGraphReadJSONBuildPresets.cxx
+  cmCMakePresetsGraphReadJSONConfigurePresets.cxx
+  cmCMakePresetsGraphReadJSONPackagePresets.cxx
+  cmCMakePresetsGraphReadJSONTestPresets.cxx
+  cmCMakePresetsGraphReadJSONWorkflowPresets.cxx
   cmCommandArgumentParserHelper.cxx
   cmCommonTargetGenerator.cxx
   cmCommonTargetGenerator.h
@@ -209,8 +150,12 @@ set(SRCS
   cmComputeLinkInformation.h
   cmComputeTargetDepends.h
   cmComputeTargetDepends.cxx
+  cmConfigureLog.h
+  cmConfigureLog.cxx
   cmConsoleBuf.h
   cmConsoleBuf.cxx
+  cmConstStack.h
+  cmConstStack.tcc
   cmCPackPropertiesGenerator.h
   cmCPackPropertiesGenerator.cxx
   cmCryptoHash.cxx
@@ -224,8 +169,13 @@ set(SRCS
   cmCustomCommandLines.cxx
   cmCustomCommandLines.h
   cmCustomCommandTypes.h
+  cmCxxModuleMapper.cxx
+  cmCxxModuleMapper.h
+  cmCxxModuleUsageEffects.cxx
+  cmCxxModuleUsageEffects.h
   cmDefinitions.cxx
   cmDefinitions.h
+  cmDependencyProvider.h
   cmDepends.cxx
   cmDepends.h
   cmDependsC.cxx
@@ -240,10 +190,14 @@ set(SRCS
   cmDependsCompiler.h
   cmDocumentation.cxx
   cmDocumentationFormatter.cxx
-  cmDocumentationSection.cxx
   cmDynamicLoader.cxx
   cmDynamicLoader.h
-  ${ELF_SRCS}
+  cmDyndepCollation.cxx
+  cmDyndepCollation.h
+  cmELF.h
+  cmELF.cxx
+  cmEvaluatedTargetProperty.cxx
+  cmEvaluatedTargetProperty.h
   cmExprParserHelper.cxx
   cmExportBuildAndroidMKGenerator.h
   cmExportBuildAndroidMKGenerator.cxx
@@ -277,8 +231,12 @@ set(SRCS
   cmFileAPICache.h
   cmFileAPICodemodel.cxx
   cmFileAPICodemodel.h
+  cmFileAPIConfigureLog.cxx
+  cmFileAPIConfigureLog.h
   cmFileAPICMakeFiles.cxx
   cmFileAPICMakeFiles.h
+  cmFileAPICommand.cxx
+  cmFileAPICommand.h
   cmFileAPIToolchains.cxx
   cmFileAPIToolchains.h
   cmFileCopier.cxx
@@ -293,6 +251,8 @@ set(SRCS
   cmFileLockResult.h
   cmFilePathChecksum.cxx
   cmFilePathChecksum.h
+  cmFileSet.cxx
+  cmFileSet.h
   cmFileTime.cxx
   cmFileTime.h
   cmFileTimeCache.cxx
@@ -341,13 +301,25 @@ set(SRCS
   cmGraphAdjacencyList.h
   cmGraphVizWriter.cxx
   cmGraphVizWriter.h
+  cmImportedCxxModuleInfo.cxx
+  cmImportedCxxModuleInfo.h
   cmInstallGenerator.h
   cmInstallGenerator.cxx
+  cmInstallGetRuntimeDependenciesGenerator.h
+  cmInstallGetRuntimeDependenciesGenerator.cxx
   cmInstallExportGenerator.cxx
   cmInstalledFile.h
   cmInstalledFile.cxx
+  cmInstallFileSetGenerator.h
+  cmInstallFileSetGenerator.cxx
   cmInstallFilesGenerator.h
   cmInstallFilesGenerator.cxx
+  cmInstallImportedRuntimeArtifactsGenerator.h
+  cmInstallImportedRuntimeArtifactsGenerator.cxx
+  cmInstallRuntimeDependencySet.h
+  cmInstallRuntimeDependencySet.cxx
+  cmInstallRuntimeDependencySetGenerator.h
+  cmInstallRuntimeDependencySetGenerator.cxx
   cmInstallScriptGenerator.h
   cmInstallScriptGenerator.cxx
   cmInstallSubdirectoryGenerator.h
@@ -356,7 +328,10 @@ set(SRCS
   cmInstallTargetGenerator.cxx
   cmInstallDirectoryGenerator.h
   cmInstallDirectoryGenerator.cxx
+  cmJSONHelpers.cxx
   cmJSONHelpers.h
+  cmJSONState.cxx
+  cmJSONState.h
   cmLDConfigLDConfigTool.cxx
   cmLDConfigLDConfigTool.h
   cmLDConfigTool.cxx
@@ -368,17 +343,20 @@ set(SRCS
   cmLinkLineComputer.h
   cmLinkLineDeviceComputer.cxx
   cmLinkLineDeviceComputer.h
+  cmList.h
+  cmList.cxx
   cmListFileCache.cxx
   cmListFileCache.h
   cmLocalCommonGenerator.cxx
   cmLocalCommonGenerator.h
   cmLocalGenerator.cxx
   cmLocalGenerator.h
+  cmPlaceholderExpander.cxx
+  cmPlaceholderExpander.h
   cmRulePlaceholderExpander.cxx
   cmRulePlaceholderExpander.h
   cmLocalUnixMakefileGenerator3.cxx
   cmLocale.h
-  ${MACH_SRCS}
   cmMakefile.cxx
   cmMakefile.h
   cmMakefileTargetGenerator.cxx
@@ -399,12 +377,16 @@ set(SRCS
   cmNewLineStyle.cxx
   cmOrderDirectories.cxx
   cmOrderDirectories.h
+  cmPlistParser.cxx
+  cmPlistParser.h
   cmPolicies.h
   cmPolicies.cxx
   cmProcessOutput.cxx
   cmProcessOutput.h
   cmProcessTools.cxx
   cmProcessTools.h
+  cmValue.cxx
+  cmValue.h
   cmProperty.h
   cmPropertyDefinition.cxx
   cmPropertyDefinition.h
@@ -435,6 +417,7 @@ set(SRCS
   cmSourceFileLocationKind.h
   cmSourceGroup.cxx
   cmSourceGroup.h
+  cmStandardLevel.h
   cmStandardLevelResolver.cxx
   cmStandardLevelResolver.h
   cmState.cxx
@@ -446,6 +429,7 @@ set(SRCS
   cmStateTypes.h
   cmStringAlgorithms.cxx
   cmStringAlgorithms.h
+  cmSyntheticTargetCache.h
   cmSystemTools.cxx
   cmSystemTools.h
   cmTarget.cxx
@@ -464,17 +448,21 @@ set(SRCS
   cmUVHandlePtr.h
   cmUVProcessChain.cxx
   cmUVProcessChain.h
+  cmUVStream.h
   cmUVStreambuf.h
   cmUVSignalHackRAII.h
   cmVariableWatch.cxx
   cmVariableWatch.h
   cmVersion.cxx
   cmVersion.h
+  cmWindowsRegistry.cxx
+  cmWindowsRegistry.h
   cmWorkerPool.cxx
   cmWorkerPool.h
   cmWorkingDirectory.cxx
   cmWorkingDirectory.h
-  ${XCOFF_SRCS}
+  cmXcFramework.cxx
+  cmXcFramework.h
   cmXMLParser.cxx
   cmXMLParser.h
   cmXMLSafe.cxx
@@ -550,6 +538,8 @@ set(SRCS
   cmExecuteProcessCommand.h
   cmExpandedCommandArgument.cxx
   cmExpandedCommandArgument.h
+  cmExperimental.cxx
+  cmExperimental.h
   cmExportCommand.cxx
   cmExportCommand.h
   cmExportLibraryDependenciesCommand.cxx
@@ -574,6 +564,8 @@ set(SRCS
   cmFindProgramCommand.h
   cmForEachCommand.cxx
   cmForEachCommand.h
+  cmBlockCommand.cxx
+  cmBlockCommand.h
   cmFunctionBlocker.cxx
   cmFunctionBlocker.h
   cmFunctionCommand.cxx
@@ -610,6 +602,8 @@ set(SRCS
   cmInstallCommand.h
   cmInstallCommandArguments.cxx
   cmInstallCommandArguments.h
+  cmInstallCxxModuleBmiGenerator.cxx
+  cmInstallCxxModuleBmiGenerator.h
   cmInstallFilesCommand.cxx
   cmInstallFilesCommand.h
   cmInstallProgramsCommand.cxx
@@ -636,6 +630,7 @@ set(SRCS
   cmMathCommand.h
   cmMessageCommand.cxx
   cmMessageCommand.h
+  cmMessageMetadata.h
   cmOptionCommand.cxx
   cmOptionCommand.h
   cmOutputRequiredFilesCommand.cxx
@@ -729,130 +724,7 @@ set(SRCS
   cmWhileCommand.h
   cmWriteFileCommand.cxx
   cmWriteFileCommand.h
-
-  cm_get_date.h
-  cm_get_date.c
-  cm_utf8.h
-  cm_utf8.c
-  cm_codecvt.hxx
-  cm_codecvt.cxx
-
-  cmDuration.h
-  cmDuration.cxx
-
-  bindexplib.cxx
-  )
-
-SET_PROPERTY(SOURCE cmProcessOutput.cxx APPEND PROPERTY COMPILE_DEFINITIONS
-  KWSYS_ENCODING_DEFAULT_CODEPAGE=${KWSYS_ENCODING_DEFAULT_CODEPAGE})
-
-# Xcode only works on Apple
-if(APPLE)
-  set(SRCS ${SRCS}
-    cmXCodeObject.cxx
-    cmXCode21Object.cxx
-    cmXCodeScheme.cxx
-    cmGlobalXCodeGenerator.cxx
-    cmGlobalXCodeGenerator.h
-    cmLocalXCodeGenerator.cxx
-    cmLocalXCodeGenerator.h)
-endif()
-
-
-if (WIN32)
-  set(SRCS ${SRCS}
-    cmCallVisualStudioMacro.cxx
-    cmCallVisualStudioMacro.h
-    )
-
-  if(NOT UNIX)
-    set(SRCS ${SRCS}
-      cmGlobalBorlandMakefileGenerator.cxx
-      cmGlobalBorlandMakefileGenerator.h
-      cmGlobalMSYSMakefileGenerator.cxx
-      cmGlobalMinGWMakefileGenerator.cxx
-      cmGlobalNMakeMakefileGenerator.cxx
-      cmGlobalNMakeMakefileGenerator.h
-      cmGlobalJOMMakefileGenerator.cxx
-      cmGlobalJOMMakefileGenerator.h
-      cmGlobalVisualStudio71Generator.cxx
-      cmGlobalVisualStudio71Generator.h
-      cmGlobalVisualStudio7Generator.cxx
-      cmGlobalVisualStudio7Generator.h
-      cmGlobalVisualStudio8Generator.cxx
-      cmGlobalVisualStudio8Generator.h
-      cmGlobalVisualStudio9Generator.cxx
-      cmGlobalVisualStudio9Generator.h
-      cmVisualStudioGeneratorOptions.h
-      cmVisualStudioGeneratorOptions.cxx
-      cmVisualStudio10TargetGenerator.h
-      cmVisualStudio10TargetGenerator.cxx
-      cmVisualStudio10ToolsetOptions.h
-      cmVisualStudio10ToolsetOptions.cxx
-      cmLocalVisualStudio10Generator.cxx
-      cmLocalVisualStudio10Generator.h
-      cmGlobalVisualStudio10Generator.h
-      cmGlobalVisualStudio10Generator.cxx
-      cmGlobalVisualStudio11Generator.h
-      cmGlobalVisualStudio11Generator.cxx
-      cmGlobalVisualStudio12Generator.h
-      cmGlobalVisualStudio12Generator.cxx
-      cmGlobalVisualStudio14Generator.h
-      cmGlobalVisualStudio14Generator.cxx
-      cmGlobalVisualStudioGenerator.cxx
-      cmGlobalVisualStudioGenerator.h
-      cmGlobalVisualStudioVersionedGenerator.h
-      cmGlobalVisualStudioVersionedGenerator.cxx
-      cmIDEFlagTable.h
-      cmIDEOptions.cxx
-      cmIDEOptions.h
-      cmLocalVisualStudio7Generator.cxx
-      cmLocalVisualStudio7Generator.h
-      cmLocalVisualStudioGenerator.cxx
-      cmLocalVisualStudioGenerator.h
-      cmVisualStudioSlnData.h
-      cmVisualStudioSlnData.cxx
-      cmVisualStudioSlnParser.h
-      cmVisualStudioSlnParser.cxx
-      cmVisualStudioWCEPlatformParser.h
-      cmVisualStudioWCEPlatformParser.cxx
-      cmVSSetupHelper.cxx
-      cmVSSetupHelper.h
-      )
-
-    # Add a manifest file to executables on Windows to allow for
-    # GetVersion to work properly on Windows 8 and above.
-    set(MANIFEST_FILE ${CMAKE_CURRENT_SOURCE_DIR}/cmake.version.manifest)
-  endif()
-endif ()
-
-# Watcom support
-if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set_property(SOURCE cmake.cxx APPEND PROPERTY COMPILE_DEFINITIONS CMAKE_USE_WMAKE)
-  list(APPEND SRCS
-    cmGlobalWatcomWMakeGenerator.cxx
-    cmGlobalWatcomWMakeGenerator.h
-    )
-endif()
-
-# GHS support
-# Works only for windows and linux
-if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(SRCS ${SRCS}
-      cmGlobalGhsMultiGenerator.cxx
-      cmGlobalGhsMultiGenerator.h
-      cmLocalGhsMultiGenerator.cxx
-      cmLocalGhsMultiGenerator.h
-      cmGhsMultiTargetGenerator.cxx
-      cmGhsMultiTargetGenerator.h
-      cmGhsMultiGpj.cxx
-      cmGhsMultiGpj.h
-    )
-endif()
-
-
-# Ninja support
-set(SRCS ${SRCS}
+  # Ninja support
   cmScanDepFormat.cxx
   cmGlobalNinjaGenerator.cxx
   cmGlobalNinjaGenerator.h
@@ -869,85 +741,295 @@ set(SRCS ${SRCS}
   cmNinjaLinkLineComputer.h
   cmNinjaLinkLineDeviceComputer.cxx
   cmNinjaLinkLineDeviceComputer.h
+
+  cm_get_date.h
+  cm_get_date.c
+  cm_utf8.h
+  cm_utf8.c
+  cm_codecvt.hxx
+  cm_codecvt.cxx
+  cm_fileno.hxx
+  cm_fileno.cxx
+
+  cmDuration.h
+  cmDuration.cxx
+
+  bindexplib.cxx
   )
+target_include_directories(
+  CMakeLib
+  PUBLIC
+    # add the include path to find the .h
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LexerParser"
+    ${CMake_HAIKU_INCLUDE_DIRS}
+  )
+target_link_libraries(
+  CMakeLib
+  PUBLIC
+    cmstd
+    cmsys
+    CURL::libcurl
+    EXPAT::EXPAT
+    JsonCpp::JsonCpp
+    $<TARGET_NAME_IF_EXISTS:kwiml::kwiml>
+    LibArchive::LibArchive
+    LibRHash::LibRHash
+    LibUV::LibUV
+    Threads::Threads
+    ZLIB::ZLIB
+  )
+
+if(CMake_ENABLE_DEBUGGER)
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmDebuggerAdapter.cxx
+      cmDebuggerAdapter.h
+      cmDebuggerBreakpointManager.cxx
+      cmDebuggerBreakpointManager.h
+      cmDebuggerExceptionManager.cxx
+      cmDebuggerExceptionManager.h
+      cmDebuggerProtocol.cxx
+      cmDebuggerProtocol.h
+      cmDebuggerSourceBreakpoint.cxx
+      cmDebuggerSourceBreakpoint.h
+      cmDebuggerStackFrame.cxx
+      cmDebuggerStackFrame.h
+      cmDebuggerThread.cxx
+      cmDebuggerThread.h
+      cmDebuggerThreadManager.cxx
+      cmDebuggerThreadManager.h
+      cmDebuggerVariables.cxx
+      cmDebuggerVariables.h
+      cmDebuggerVariablesHelper.cxx
+      cmDebuggerVariablesHelper.h
+      cmDebuggerVariablesManager.cxx
+      cmDebuggerVariablesManager.h
+    )
+  if(WIN32)
+    target_sources(
+    CMakeLib
+    PRIVATE
+      cmDebuggerWindowsPipeConnection.cxx
+      cmDebuggerWindowsPipeConnection.h
+    )
+  else()
+    target_sources(
+    CMakeLib
+    PRIVATE
+      cmDebuggerPosixPipeConnection.cxx
+      cmDebuggerPosixPipeConnection.h
+    )
+  endif()
+  target_link_libraries(CMakeLib PUBLIC cppdap::cppdap)
+endif()
+
+# Check if we can build the Mach-O parser.
+if(CMake_USE_MACH_PARSER)
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmMachO.h
+      cmMachO.cxx
+    )
+endif()
+
+# Check if we can build the XCOFF parser.
+if(CMake_USE_XCOFF_PARSER)
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmXCOFF.h
+      cmXCOFF.cxx
+    )
+endif()
+
+# Xcode only works on Apple
+if(APPLE)
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmXCodeObject.cxx
+      cmXCode21Object.cxx
+      cmXCodeScheme.cxx
+      cmGlobalXCodeGenerator.cxx
+      cmGlobalXCodeGenerator.h
+      cmLocalXCodeGenerator.cxx
+      cmLocalXCodeGenerator.h
+    )
+endif()
+
+if(WIN32)
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmCallVisualStudioMacro.cxx
+      cmCallVisualStudioMacro.h
+    )
+
+  if(NOT UNIX)
+    target_sources(
+      CMakeLib
+      PRIVATE
+        cmGlobalBorlandMakefileGenerator.cxx
+        cmGlobalBorlandMakefileGenerator.h
+        cmGlobalMSYSMakefileGenerator.cxx
+        cmGlobalMinGWMakefileGenerator.cxx
+        cmGlobalNMakeMakefileGenerator.cxx
+        cmGlobalNMakeMakefileGenerator.h
+        cmGlobalJOMMakefileGenerator.cxx
+        cmGlobalJOMMakefileGenerator.h
+        cmGlobalVisualStudio71Generator.cxx
+        cmGlobalVisualStudio71Generator.h
+        cmGlobalVisualStudio7Generator.cxx
+        cmGlobalVisualStudio7Generator.h
+        cmGlobalVisualStudio8Generator.cxx
+        cmGlobalVisualStudio8Generator.h
+        cmGlobalVisualStudio9Generator.cxx
+        cmGlobalVisualStudio9Generator.h
+        cmVisualStudioGeneratorOptions.h
+        cmVisualStudioGeneratorOptions.cxx
+        cmVsProjectType.h
+        cmVisualStudio10TargetGenerator.h
+        cmVisualStudio10TargetGenerator.cxx
+        cmLocalVisualStudio10Generator.cxx
+        cmLocalVisualStudio10Generator.h
+        cmGlobalVisualStudio10Generator.h
+        cmGlobalVisualStudio10Generator.cxx
+        cmGlobalVisualStudio11Generator.h
+        cmGlobalVisualStudio11Generator.cxx
+        cmGlobalVisualStudio12Generator.h
+        cmGlobalVisualStudio12Generator.cxx
+        cmGlobalVisualStudio14Generator.h
+        cmGlobalVisualStudio14Generator.cxx
+        cmGlobalVisualStudioGenerator.cxx
+        cmGlobalVisualStudioGenerator.h
+        cmGlobalVisualStudioVersionedGenerator.h
+        cmGlobalVisualStudioVersionedGenerator.cxx
+        cmIDEFlagTable.h
+        cmIDEOptions.cxx
+        cmIDEOptions.h
+        cmLocalVisualStudio7Generator.cxx
+        cmLocalVisualStudio7Generator.h
+        cmLocalVisualStudioGenerator.cxx
+        cmLocalVisualStudioGenerator.h
+        cmVisualStudioSlnData.h
+        cmVisualStudioSlnData.cxx
+        cmVisualStudioSlnParser.h
+        cmVisualStudioSlnParser.cxx
+        cmVisualStudioWCEPlatformParser.h
+        cmVisualStudioWCEPlatformParser.cxx
+        cmVSSetupHelper.cxx
+        cmVSSetupHelper.h
+      )
+
+    # Add a manifest file to executables on Windows to allow for
+    # GetVersion to work properly on Windows 8 and above.
+    target_sources(ManifestLib INTERFACE cmake.version.manifest)
+  endif()
+endif()
+
+# Watcom support
+if(CMAKE_USE_WMAKE)
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmGlobalWatcomWMakeGenerator.cxx
+      cmGlobalWatcomWMakeGenerator.h
+    )
+endif()
+
+# GHS support
+# Works only for windows and linux
+if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_sources(
+    CMakeLib
+    PRIVATE
+      cmGlobalGhsMultiGenerator.cxx
+      cmGlobalGhsMultiGenerator.h
+      cmLocalGhsMultiGenerator.cxx
+      cmLocalGhsMultiGenerator.h
+      cmGhsMultiTargetGenerator.cxx
+      cmGhsMultiTargetGenerator.h
+      cmGhsMultiGpj.cxx
+      cmGhsMultiGpj.h
+    )
+endif()
+
+if(CMake_BUILD_PCH)
+  target_precompile_headers(CMakeLib PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:<string$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<iostream$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<sstream$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<iomanip$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<cm/memory$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:<cm3p/cppdap/protocol.h$<ANGLE-R>>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmMakefile.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmGlobalGenerator.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmLocalGenerator.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmGeneratorTarget.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmGeneratorExpression.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmArgumentParser.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmake.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmCMakePath.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cmCurl.h>")
+
+    set_source_files_properties(
+      "LexerParser/cmFortranLexer.cxx"
+      PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
+  if(WIN32)
+    target_precompile_headers(CMakeLib PRIVATE
+      "$<$<COMPILE_LANGUAGE:CXX>:<cm3p/uv.h$<ANGLE-R>>"
+      "$<$<COMPILE_LANGUAGE:CXX>:cmVSSetupHelper.h>")
+    set_source_files_properties("LexerParser/cmFortranParser.cxx" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+  else()
+    set_source_files_properties(
+      "LexerParser/cmCommandArgumentLexer.cxx"
+      "LexerParser/cmGccDepfileLexer.cxx"
+      "LexerParser/cmExprLexer.cxx"
+      "LexerParser/cmDependsJavaLexer.cxx"
+      PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+  endif()
+endif()
 
 # Temporary variable for tools targets
 set(_tools)
 
 if(WIN32 AND NOT CYGWIN)
   set_source_files_properties(cmcldeps.cxx PROPERTIES COMPILE_DEFINITIONS _WIN32_WINNT=0x0501)
-  add_executable(cmcldeps cmcldeps.cxx ${MANIFEST_FILE})
+  add_executable(cmcldeps cmcldeps.cxx)
+  target_link_libraries(cmcldeps PRIVATE CMakeLib ManifestLib)
   list(APPEND _tools cmcldeps)
-  target_link_libraries(cmcldeps CMakeLib)
 endif()
 
-foreach(v CURL_CA_BUNDLE CURL_CA_PATH)
-  if(${v})
-    set_property(SOURCE cmCurl.cxx APPEND PROPERTY COMPILE_DEFINITIONS ${v}="${${v}}")
-  endif()
-endforeach()
-
-foreach(check
-    STAT_HAS_ST_MTIM
-    STAT_HAS_ST_MTIMESPEC
-    )
-  if(KWSYS_CXX_${check}_COMPILED) # abuse KWSys check cache entry
-    set(CMake_${check} 1)
-  else()
-    set(CMake_${check} 0)
-  endif()
-  set_property(SOURCE cmFileTime.cxx APPEND PROPERTY
-    COMPILE_DEFINITIONS CMake_${check}=${CMake_${check}})
-endforeach()
-
-# create a library used by the command line and the GUI
-add_library(CMakeLib ${SRCS})
-target_link_libraries(CMakeLib cmsys
-  ${CMAKE_STD_LIBRARY}
-  ${CMAKE_EXPAT_LIBRARIES} ${CMAKE_ZLIB_LIBRARIES}
-  ${CMAKE_TAR_LIBRARIES}
-  ${CMAKE_CURL_LIBRARIES}
-  ${CMAKE_JSONCPP_LIBRARIES}
-  ${CMAKE_LIBUV_LIBRARIES}
-  ${CMAKE_LIBRHASH_LIBRARIES}
-  ${CMake_KWIML_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
-  )
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "sparc")
-  # the atomic instructions are implemented using libatomic on some platforms,
-  # so linking to that may be required
-  check_library_exists(atomic __atomic_fetch_add_4 "" LIBATOMIC_NEEDED)
-  if(LIBATOMIC_NEEDED)
-    target_link_libraries(CMakeLib atomic)
-  endif()
+# Some atomic instructions are implemented using libatomic on some platforms.
+if(CMake_HAVE_CXX_ATOMIC_LIB)
+  target_link_libraries(CMakeLib PUBLIC atomic)
 endif()
 
 # On Apple we need CoreFoundation and CoreServices
 if(APPLE)
-  target_link_libraries(CMakeLib "-framework CoreFoundation")
-  target_link_libraries(CMakeLib "-framework CoreServices")
+  target_link_libraries(CMakeLib PUBLIC "-framework CoreFoundation")
+  target_link_libraries(CMakeLib PUBLIC "-framework CoreServices")
 endif()
 
 if(WIN32 AND NOT UNIX)
   # We need the rpcrt4 library on Windows.
   # We need the crypt32 library on Windows for crypto/cert APIs.
-  target_link_libraries(CMakeLib rpcrt4 crypt32)
+  target_link_libraries(CMakeLib PUBLIC rpcrt4 crypt32)
 endif()
 
 target_compile_definitions(CMakeLib PUBLIC ${CLANG_TIDY_DEFINITIONS})
 
 #
-# CTestLib
+# Build CTestLib
 #
-include_directories(
-  "${CMake_SOURCE_DIR}/Source/CTest"
-  ${CMAKE_CURL_INCLUDES}
-  )
-#
-# Sources for CTestLib
-#
-set(CTEST_SRCS cmCTest.cxx
+add_library(
+  CTestLib
+  cmCTest.cxx
   CTest/cmProcess.cxx
   CTest/cmCTestBinPacker.cxx
   CTest/cmCTestBuildAndTestHandler.cxx
@@ -987,6 +1069,7 @@ set(CTEST_SRCS cmCTest.cxx
   CTest/cmCTestSubmitHandler.cxx
   CTest/cmCTestTestCommand.cxx
   CTest/cmCTestTestHandler.cxx
+  CTest/cmCTestTestMeasurementXMLParser.cxx
   CTest/cmCTestUpdateCommand.cxx
   CTest/cmCTestUpdateHandler.cxx
   CTest/cmCTestUploadCommand.cxx
@@ -1013,21 +1096,36 @@ set(CTEST_SRCS cmCTest.cxx
   LexerParser/cmCTestResourceGroupsLexer.h
   LexerParser/cmCTestResourceGroupsLexer.in.l
   )
-
-# Build CTestLib
-add_library(CTestLib ${CTEST_SRCS})
-target_link_libraries(CTestLib CMakeLib ${CMAKE_CURL_LIBRARIES})
-
-#
-# CPack
-#
-include_directories(
-  "${CMake_SOURCE_DIR}/Source/CPack"
+target_include_directories(
+  CTestLib
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/CTest"
   )
+target_link_libraries(CTestLib PUBLIC CMakeLib)
+
+if(CMake_BUILD_PCH)
+  target_precompile_headers(CTestLib PRIVATE
+    "cmDuration.h"
+    "cmMakefile.h"
+    "cmSystemTools.h"
+    "cmGlobalGenerator.h"
+    "cmake.h"
+    "CTest/cmCTestGenericHandler.h"
+    "<sstream>"
+    "<cm3p/uv.h>")
+
+  if(WIN32)
+    target_precompile_headers(CTestLib PRIVATE "cmCurl.h" "CTest/cmCTestMultiProcessHandler.h")
+  else()
+    set_source_files_properties("LexerParser/cmCTestResourceGroupsLexer.cxx" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+  endif()
+endif()
+
 #
-# Sources for CPack
+# Build CPackLib
 #
-set(CPACK_SRCS
+add_library(
+  CPackLib
   CPack/cmCPackArchiveGenerator.cxx
   CPack/cmCPackComponentGroup.cxx
   CPack/cmCPackDebGenerator.cxx
@@ -1035,12 +1133,11 @@ set(CPACK_SRCS
   CPack/cmCPackGeneratorFactory.cxx
   CPack/cmCPackGenerator.cxx
   CPack/cmCPackLog.cxx
+  CPack/cmCPackInnoSetupGenerator.cxx
   CPack/cmCPackNSISGenerator.cxx
   CPack/cmCPackNuGetGenerator.cxx
   CPack/cmCPackSTGZGenerator.cxx
-  )
-# CPack IFW generator
-set(CPACK_SRCS ${CPACK_SRCS}
+  # CPack IFW generator
   CPack/IFW/cmCPackIFWCommon.cxx
   CPack/IFW/cmCPackIFWCommon.h
   CPack/IFW/cmCPackIFWGenerator.cxx
@@ -1052,19 +1149,20 @@ set(CPACK_SRCS ${CPACK_SRCS}
   CPack/IFW/cmCPackIFWRepository.cxx
   CPack/IFW/cmCPackIFWRepository.h
   )
-
-if(CYGWIN)
-  set(CPACK_SRCS ${CPACK_SRCS}
-    CPack/cmCPackCygwinBinaryGenerator.cxx
-    CPack/cmCPackCygwinSourceGenerator.cxx
-    )
-endif()
+target_include_directories(
+  CPackLib
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/CPack"
+    "${CMAKE_CURRENT_BINARY_DIR}/CPack"
+  )
+target_link_libraries(CPackLib PUBLIC CMakeLib)
 
 option(CPACK_ENABLE_FREEBSD_PKG "Add FreeBSD pkg(8) generator to CPack." OFF)
-
 if(UNIX)
-  set(CPACK_SRCS ${CPACK_SRCS}
-    CPack/cmCPackRPMGenerator.cxx
+  target_sources(
+    CPackLib
+    PRIVATE
+      CPack/cmCPackRPMGenerator.cxx
     )
 
   # Optionally, try to use pkg(8)
@@ -1080,13 +1178,14 @@ if(UNIX)
         pkg
         DOC "FreeBSD pkg(8) library")
       if(FREEBSD_PKG_LIBRARIES)
-        set(CPACK_SRCS ${CPACK_SRCS}
-          CPack/cmCPackFreeBSDGenerator.cxx
-          )
+        set(ENABLE_BUILD_FREEBSD_PKG 1)
+        target_sources(CPackLib PRIVATE CPack/cmCPackFreeBSDGenerator.cxx)
+        target_include_directories(CPackLib PUBLIC ${FREEBSD_PKG_INCLUDE_DIRS})
+        target_link_libraries(CPackLib PUBLIC ${FREEBSD_PKG_LIBRARIES})
       endif()
     endif()
 
-    if (NOT FREEBSD_PKG_INCLUDE_DIRS OR NOT FREEBSD_PKG_LIBRARIES)
+    if(NOT FREEBSD_PKG_INCLUDE_DIRS OR NOT FREEBSD_PKG_LIBRARIES)
       message(FATAL_ERROR "CPack needs libpkg(3) to produce FreeBSD packages natively.")
     endif()
   else()
@@ -1096,49 +1195,57 @@ if(UNIX)
 endif()
 
 if(CYGWIN)
+  target_sources(
+    CPackLib
+    PRIVATE
+      CPack/cmCPackCygwinBinaryGenerator.cxx
+      CPack/cmCPackCygwinSourceGenerator.cxx
+    )
   find_package(LibUUID)
 endif()
-if(WIN32 OR (CYGWIN AND LibUUID_FOUND))
-  set(CPACK_SRCS ${CPACK_SRCS}
-    CPack/WiX/cmCMakeToWixPath.cxx
-    CPack/WiX/cmCMakeToWixPath.h
-    CPack/WiX/cmCPackWIXGenerator.cxx
-    CPack/WiX/cmCPackWIXGenerator.h
-    CPack/WiX/cmWIXAccessControlList.cxx
-    CPack/WiX/cmWIXAccessControlList.h
-    CPack/WiX/cmWIXDirectoriesSourceWriter.cxx
-    CPack/WiX/cmWIXDirectoriesSourceWriter.h
-    CPack/WiX/cmWIXFeaturesSourceWriter.cxx
-    CPack/WiX/cmWIXFeaturesSourceWriter.h
-    CPack/WiX/cmWIXFilesSourceWriter.cxx
-    CPack/WiX/cmWIXFilesSourceWriter.h
-    CPack/WiX/cmWIXPatch.cxx
-    CPack/WiX/cmWIXPatch.h
-    CPack/WiX/cmWIXPatchParser.cxx
-    CPack/WiX/cmWIXPatchParser.h
-    CPack/WiX/cmWIXRichTextFormatWriter.cxx
-    CPack/WiX/cmWIXRichTextFormatWriter.h
-    CPack/WiX/cmWIXShortcut.cxx
-    CPack/WiX/cmWIXShortcut.h
-    CPack/WiX/cmWIXSourceWriter.cxx
-    CPack/WiX/cmWIXSourceWriter.h
+
+if(WIN32 OR (CYGWIN AND TARGET LibUUID::LibUUID))
+  set(ENABLE_BUILD_WIX_GENERATOR 1)
+  target_sources(
+    CPackLib
+    PRIVATE
+      CPack/WiX/cmCMakeToWixPath.cxx
+      CPack/WiX/cmCMakeToWixPath.h
+      CPack/WiX/cmCPackWIXGenerator.cxx
+      CPack/WiX/cmCPackWIXGenerator.h
+      CPack/WiX/cmWIXAccessControlList.cxx
+      CPack/WiX/cmWIXAccessControlList.h
+      CPack/WiX/cmWIXDirectoriesSourceWriter.cxx
+      CPack/WiX/cmWIXDirectoriesSourceWriter.h
+      CPack/WiX/cmWIXFeaturesSourceWriter.cxx
+      CPack/WiX/cmWIXFeaturesSourceWriter.h
+      CPack/WiX/cmWIXFilesSourceWriter.cxx
+      CPack/WiX/cmWIXFilesSourceWriter.h
+      CPack/WiX/cmWIXPatch.cxx
+      CPack/WiX/cmWIXPatch.h
+      CPack/WiX/cmWIXPatchParser.cxx
+      CPack/WiX/cmWIXPatchParser.h
+      CPack/WiX/cmWIXRichTextFormatWriter.cxx
+      CPack/WiX/cmWIXRichTextFormatWriter.h
+      CPack/WiX/cmWIXShortcut.cxx
+      CPack/WiX/cmWIXShortcut.h
+      CPack/WiX/cmWIXSourceWriter.cxx
+      CPack/WiX/cmWIXSourceWriter.h
     )
+  target_link_libraries(CPackLib PUBLIC $<TARGET_NAME_IF_EXISTS:LibUUID::LibUUID>)
 endif()
 
 if(APPLE)
-  set(CPACK_SRCS ${CPACK_SRCS}
-    CPack/cmCPackBundleGenerator.cxx
-    CPack/cmCPackDragNDropGenerator.cxx
-    CPack/cmCPackOSXX11Generator.cxx
-    CPack/cmCPackPKGGenerator.cxx
-    CPack/cmCPackPackageMakerGenerator.cxx
-    CPack/cmCPackProductBuildGenerator.cxx
+  target_sources(
+    CPackLib
+    PRIVATE
+      CPack/cmCPackBundleGenerator.cxx
+      CPack/cmCPackDragNDropGenerator.cxx
+      CPack/cmCPackPKGGenerator.cxx
+      CPack/cmCPackProductBuildGenerator.cxx
     )
 endif()
 
-# Build CPackLib
-add_library(CPackLib ${CPACK_SRCS})
-target_link_libraries(CPackLib CMakeLib)
 if(APPLE)
   # Some compilers produce errors in the CoreServices framework headers.
   # Ideally such errors should be fixed by either the compiler vendor
@@ -1146,8 +1253,7 @@ if(APPLE)
   # If it does not work, build with reduced functionality and warn.
   check_include_file("CoreServices/CoreServices.h" HAVE_CoreServices)
   if(HAVE_CoreServices)
-    set_property(SOURCE CPack/cmCPackDragNDropGenerator.cxx PROPERTY COMPILE_DEFINITIONS HAVE_CoreServices)
-    target_link_libraries(CPackLib "-framework CoreServices")
+    target_link_libraries(CPackLib PUBLIC "-framework CoreServices")
   else()
     message(WARNING "This compiler does not appear to support\n"
       "  #include <CoreServices/CoreServices.h>\n"
@@ -1155,38 +1261,25 @@ if(APPLE)
       "See CMakeFiles/CMakeError.log for details of the failure.")
   endif()
 endif()
-if(CYGWIN AND LibUUID_FOUND)
-  target_link_libraries(CPackLib ${LibUUID_LIBRARIES})
-  include_directories(CPackLib ${LibUUID_INCLUDE_DIRS})
-  set_property(SOURCE CPack/cmCPackGeneratorFactory.cxx PROPERTY COMPILE_DEFINITIONS HAVE_LIBUUID)
-endif()
-if(CPACK_ENABLE_FREEBSD_PKG AND FREEBSD_PKG_INCLUDE_DIRS AND FREEBSD_PKG_LIBRARIES)
-  target_link_libraries(CPackLib ${FREEBSD_PKG_LIBRARIES})
-  include_directories(${FREEBSD_PKG_INCLUDE_DIRS})
-  add_definitions(-DHAVE_FREEBSD_PKG)
-endif()
 
-if(APPLE)
-  add_executable(OSXScriptLauncher
-    CPack/OSXScriptLauncher.cxx)
-  target_link_libraries(OSXScriptLauncher cmsys)
-  target_link_libraries(OSXScriptLauncher "-framework CoreFoundation")
-endif()
+# Render config header file for CPackLib
+configure_file(CPack/cmCPackConfigure.h.in CPack/cmCPackConfigure.h)
+
 
 # Build CMake executable
-add_executable(cmake cmakemain.cxx cmcmd.cxx cmcmd.h ${MANIFEST_FILE})
+add_executable(cmake cmakemain.cxx cmcmd.cxx cmcmd.h)
+target_link_libraries(cmake PRIVATE CMakeLib ManifestLib)
 list(APPEND _tools cmake)
-target_link_libraries(cmake CMakeLib)
 
 # Build CTest executable
-add_executable(ctest ctest.cxx ${MANIFEST_FILE})
+add_executable(ctest ctest.cxx)
+target_link_libraries(ctest PRIVATE CTestLib ManifestLib)
 list(APPEND _tools ctest)
-target_link_libraries(ctest CTestLib)
 
 # Build CPack executable
-add_executable(cpack CPack/cpack.cxx ${MANIFEST_FILE})
+add_executable(cpack CPack/cpack.cxx)
+target_link_libraries(cpack PRIVATE CPackLib ManifestLib)
 list(APPEND _tools cpack)
-target_link_libraries(cpack CPackLib)
 
 # Curses GUI
 if(BUILD_CursesDialog)
@@ -1199,8 +1292,8 @@ if(BUILD_QtDialog)
   add_subdirectory(QtDialog)
 endif()
 
-include (${CMake_BINARY_DIR}/Source/LocalUserOptions.cmake OPTIONAL)
-include (${CMake_SOURCE_DIR}/Source/LocalUserOptions.cmake OPTIONAL)
+include(${CMAKE_CURRENT_BINARY_DIR}/LocalUserOptions.cmake OPTIONAL)
+include(${CMAKE_CURRENT_SOURCE_DIR}/LocalUserOptions.cmake OPTIONAL)
 
 if(WIN32)
   # Compute the binary version that appears in the RC file. Version
@@ -1219,14 +1312,14 @@ if(WIN32)
   set(CMake_RCVERSION_STR ${CMake_VERSION})
 
   # Add Windows executable version information.
-  configure_file("CMakeVersion.rc.in" "CMakeVersion.rc" @ONLY)
+  configure_file(CMakeVersion.rc.in CMakeVersion.rc @ONLY)
 
   # We use a separate object library for this to work around a limitation of
   # MinGW's windres tool with spaces in the path to the include directories.
   add_library(CMakeVersion OBJECT "${CMAKE_CURRENT_BINARY_DIR}/CMakeVersion.rc")
   set_property(TARGET CMakeVersion PROPERTY INCLUDE_DIRECTORIES "")
-  foreach(_tool ${_tools})
-    target_sources(${_tool} PRIVATE $<TARGET_OBJECTS:CMakeVersion>)
+  foreach(_tool IN LISTS _tools)
+    target_link_libraries(${_tool} PRIVATE CMakeVersion)
   endforeach()
 endif()
 
@@ -1237,7 +1330,7 @@ endif()
 
 # Install tools
 
-foreach(_tool ${_tools})
+foreach(_tool IN LISTS _tools)
   CMake_OPTIONAL_COMPONENT(${_tool})
   install(TARGETS ${_tool} DESTINATION ${CMAKE_BIN_DIR} ${COMPONENT})
 endforeach()

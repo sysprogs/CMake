@@ -63,7 +63,7 @@ bool TargetIncludeDirectoriesImpl::HandleDirectContent(
   bool system)
 {
   cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
-  tgt->InsertInclude(this->Join(content), lfbt, prepend);
+  tgt->InsertInclude(BT<std::string>(this->Join(content), lfbt), prepend);
   if (system) {
     std::string prefix = this->Makefile->GetCurrentSourceDirectory() + "/";
     std::set<std::string> sdirs;
@@ -88,7 +88,8 @@ void TargetIncludeDirectoriesImpl::HandleInterfaceContent(
                                                         system);
   if (system) {
     std::string joined = this->Join(content);
-    tgt->AppendProperty("INTERFACE_SYSTEM_INCLUDE_DIRECTORIES", joined);
+    tgt->AppendProperty("INTERFACE_SYSTEM_INCLUDE_DIRECTORIES", joined,
+                        this->Makefile->GetBacktrace());
   }
 }
 
@@ -99,8 +100,7 @@ bool cmTargetIncludeDirectoriesCommand(std::vector<std::string> const& args,
 {
   return TargetIncludeDirectoriesImpl(status).HandleArguments(
     args, "INCLUDE_DIRECTORIES",
-    TargetIncludeDirectoriesImpl::ArgumentFlags(
-      TargetIncludeDirectoriesImpl::PROCESS_BEFORE |
+    TargetIncludeDirectoriesImpl::PROCESS_BEFORE |
       TargetIncludeDirectoriesImpl::PROCESS_AFTER |
-      TargetIncludeDirectoriesImpl::PROCESS_SYSTEM));
+      TargetIncludeDirectoriesImpl::PROCESS_SYSTEM);
 }

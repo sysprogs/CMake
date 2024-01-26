@@ -4,8 +4,6 @@ set(SITE test-site)
 set(BUILDNAME test-build)
 set(COVERAGE_COMMAND "")
 
-unset(ENV{CTEST_PARALLEL_LEVEL})
-
 function(run_mc_test CASE_NAME CHECKER_COMMAND)
   run_ctest(${CASE_NAME} ${ARGN})
 endfunction()
@@ -91,6 +89,19 @@ set(CMAKELISTS_EXTRA_CODE
 -P \"${RunCMake_SOURCE_DIR}/testUndefinedBehaviorSanitizer.cmake\")
 ")
 run_mc_test(DummyUndefinedBehaviorSanitizer "" -DMEMCHECK_TYPE=UndefinedBehaviorSanitizer)
+unset(CMAKELISTS_EXTRA_CODE)
+unset(CTEST_EXTRA_CODE)
+
+#-----------------------------------------------------------------------------
+# add output test
+set(CTEST_EXTRA_CODE
+"set(CTEST_MEMORYCHECK_SANITIZER_OPTIONS \"simulate_sanitizer=1\")
+")
+set(CMAKELISTS_EXTRA_CODE
+"add_test(NAME TestSan COMMAND \"\${CMAKE_COMMAND}\"
+-P \"${RunCMake_SOURCE_DIR}/testUndefinedBehaviorSanitizer.cmake\")
+")
+run_mc_test(ExpectedOutputs "" -DMEMCHECK_TYPE=UndefinedBehaviorSanitizer)
 unset(CMAKELISTS_EXTRA_CODE)
 unset(CTEST_EXTRA_CODE)
 

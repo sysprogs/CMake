@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <map>
+#include <type_traits>
 #include <utility>
 
 #include "cmsys/FStream.hxx"
@@ -13,14 +14,13 @@
 #include "cmFortranParser.h" /* Interface to parser object.  */
 #include "cmGeneratedFileStream.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
+#include "cmList.h"
 #include "cmLocalUnixMakefileGenerator3.h"
 #include "cmMakefile.h"
 #include "cmOutputConverter.h"
-#include "cmProperty.h"
-#include "cmStateDirectory.h"
-#include "cmStateSnapshot.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 // TODO: Test compiler for the case of the mod file.  Some always
 // use lower case and some always use upper case.  I do not know if any
@@ -80,9 +80,8 @@ cmDependsFortran::cmDependsFortran(cmLocalUnixMakefileGenerator3* lg)
   this->SetIncludePathFromLanguage("Fortran");
 
   // Get the list of definitions.
-  std::vector<std::string> definitions;
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  mf->GetDefExpandList("CMAKE_TARGET_DEFINITIONS_Fortran", definitions);
+  cmList definitions{ mf->GetDefinition("CMAKE_TARGET_DEFINITIONS_Fortran") };
 
   // translate i.e. FOO=BAR to FOO and add it to the list of defined
   // preprocessor symbols
@@ -152,7 +151,9 @@ bool cmDependsFortran::Finalize(std::ostream& makeDepends,
                                 std::ostream& internalDepends)
 {
   // Prepare the module search process.
-  this->LocateModules();
+  if (!this->LocateModules()) {
+    return false;
+  }
 
   // Get the directory in which stamp files will be stored.
   const std::string& stamp_dir = this->TargetDirectory;
@@ -165,12 +166,17 @@ bool cmDependsFortran::Finalize(std::ostream& makeDepends,
     mod_dir = this->LocalGenerator->GetCurrentBinaryDirectory();
   }
 
+  bool building_intrinsics =
+    !mf->GetSafeDefinition("CMAKE_Fortran_TARGET_BUILDING_INSTRINSIC_MODULES")
+       .empty();
+
   // Actually write dependencies to the streams.
   using ObjectInfoMap = cmDependsFortranInternals::ObjectInfoMap;
   ObjectInfoMap const& objInfo = this->Internal->ObjectInfo;
   for (auto const& i : objInfo) {
     if (!this->WriteDependenciesReal(i.first, i.second, mod_dir, stamp_dir,
-                                     makeDepends, internalDepends)) {
+                                     makeDepends, internalDepends,
+                                     building_intrinsics)) {
       return false;
     }
   }
@@ -192,8 +198,6 @@ bool cmDependsFortran::Finalize(std::ostream& makeDepends,
     cmGeneratedFileStream fcStream(fcName);
     fcStream << "# Remove fortran modules provided by this target.\n";
     fcStream << "FILE(REMOVE";
-    std::string currentBinDir =
-      this->LocalGenerator->GetCurrentBinaryDirectory();
     for (std::string const& i : provides) {
       std::string mod_upper = cmStrCat(mod_dir, '/');
       std::string mod_lower = cmStrCat(mod_dir, '/');
@@ -201,13 +205,13 @@ bool cmDependsFortran::Finalize(std::ostream& makeDepends,
       std::string stamp = cmStrCat(stamp_dir, '/', i, ".stamp");
       fcStream << "\n"
                   "  \""
-               << this->MaybeConvertToRelativePath(currentBinDir, mod_lower)
+               << this->LocalGenerator->MaybeRelativeToCurBinDir(mod_lower)
                << "\"\n"
                   "  \""
-               << this->MaybeConvertToRelativePath(currentBinDir, mod_upper)
+               << this->LocalGenerator->MaybeRelativeToCurBinDir(mod_upper)
                << "\"\n"
                   "  \""
-               << this->MaybeConvertToRelativePath(currentBinDir, stamp)
+               << this->LocalGenerator->MaybeRelativeToCurBinDir(stamp)
                << "\"\n";
     }
     fcStream << "  )\n";
@@ -215,7 +219,7 @@ bool cmDependsFortran::Finalize(std::ostream& makeDepends,
   return true;
 }
 
-void cmDependsFortran::LocateModules()
+bool cmDependsFortran::LocateModules()
 {
   // Collect the set of modules provided and required by all sources.
   using ObjectInfoMap = cmDependsFortranInternals::ObjectInfoMap;
@@ -233,7 +237,7 @@ void cmDependsFortran::LocateModules()
 
   // Short-circuit for simple targets.
   if (this->Internal->TargetRequires.empty()) {
-    return;
+    return true;
   }
 
   // Match modules provided by this target to those it requires.
@@ -241,16 +245,26 @@ void cmDependsFortran::LocateModules()
 
   // Load information about other targets.
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  std::vector<std::string> infoFiles;
-  mf->GetDefExpandList("CMAKE_TARGET_LINKED_INFO_FILES", infoFiles);
-  for (std::string const& i : infoFiles) {
+  cmList infoFiles{ mf->GetDefinition(
+    "CMAKE_Fortran_TARGET_LINKED_INFO_FILES") };
+  for (auto const& i : infoFiles) {
     std::string targetDir = cmSystemTools::GetFilenamePath(i);
     std::string fname = targetDir + "/fortran.internal";
     cmsys::ifstream fin(fname.c_str());
-    if (fin) {
-      this->MatchRemoteModules(fin, targetDir);
+    if (!fin) {
+      cmSystemTools::Error(cmStrCat("-E cmake_depends failed to open ", fname,
+                                    " for module information"));
+      return false;
     }
+    this->MatchRemoteModules(fin, targetDir);
   }
+
+  // TODO: Use `CMAKE_Fortran_TARGET_FORWARD_LINKED_INFO_FILES` to handle cases
+  // described in #25425. Note that because Makefiles generators do not
+  // implement relaxed object compilation as described in #15555, the issues
+  // never actually cause build failures; only incremental build incorrectness.
+
+  return true;
 }
 
 void cmDependsFortran::MatchLocalModules()
@@ -311,14 +325,14 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
                                              std::string const& mod_dir,
                                              std::string const& stamp_dir,
                                              std::ostream& makeDepends,
-                                             std::ostream& internalDepends)
+                                             std::ostream& internalDepends,
+                                             bool buildingIntrinsics)
 {
   // Get the source file for this object.
   std::string const& src = info.Source;
 
   // Write the include dependencies to the output stream.
-  std::string binDir = this->LocalGenerator->GetBinaryDirectory();
-  std::string obj_i = this->MaybeConvertToRelativePath(binDir, obj);
+  std::string obj_i = this->LocalGenerator->MaybeRelativeToTopBinDir(obj);
   std::string obj_m = cmSystemTools::ConvertToOutputPath(obj_i);
   internalDepends << obj_i << "\n " << src << '\n';
   if (!info.Includes.empty()) {
@@ -333,7 +347,7 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
     }
     for (std::string const& i : info.Includes) {
       std::string dependee = cmSystemTools::ConvertToOutputPath(
-        this->MaybeConvertToRelativePath(binDir, i));
+        this->LocalGenerator->MaybeRelativeToTopBinDir(i));
       if (supportLongLineDepend) {
         makeDepends << ' ' << lineContinue << ' ' << dependee;
       } else {
@@ -344,8 +358,13 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
     makeDepends << '\n';
   }
 
+  std::set<std::string> req = info.Requires;
+  if (buildingIntrinsics) {
+    req.insert(info.Intrinsics.begin(), info.Intrinsics.end());
+  }
+
   // Write module requirements to the output stream.
-  for (std::string const& i : info.Requires) {
+  for (std::string const& i : req) {
     // Require only modules not provided in the same source.
     if (info.Provides.find(i) != info.Provides.cend()) {
       continue;
@@ -360,7 +379,7 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
     if (!required->second.empty()) {
       // This module is known.  Depend on its timestamp file.
       std::string stampFile = cmSystemTools::ConvertToOutputPath(
-        this->MaybeConvertToRelativePath(binDir, required->second));
+        this->LocalGenerator->MaybeRelativeToTopBinDir(required->second));
       makeDepends << obj_m << ": " << stampFile << '\n';
     } else {
       // This module is not known to CMake.  Try to locate it where
@@ -368,7 +387,7 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
       std::string module;
       if (this->FindModule(i, module)) {
         module = cmSystemTools::ConvertToOutputPath(
-          this->MaybeConvertToRelativePath(binDir, module));
+          this->LocalGenerator->MaybeRelativeToTopBinDir(module));
         makeDepends << obj_m << ": " << module << '\n';
       }
     }
@@ -387,10 +406,10 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
       // try various cases for the real mod file name.
       std::string modFile = cmStrCat(mod_dir, '/', i);
       modFile = this->LocalGenerator->ConvertToOutputFormat(
-        this->MaybeConvertToRelativePath(binDir, modFile),
+        this->LocalGenerator->MaybeRelativeToTopBinDir(modFile),
         cmOutputConverter::SHELL);
       std::string stampFile = cmStrCat(stamp_dir, '/', i, ".stamp");
-      stampFile = this->MaybeConvertToRelativePath(binDir, stampFile);
+      stampFile = this->LocalGenerator->MaybeRelativeToTopBinDir(stampFile);
       std::string const stampFileForShell =
         this->LocalGenerator->ConvertToOutputFormat(stampFile,
                                                     cmOutputConverter::SHELL);
@@ -404,13 +423,13 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
       // file is not updated. In such case the stamp file will be always
       // older than its prerequisite and trigger cmake_copy_f90_mod
       // on each new build. This is expected behavior for incremental
-      // builds and can not be changed without preforming recursive make
+      // builds and can not be changed without performing recursive make
       // calls that would considerably slow down the building process.
       makeDepends << stampFileForMake << ": " << obj_m << '\n';
       makeDepends << "\t$(CMAKE_COMMAND) -E cmake_copy_f90_mod " << modFile
                   << ' ' << stampFileForShell;
       cmMakefile* mf = this->LocalGenerator->GetMakefile();
-      cmProp cid = mf->GetDefinition("CMAKE_Fortran_COMPILER_ID");
+      cmValue cid = mf->GetDefinition("CMAKE_Fortran_COMPILER_ID");
       if (cmNonempty(cid)) {
         makeDepends << ' ' << *cid;
       }
@@ -425,7 +444,7 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
     // the target finishes building.
     std::string driver = cmStrCat(this->TargetDirectory, "/build");
     driver = cmSystemTools::ConvertToOutputPath(
-      this->MaybeConvertToRelativePath(binDir, driver));
+      this->LocalGenerator->MaybeRelativeToTopBinDir(driver));
     makeDepends << driver << ": " << obj_m << ".provides.build\n";
   }
 
@@ -472,7 +491,7 @@ bool cmDependsFortran::CopyModule(const std::vector<std::string>& args)
   // when the interface described in the module does not.
 
   std::string mod = args[2];
-  std::string stamp = args[3];
+  std::string const& stamp = args[3];
   std::string compilerId;
   if (args.size() >= 5) {
     compilerId = args[4];
@@ -653,7 +672,7 @@ bool cmDependsFortran::ModulesDiffer(const std::string& modFile,
         return true;
       }
     }
-  } else if (compilerId == "Intel") {
+  } else if (compilerId == "Intel" || compilerId == "IntelLLVM") {
     const char seq[2] = { '\n', '\0' };
     const int seqlen = 2;
 
@@ -680,14 +699,4 @@ bool cmDependsFortran::ModulesDiffer(const std::string& modFile,
   // including the case none was given, this will compare the whole
   // content.
   return cmFortranStreamsDiffer(finModFile, finStampFile);
-}
-
-std::string cmDependsFortran::MaybeConvertToRelativePath(
-  std::string const& base, std::string const& path)
-{
-  if (!this->LocalGenerator->GetStateSnapshot().GetDirectory().ContainsBoth(
-        base, path)) {
-    return path;
-  }
-  return cmSystemTools::ForceToRelativePath(base, path);
 }

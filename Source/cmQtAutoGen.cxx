@@ -22,9 +22,10 @@
 
 /// @brief Merges newOpts into baseOpts
 /// @arg valueOpts list of options that accept a value
-void MergeOptions(std::vector<std::string>& baseOpts,
-                  std::vector<std::string> const& newOpts,
-                  std::initializer_list<cm::string_view> valueOpts, bool isQt5)
+static void MergeOptions(std::vector<std::string>& baseOpts,
+                         std::vector<std::string> const& newOpts,
+                         std::initializer_list<cm::string_view> valueOpts,
+                         bool isQt5OrLater)
 {
   if (newOpts.empty()) {
     return;
@@ -47,7 +48,7 @@ void MergeOptions(std::vector<std::string>& baseOpts,
           auto oit = newOpt.begin();
           if (*oit == '-') {
             ++oit;
-            if (isQt5 && (*oit == '-')) {
+            if (isQt5OrLater && (*oit == '-')) {
               ++oit;
             }
             optName.assign(oit, newOpt.end());
@@ -74,6 +75,13 @@ void MergeOptions(std::vector<std::string>& baseOpts,
 // - Class definitions
 
 unsigned int const cmQtAutoGen::ParallelMax = 64;
+
+#ifdef _WIN32
+// Actually 32767 (see
+// https://devblogs.microsoft.com/oldnewthing/20031210-00/?p=41553) but we
+// allow for a small margin
+size_t const cmQtAutoGen::CommandLineLengthMax = 32000;
+#endif
 
 cm::string_view cmQtAutoGen::GeneratorName(GenT genType)
 {
@@ -204,24 +212,24 @@ std::string cmQtAutoGen::AppendFilenameSuffix(cm::string_view filename,
 
 void cmQtAutoGen::UicMergeOptions(std::vector<std::string>& baseOpts,
                                   std::vector<std::string> const& newOpts,
-                                  bool isQt5)
+                                  bool isQt5OrLater)
 {
   static std::initializer_list<cm::string_view> const valueOpts = {
     "tr",      "translate", "postfix", "generator",
     "include", // Since Qt 5.3
     "g"
   };
-  MergeOptions(baseOpts, newOpts, valueOpts, isQt5);
+  MergeOptions(baseOpts, newOpts, valueOpts, isQt5OrLater);
 }
 
 void cmQtAutoGen::RccMergeOptions(std::vector<std::string>& baseOpts,
                                   std::vector<std::string> const& newOpts,
-                                  bool isQt5)
+                                  bool isQt5OrLater)
 {
   static std::initializer_list<cm::string_view> const valueOpts = {
     "name", "root", "compress", "threshold"
   };
-  MergeOptions(baseOpts, newOpts, valueOpts, isQt5);
+  MergeOptions(baseOpts, newOpts, valueOpts, isQt5OrLater);
 }
 
 static void RccListParseContent(std::string const& content,

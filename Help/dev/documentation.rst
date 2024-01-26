@@ -92,6 +92,11 @@ literal block after ``::``
  the referenced documents inline as part of the referencing
  document.
 
+``versionadded``, ``versionchanged`` directives
+ Specify that something was added or changed by a named CMake version.
+ The command-line help processor prints the block content as if the lines
+ were normal paragraph text with interpretation.
+
 Inline markup constructs not listed above are printed literally in the
 command-line help output.  We prefer to use inline markup constructs that
 look correct in source form, so avoid use of \\-escapes in favor of inline
@@ -163,46 +168,175 @@ documentation:
  See the `cmake-variables(7)`_ manual
  and the `set()`_ command.
 
-Documentation objects in the CMake Domain come from two sources.
-First, the CMake extension to Sphinx transforms every document named
-with the form ``Help/<type>/<file-name>.rst`` to a domain object with
-type ``<type>``.  The object name is extracted from the document title,
-which is expected to be of the form::
+Documentation objects in the CMake Domain come from two sources:
 
- <object-name>
- -------------
+1. The CMake extension to Sphinx transforms every document named
+   with the form ``Help/<type>/<file-name>.rst`` to a domain object with
+   type ``<type>``.  The object name is extracted from the document title,
+   which is expected to be of the form::
 
-and to appear at or near the top of the ``.rst`` file before any other
-lines starting in a letter, digit, ``<``, or ``$``.  If no such title appears
-literally in the ``.rst`` file, the object name is the ``<file-name>``.
-If a title does appear, it is expected that ``<file-name>`` is equal
-to ``<object-name>`` with any ``<`` and ``>`` characters removed,
-or in the case of a ``$<genex-name>`` or ``$<genex-name:...>``, the
-``genex-name``.
+    <object-name>
+    -------------
 
-Second, the CMake Domain provides directives to define objects inside
-other documents:
+   and to appear at or near the top of the ``.rst`` file before any other lines
+   starting in a letter, digit, ``<``, or ``$``.  If no such title appears
+   literally in the ``.rst`` file, the object name is the ``<file-name>``.
+   If a title does appear, it is expected that ``<file-name>`` is equal
+   to ``<object-name>`` with any ``<`` and ``>`` characters removed,
+   or in the case of a ``$<genex-name>`` or ``$<genex-name:...>``, the
+   ``genex-name``.
+
+2. `CMake Domain directives`_ may be used in documents to explicitly define
+   some object types:
+
+   * `command directive`_
+   * `envvar directive`_
+   * `genex directive`_
+   * `variable directive`_
+
+   Object types for which no directive is available must be defined using
+   the document transform above.
+
+CMake Domain Directives
+-----------------------
+
+The CMake Domain provides the following directives.
+
+``command`` directive
+^^^^^^^^^^^^^^^^^^^^^
+
+Document a "command" object:
 
 .. code-block:: rst
 
- .. command:: <command-name>
+  .. command:: <command-name>
 
-  This indented block documents <command-name>.
+    This indented block documents <command-name>.
 
- .. envvar:: <envvar-name>
+The directive requires a single argument, the command name.
 
-  This indented block documents <envvar-name>.
+``envvar`` directive
+^^^^^^^^^^^^^^^^^^^^
+
+Document an "envvar" object:
+
+.. code-block:: rst
+
+  .. envvar:: <envvar-name>
+
+    This indented block documents <envvar-name>.
+
+The directive requires a single argument, the environment variable name.
+
+``genex`` directive
+^^^^^^^^^^^^^^^^^^^
+
+Document a "genex" object:
+
+.. code-block:: rst
 
  .. genex:: <genex-name>
 
   This indented block documents <genex-name>.
 
+The directive requires a single argument, the generator expression name.
+
+The optional ``:target:`` option allows a custom target name to be specified.
+Because this will affect the ability to reference the "genex" object using the
+``:genex:`` role, this option should be used very sparingly.
+
+``signature`` directive
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Document `CMake Command Signatures <Style: CMake Command Signatures_>`_
+within a ``Help/command/<command-name>.rst`` document.
+
+.. code-block:: rst
+
+  .. signature:: <command-name>(<signature>)
+
+    This indented block documents one or more signatures of a CMake command.
+
+The ``signature`` directive requires one argument, the signature summary:
+
+* One or more signatures must immediately follow the ``::``.
+  The first signature may optionally be placed on the same line.
+  A blank line following the ``signature`` directive will result in a
+  documentation generation error: ``1 argument(s) required, 0 supplied``.
+
+* Signatures may be split across multiple lines, but the final ``)`` of each
+  signature must be the last character on its line.
+
+* Blank lines between signatures are not allowed.  (Content after a blank line
+  is treated as part of the description.)
+
+* Whitespace in signatures is not preserved.  To document a complex signature,
+  abbreviate it in the ``signature`` directive argument and specify the full
+  signature in a ``code-block`` in the description.
+
+The ``signature`` directive generates a hyperlink target for each signature:
+
+* Default target names are automatically extracted from leading "keyword"
+  arguments in the signatures, where a keyword is any sequence of
+  non-space starting with a letter.  For example, the signature
+  ``string(REGEX REPLACE <match-regex> ...)`` generates the target
+  ``REGEX REPLACE``, similar to ``.. _`REGEX REPLACE`:``.
+
+* Custom target names may be specified using a ``:target:`` option.
+  For example:
+
+  .. code-block:: rst
+
+    .. signature::
+      cmake_path(GET <path-var> ROOT_NAME <out-var>)
+      cmake_path(GET <path-var> ROOT_PATH <out-var>)
+      :target:
+        GET ROOT_NAME
+        GET ROOT_PATH
+
+  Provide a custom target name for each signature, one per line.
+  The first target may optionally be placed on the same line as ``:target:``.
+
+* If a target name is already in use earlier in the document, no hyperlink
+  target will be generated.
+
+* The targets may be referenced from within the same document using
+  ```REF`_`` or ```TEXT <REF_>`_`` syntax.  Like reStructuredText section
+  headers, the targets do not work with Sphinx ``:ref:`` syntax, however
+  they can be globally referenced using e.g. ``:command:`string(APPEND)```.
+
+Although whitespace in the signature is not preserved, by default, line breaks
+are suppressed inside of square- or angle-brackets.  This behavior can be
+controlled using the ``:break:`` option; note, however, that there is no way
+to *force* a line break.  The default value is 'smart'.  Allowable values are:
+
+  ``all``
+    Allow line breaks at any whitespace.
+
+  ``smart`` (default)
+    Allow line breaks at whitespace, except between matched square- or
+    angle-brackets.  For example, if a signature contains the text
+    ``<input>... [OUTPUT_VARIABLE <out-var>]``, a line break would be allowed
+    after ``<input>...`` but not between ``OUTPUT_VARIABLE`` and ``<out-var>``.
+
+  ``verbatim``
+    Allow line breaks only where the source document contains a newline.
+
+The directive treats its content as the documentation of the signature(s).
+Indent the signature documentation accordingly.
+
+``variable`` directive
+^^^^^^^^^^^^^^^^^^^^^^
+
+Document a "variable" object:
+
+.. code-block:: rst
+
  .. variable:: <variable-name>
 
   This indented block documents <variable-name>.
 
-Object types for which no directive is available must be defined using
-the first approach above.
+The directive requires a single argument, the variable name.
 
 .. _`Sphinx Domain`: http://sphinx-doc.org/domains.html
 .. _`cmake(1)`: https://cmake.org/cmake/help/latest/manual/cmake.1.html
@@ -261,6 +395,10 @@ object names like ``OUTPUT_NAME_<CONFIG>``.  The form ``a <b>``,
 with a space preceding ``<``, is still interpreted as a link text
 with an explicit target.
 
+Additionally, the ``cref`` role may be used to create references
+to local targets that have literal styling.  This is especially
+useful for referencing a subcommand in the command's documentation.
+
 .. _`list()`: https://cmake.org/cmake/help/latest/command/list.html
 .. _`list(APPEND)`: https://cmake.org/cmake/help/latest/command/list.html
 .. _`list(APPEND) sub-command`: https://cmake.org/cmake/help/latest/command/list.html
@@ -293,6 +431,7 @@ The section header underline character hierarchy is
 * ``-``: Subsection or `CMake Domain`_ object document title
 * ``^``: Subsubsection or `CMake Domain`_ object document section
 * ``"``: Paragraph or `CMake Domain`_ object document subsection
+* ``~``: `CMake Domain`_ object document subsubsection
 
 Style: Whitespace
 ^^^^^^^^^^^^^^^^^
@@ -324,11 +463,11 @@ paragraph.
 Style: CMake Command Signatures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Command signatures should be marked up as plain literal blocks, not as
-cmake ``code-blocks``.
-
-Signatures are separated from preceding content by a section header.
-That is, use:
+A ``Help/command/<command-name>.rst`` document defines one ``command``
+object in the `CMake Domain`_, but some commands have multiple signatures.
+Use the CMake Domain's `signature directive`_ to document each signature.
+Separate signatures from preceding content by a section header.
+For example:
 
 .. code-block:: rst
 
@@ -337,17 +476,23 @@ That is, use:
   Normal Libraries
   ^^^^^^^^^^^^^^^^
 
-  ::
-
+  .. signature::
     add_library(<lib> ...)
 
-  This signature is used for ...
+    This signature is used for ...
 
-Signatures of commands should wrap optional parts with square brackets,
-and should mark list of optional arguments with an ellipsis (``...``).
-Elements of the signature which are specified by the user should be
-specified with angle brackets, and may be referred to in prose using
-``inline-literal`` syntax.
+Use the following conventions in command signature documentation:
+
+* Use an angle-bracket ``<placeholder>`` for arguments to be specified
+  by the caller.  Refer to them in prose using
+  `inline literal <Style: Inline Literals_>`_ syntax.
+
+* Wrap optional parts with square brackets.
+
+* Mark repeatable parts with a trailing ellipsis (``...``).
+
+The ``signature`` directive may be used multiple times for different
+signatures of the same command.
 
 Style: Boolean Constants
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -508,7 +653,7 @@ bracket is excluded if and only if the line starts in ``#``.
 Additional such ``.rst:`` comments may appear anywhere in the module file.
 All such comments must start with ``#`` in the first column.
 
-For example, a ``Findxxx.cmake`` module may contain:
+For example, a ``FindXxx.cmake`` module may contain:
 
 ::
 
@@ -535,13 +680,13 @@ For example, a ``Findxxx.cmake`` module may contain:
   <code>
 
   #[=======================================================================[.rst:
-  .. command:: xxx_do_something
+  .. command:: Xxx_do_something
 
    This command does something for Xxx::
 
-    xxx_do_something(some arguments)
+    Xxx_do_something(some arguments)
   #]=======================================================================]
-  macro(xxx_do_something)
+  macro(Xxx_do_something)
     <code>
   endmacro()
 
@@ -554,3 +699,56 @@ documentation, simply leave out the ``Help/module/<module-name>.rst``
 file and the ``Help/manual/cmake-modules.7.rst`` toctree entry.
 
 .. _`Bracket Comment`: https://cmake.org/cmake/help/latest/manual/cmake-language.7.html#bracket-comment
+
+Module Functions and Macros
+---------------------------
+
+Modules may provide CMake functions and macros defined by the `function()`_
+and `macro()`_ commands.  To avoid conflicts across modules, name the
+functions and macros using the prefix ``<ModuleName>_`` followed by the
+rest of the name, where ``<ModuleName>`` is the exact-case spelling of
+the module name.  We have no convention for the portion of names after
+the ``<ModuleName>_`` prefix.
+
+For historical reasons, some modules that come with CMake do not follow
+this prefix convention.  When adding new functions to these modules,
+discussion during review can decide whether to follow their existing
+convention or to use the module name prefix.
+
+Documentation of public functions and macros should be provided in
+the module, typically in the main `module documentation`_ at the top.
+For example, a ``MyModule`` module may document a function like this::
+
+  #[=======================================================================[.rst:
+  MyModule
+  --------
+
+  This is my module.  It provides some functions.
+
+  .. command:: MyModule_Some_Function
+
+    This is some function:
+
+    .. code-block:: cmake
+
+      MyModule_Some_Function(...)
+  #]=======================================================================]
+
+Documentation may alternatively be placed just before each definition.
+For example, a ``MyModule`` module may document another function like this::
+
+  #[=======================================================================[.rst:
+  .. command:: MyModule_Other_Function
+
+    This is another function:
+
+    .. code-block:: cmake
+
+      MyModule_Other_Function(...)
+  #]=======================================================================]
+  function(MyModule_Other_Function ...)
+    # ...
+  endfunction()
+
+.. _`function()`: https://cmake.org/cmake/help/latest/command/function.html
+.. _`macro()`: https://cmake.org/cmake/help/latest/command/macro.html

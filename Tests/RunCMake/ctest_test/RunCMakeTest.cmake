@@ -1,9 +1,6 @@
 include(RunCTest)
 set(RunCMake_TEST_TIMEOUT 60)
 
-unset(ENV{CTEST_PARALLEL_LEVEL})
-unset(ENV{CTEST_OUTPUT_ON_FAILURE})
-
 set(CASE_CTEST_TEST_ARGS "")
 set(CASE_CTEST_TEST_LOAD "")
 
@@ -18,6 +15,7 @@ run_ctest_test(TestQuiet QUIET)
 #
 # Spoof a load average value to make these tests more reliable.
 set(ENV{__CTEST_FAKE_LOAD_AVERAGE_FOR_TESTING} 5)
+set(RunCTest_VERBOSE_FLAG -VV)
 
 # Verify that new tests are started when the load average falls below
 # our threshold.
@@ -53,6 +51,14 @@ run_ctest_test(TestLoadOrder TEST_LOAD "ERR4")
 
 unset(ENV{__CTEST_FAKE_LOAD_AVERAGE_FOR_TESTING})
 unset(CASE_CTEST_TEST_LOAD)
+unset(RunCTest_VERBOSE_FLAG)
+
+block()
+  set(CASE_CMAKELISTS_SUFFIX_CODE [[
+    add_test(NAME testNotRun COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/does_not_exist)
+  ]])
+  run_ctest_test(NotRun)
+endblock()
 
 function(run_TestChangeId)
   set(CASE_TEST_PREFIX_CODE [[
@@ -77,6 +83,23 @@ add_test(NAME FailingTest COMMAND ${CMAKE_COMMAND} -E no_such_command)
   run_ctest(TestOutputSize)
 endfunction()
 run_TestOutputSize()
+
+# Test --test-output-truncation
+function(run_TestOutputTruncation mode expected)
+  set(CASE_CTEST_TEST_ARGS EXCLUDE RunCMakeVersion)
+  set(TRUNCATED_OUTPUT ${expected})  # used in TestOutputTruncation-check.cmake
+  string(CONCAT CASE_TEST_PREFIX_CODE "
+set(CTEST_CUSTOM_MAXIMUM_PASSED_TEST_OUTPUT_SIZE 5)
+set(CTEST_CUSTOM_TEST_OUTPUT_TRUNCATION ${mode})" )
+  set(CASE_CMAKELISTS_SUFFIX_CODE "
+add_test(NAME Truncation_${mode} COMMAND \${CMAKE_COMMAND} -E echo 123456789)")
+
+  run_ctest(TestOutputTruncation_${mode})
+endfunction()
+run_TestOutputTruncation("head" "\\.\\.\\.6789")
+run_TestOutputTruncation("middle" "12\\.\\.\\..*\\.\\.\\.89")
+run_TestOutputTruncation("tail" "12345\\.\\.\\.")
+run_TestOutputTruncation("bad" "")
 
 run_ctest_test(TestRepeatBad1 REPEAT UNKNOWN:3)
 run_ctest_test(TestRepeatBad2 REPEAT UNTIL_FAIL:-1)
@@ -115,8 +138,7 @@ run_TestRepeat(AfterTimeout RETURN_VALUE:0 REPEAT AFTER_TIMEOUT:3)
 
 # test repeat and not run tests interact correctly
 set(CASE_CMAKELISTS_SUFFIX_CODE [[
-add_test(NAME testNotRun
-  COMMAND ${CMAKE_COMMAND}/doesnt_exist)
+  add_test(NAME testNotRun COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/does_not_exist)
   set_property(TEST testNotRun PROPERTY TIMEOUT 5)
   ]])
 run_TestRepeat(NotRun RETURN_VALUE:1 REPEAT UNTIL_PASS:3)
@@ -144,3 +166,76 @@ set_property(TEST RunCMakeVersion PROPERTY ENVIRONMENT "ENV1=env1;ENV2=env2")
   run_ctest(TestEnvironment)
 endfunction()
 run_environment()
+
+# test for OUTPUT_JUNIT
+run_ctest_test(OutputJUnit OUTPUT_JUNIT junit.xml REPEAT UNTIL_FAIL:2)
+
+# Verify that extra measurements get reported.
+function(run_measurements)
+  set(CASE_CMAKELISTS_SUFFIX_CODE [[
+add_test(
+  NAME double_measurement
+  COMMAND ${CMAKE_COMMAND} -E
+  echo <DartMeasurement type="numeric/double" name="my_custom_value">1.4847</DartMeasurement>)
+add_test(
+  NAME double_measurement2
+  COMMAND ${CMAKE_COMMAND} -E
+  echo <CTestMeasurement type="numeric/double" name="another_custom_value">1.8474</CTestMeasurement>)
+add_test(
+  NAME img_measurement
+  COMMAND ${CMAKE_COMMAND} -E
+  echo <DartMeasurementFile name="TestImage" type="image/png">]] ${IMAGE_DIR}/cmake-logo-16.png [[</DartMeasurementFile>)
+add_test(
+  NAME img_measurement2
+  COMMAND ${CMAKE_COMMAND} -E
+  echo <CTestMeasurementFile name="TestImage2" type="image/png">]] ${IMAGE_DIR}/cmake-logo-16.png [[</CTestMeasurementFile>)
+add_test(
+  NAME file_measurement
+  COMMAND ${CMAKE_COMMAND} -E
+  echo <DartMeasurementFile name="my_test_input_data" type="file">]] ${IMAGE_DIR}/cmake-logo-16.png [[</DartMeasurementFile>)
+add_test(
+  NAME file_measurement2
+  COMMAND ${CMAKE_COMMAND} -E
+  echo <CTestMeasurementFile name="another_test_input_data" type="file">]] ${IMAGE_DIR}/cmake-logo-16.png [[</CTestMeasurementFile>)
+  ]])
+  run_ctest(TestMeasurements)
+endfunction()
+run_measurements()
+
+# Verify that test output can override the Completion Status.
+function(run_completion_status)
+  set(CASE_CMAKELISTS_SUFFIX_CODE [[
+add_test(
+  NAME custom_details
+  COMMAND ${CMAKE_COMMAND} -E
+  echo test output\n<CTestDetails>CustomDetails</CTestDetails>\nmore output)
+  ]])
+  run_ctest(TestCompletionStatus)
+endfunction()
+run_completion_status()
+
+# Verify that running ctest_test() multiple times with different label arguments
+# doesn't break.
+function(run_changing_labels)
+  set(CASE_CMAKELISTS_SUFFIX_CODE [[
+add_test(NAME a COMMAND ${CMAKE_COMMAND} -E true)
+set_property(TEST a PROPERTY LABELS a)
+add_test(NAME b COMMAND ${CMAKE_COMMAND} -E true)
+set_property(TEST b PROPERTY LABELS b)
+  ]])
+  run_ctest(TestChangingLabels)
+endfunction()
+run_changing_labels()
+
+# Verify that test output can add additional labels
+function(run_extra_labels)
+  set(CASE_CMAKELISTS_SUFFIX_CODE [[
+add_test(
+  NAME custom_labels
+  COMMAND ${CMAKE_COMMAND} -E
+  echo before\n<CTestLabel>label2</CTestLabel>\n<CTestLabel>label1</CTestLabel>\n<CTestLabel>label3</CTestLabel>\n<CTestLabel>label2</CTestLabel>\nafter)
+set_tests_properties(custom_labels PROPERTIES LABELS "label1")
+  ]])
+  run_ctest(TestExtraLabels)
+endfunction()
+run_extra_labels()

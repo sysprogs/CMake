@@ -13,7 +13,7 @@ An XCTest bundle is a CFBundle with a special product-type
 and bundle extension. The Mac Developer Library provides more
 information in the `Testing with Xcode`_ document.
 
-.. _Testing with Xcode: http://developer.apple.com/library/mac/documentation/DeveloperTools/Conceptual/testing_with_xcode/
+.. _Testing with Xcode: https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/testing_with_xcode/
 
 Module Functions
 ^^^^^^^^^^^^^^^^
@@ -74,7 +74,7 @@ if(CMAKE_EFFECTIVE_SYSTEM_NAME STREQUAL "Apple"
   # platform directory which is not added to the CMAKE_FIND_ROOT_PATH
   # (only to CMAKE_SYSTEM_FRAMEWORK_PATH) and therefore not searched.
   #
-  # Until this is properly addressed, temporaily add the platform
+  # Until this is properly addressed, temporarily add the platform
   # directory to CMAKE_FIND_ROOT_PATH.
   list(APPEND CMAKE_FIND_ROOT_PATH "${_CMAKE_OSX_SYSROOT_PATH}/../..")
 endif()
@@ -156,8 +156,9 @@ function(xctest_add_bundle target testee)
         XCODE_ATTRIBUTE_BUNDLE_LOADER "$(TEST_HOST)"
         XCODE_ATTRIBUTE_TEST_HOST "$<TARGET_FILE:${testee}>")
       if(XCODE_VERSION VERSION_GREATER_EQUAL 7.3)
-        # CMAKE_XCODE_BUILD_SYSTEM equals 12 means that at least Xcode 11.x is used.
+        # The Xcode "new build system" used a different path until Xcode 12.5.
         if(CMAKE_XCODE_BUILD_SYSTEM EQUAL 12 AND
+           XCODE_VERSION VERSION_LESS 12.5 AND
            NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
           set(_output_directory "$<TARGET_BUNDLE_CONTENT_DIR:${testee}>")
         else()

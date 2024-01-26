@@ -6,6 +6,7 @@
 
 #include "cmExecutionStatus.h"
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmPolicies.h"
@@ -39,7 +40,7 @@ bool cmLinkDirectoriesCommand(std::vector<std::string> const& args,
     AddLinkDir(mf, *i, directories);
   }
 
-  mf.AddLinkDirectory(cmJoin(directories, ";"), before);
+  mf.AddLinkDirectory(cmList::to_string(directories), before);
 
   return true;
 }
@@ -62,7 +63,7 @@ static void AddLinkDir(cmMakefile& mf, std::string const& dir,
       case cmPolicies::WARN:
         e << cmPolicies::GetPolicyWarning(cmPolicies::CMP0015);
         mf.IssueMessage(MessageType::AUTHOR_WARNING, e.str());
-        break;
+        CM_FALLTHROUGH;
       case cmPolicies::OLD:
         // OLD behavior does not convert
         break;

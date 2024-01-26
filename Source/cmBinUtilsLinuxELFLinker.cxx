@@ -11,6 +11,7 @@
 #include <cmsys/RegularExpression.hxx>
 
 #include "cmBinUtilsLinuxELFObjdumpGetRuntimeDependenciesTool.h"
+#include "cmELF.h"
 #include "cmLDConfigLDConfigTool.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
@@ -72,6 +73,9 @@ bool cmBinUtilsLinuxELFLinker::Prepare()
   if (ldConfigTool == "ldconfig") {
     this->LDConfigTool =
       cm::make_unique<cmLDConfigLDConfigTool>(this->Archive);
+    if (!this->LDConfigTool->GetLDConfigPaths(this->LDConfigPaths)) {
+      return false;
+    }
   } else {
     std::ostringstream e;
     e << "Invalid value for CMAKE_LDCONFIG_TOOL: " << ldConfigTool;
@@ -86,6 +90,22 @@ bool cmBinUtilsLinuxELFLinker::ScanDependencies(
   std::string const& file, cmStateEnums::TargetType /* unused */)
 {
   std::vector<std::string> parentRpaths;
+
+  cmELF elf(file.c_str());
+  if (!elf) {
+    return false;
+  }
+  if (elf.GetMachine() != 0) {
+    if (this->Machine != 0) {
+      if (elf.GetMachine() != this->Machine) {
+        this->SetError("All files must have the same architecture.");
+        return false;
+      }
+    } else {
+      this->Machine = elf.GetMachine();
+    }
+  }
+
   return this->ScanDependencies(file, parentRpaths);
 }
 
@@ -115,12 +135,8 @@ bool cmBinUtilsLinuxELFLinker::ScanDependencies(
                        parentRpaths.end());
   }
 
-  std::vector<std::string> ldConfigPaths;
-  if (!this->LDConfigTool->GetLDConfigPaths(ldConfigPaths)) {
-    return false;
-  }
-  searchPaths.insert(searchPaths.end(), ldConfigPaths.begin(),
-                     ldConfigPaths.end());
+  searchPaths.insert(searchPaths.end(), this->LDConfigPaths.begin(),
+                     this->LDConfigPaths.end());
 
   for (auto const& dep : needed) {
     if (!this->Archive->IsPreExcluded(dep)) {
@@ -137,8 +153,13 @@ bool cmBinUtilsLinuxELFLinker::ScanDependencies(
         if (!this->Archive->IsPostExcluded(path)) {
           bool unique;
           this->Archive->AddResolvedPath(dep, path, unique);
-          if (unique && !this->ScanDependencies(path, rpaths)) {
-            return false;
+          if (unique) {
+            std::vector<std::string> combinedParentRpaths = parentRpaths;
+            combinedParentRpaths.insert(combinedParentRpaths.end(),
+                                        rpaths.begin(), rpaths.end());
+            if (!this->ScanDependencies(path, combinedParentRpaths)) {
+              return false;
+            }
           }
         }
       } else {
@@ -150,13 +171,25 @@ bool cmBinUtilsLinuxELFLinker::ScanDependencies(
   return true;
 }
 
+namespace {
+bool FileHasArchitecture(const char* filename, std::uint16_t machine)
+{
+  cmELF elf(filename);
+  if (!elf) {
+    return false;
+  }
+  return machine == 0 || machine == elf.GetMachine();
+}
+}
+
 bool cmBinUtilsLinuxELFLinker::ResolveDependency(
   std::string const& name, std::vector<std::string> const& searchPaths,
   std::string& path, bool& resolved)
 {
   for (auto const& searchPath : searchPaths) {
     path = cmStrCat(searchPath, '/', name);
-    if (cmSystemTools::PathExists(path)) {
+    if (cmSystemTools::PathExists(path) &&
+        FileHasArchitecture(path.c_str(), this->Machine)) {
       resolved = true;
       return true;
     }
@@ -164,7 +197,8 @@ bool cmBinUtilsLinuxELFLinker::ResolveDependency(
 
   for (auto const& searchPath : this->Archive->GetSearchDirectories()) {
     path = cmStrCat(searchPath, '/', name);
-    if (cmSystemTools::PathExists(path)) {
+    if (cmSystemTools::PathExists(path) &&
+        FileHasArchitecture(path.c_str(), this->Machine)) {
       std::ostringstream warning;
       warning << "Dependency " << name << " found in search directory:\n  "
               << searchPath

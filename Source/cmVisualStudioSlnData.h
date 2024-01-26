@@ -8,15 +8,17 @@
 #include <string>
 #include <vector>
 
+#include <cm/optional>
+
 class cmSlnProjectEntry
 {
 public:
-  cmSlnProjectEntry() {}
-  cmSlnProjectEntry(const std::string& guid, const std::string& name,
-                    const std::string& relativePath)
-    : Guid(guid)
-    , Name(name)
-    , RelativePath(relativePath)
+  cmSlnProjectEntry() = default;
+  cmSlnProjectEntry(std::string guid, std::string name,
+                    std::string relativePath)
+    : Guid(std::move(guid))
+    , Name(std::move(name))
+    , RelativePath(std::move(relativePath))
   {
   }
 
@@ -24,17 +26,40 @@ public:
   std::string GetName() const { return Name; }
   std::string GetRelativePath() const { return RelativePath; }
 
+  void AddProjectConfiguration(const std::string& solutionConfiguration,
+                               const std::string& projectConfiguration);
+
+  std::string GetProjectConfiguration(
+    const std::string& solutionConfiguration);
+
 private:
   std::string Guid, Name, RelativePath;
+  std::map<std::string, std::string> projectConfigurationMap;
 };
 
 class cmSlnData
 {
 public:
-  const cmSlnProjectEntry* GetProjectByGUID(
+  std::string GetVisualStudioVersion() const { return visualStudioVersion; }
+  void SetVisualStudioVersion(const std::string& version)
+  {
+    visualStudioVersion = version;
+  }
+
+  std::string GetMinimumVisualStudioVersion() const
+  {
+    return minimumVisualStudioVersion;
+  }
+
+  void SetMinimumVisualStudioVersion(const std::string& version)
+  {
+    minimumVisualStudioVersion = version;
+  }
+
+  cm::optional<cmSlnProjectEntry> GetProjectByGUID(
     const std::string& projectGUID) const;
 
-  const cmSlnProjectEntry* GetProjectByName(
+  cm::optional<cmSlnProjectEntry> GetProjectByName(
     const std::string& projectName) const;
 
   std::vector<cmSlnProjectEntry> GetProjects() const;
@@ -43,9 +68,20 @@ public:
                                 const std::string& projectName,
                                 const std::string& projectRelativePath);
 
+  void AddConfiguration(const std::string& configuration)
+  {
+    solutionConfigurations.push_back(configuration);
+  }
+
+  std::string GetConfigurationTarget(const std::string& projectName,
+                                     const std::string& solutionConfiguration,
+                                     const std::string& platformName);
+
 private:
+  std::string visualStudioVersion, minimumVisualStudioVersion;
   using ProjectStorage = std::map<std::string, cmSlnProjectEntry>;
   ProjectStorage ProjectsByGUID;
   using ProjectStringIndex = std::map<std::string, ProjectStorage::iterator>;
   ProjectStringIndex ProjectNameIndex;
+  std::vector<std::string> solutionConfigurations;
 };

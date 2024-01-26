@@ -1,9 +1,5 @@
-cmake_minimum_required (VERSION 2.6)
-cmake_policy(SET CMP0054 NEW)
+cmake_minimum_required (VERSION 3.5)
 project(Plugin)
-
-# We need proper C++98 support from the compiler
-set(CMAKE_CXX_STANDARD 98)
 
 # Test per-target output directory properties.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${Plugin_BINARY_DIR}/bin)
@@ -20,12 +16,6 @@ include_directories(
   ${Plugin_BINARY_DIR}/include
   ${Plugin_SOURCE_DIR}/include
   )
-
-# Clang/C2 in C++98 mode cannot properly handle some of MSVC headers
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
-    CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
-  set(CMAKE_CXX_STANDARD 11)
-endif()
 
 # Create an executable that exports an API for use by plugins.
 add_executable(example_exe src/example_exe.cxx src/DynamicLoader.cxx)
@@ -46,7 +36,7 @@ target_link_libraries(example_mod_1 example_exe)
 if(CMAKE_SHARED_LIBRARY_SONAME_C_FLAG AND
     "${CMAKE_C_CREATE_SHARED_MODULE}" MATCHES "SONAME_FLAG")
   # Verify that targets export with proper IMPORTED SONAME properties.
-  export(TARGETS example_mod_1 NAMESPACE exp_
+  export(TARGETS example_mod_1 example_exe NAMESPACE exp_
     FILE ${CMAKE_CURRENT_BINARY_DIR}/mods.cmake)
 
   include(ExternalProject)

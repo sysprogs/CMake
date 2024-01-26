@@ -7,8 +7,7 @@
 #include <cstring>
 #include <ratio>
 
-#include "cmsys/Process.h"
-
+#include "cmBuildOptions.h"
 #include "cmCTest.h"
 #include "cmCTestTestHandler.h"
 #include "cmGlobalGenerator.h"
@@ -18,6 +17,8 @@
 #include "cmSystemTools.h"
 #include "cmWorkingDirectory.h"
 #include "cmake.h"
+
+struct cmMessageMetadata;
 
 cmCTestBuildAndTestHandler::cmCTestBuildAndTestHandler()
 {
@@ -41,9 +42,9 @@ int cmCTestBuildAndTestHandler::ProcessHandler()
 {
   this->Output.clear();
   std::string output;
-  cmSystemTools::ResetErrorOccuredFlag();
+  cmSystemTools::ResetErrorOccurredFlag();
   int retv = this->RunCMakeAndTest(&this->Output);
-  cmSystemTools::ResetErrorOccuredFlag();
+  cmSystemTools::ResetErrorOccurredFlag();
   return retv;
 }
 
@@ -69,11 +70,6 @@ int cmCTestBuildAndTestHandler::RunCMake(std::string* outstring,
   if (!this->CTest->GetConfigType().empty()) {
     config = this->CTest->GetConfigType().c_str();
   }
-#ifdef CMAKE_INTDIR
-  if (!config) {
-    config = CMAKE_INTDIR;
-  }
-#endif
 
   if (config) {
     args.push_back("-DCMAKE_BUILD_TYPE:STRING=" + std::string(config));
@@ -125,7 +121,7 @@ public:
     : CM(cm)
   {
     cmSystemTools::SetMessageCallback(
-      [&s](const std::string& msg, const char* /*unused*/) {
+      [&s](const std::string& msg, const cmMessageMetadata& /* unused */) {
         s += msg;
         s += "\n";
       });
@@ -162,7 +158,7 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     if (outstring) {
       *outstring = "--build-and-test requires that the generator "
                    "be provided using the --build-generator "
-                   "command line option. ";
+                   "command line option.\n";
     }
     return 1;
   }
@@ -248,24 +244,20 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
         return 1;
       }
     }
-    std::string output;
     const char* config = nullptr;
     if (!this->CTest->GetConfigType().empty()) {
       config = this->CTest->GetConfigType().c_str();
     }
-#ifdef CMAKE_INTDIR
-    if (!config) {
-      config = CMAKE_INTDIR;
-    }
-#endif
     if (!config) {
       config = "Debug";
     }
+
+    cmBuildOptions buildOptions(!this->BuildNoClean, false,
+                                PackageResolveMode::Disable);
     int retVal = cm.GetGlobalGenerator()->Build(
       cmake::NO_BUILD_PARALLEL_LEVEL, this->SourceDir, this->BinaryDir,
-      this->BuildProject, { tar }, output, this->BuildMakeProgram, config,
-      !this->BuildNoClean, false, false, remainingTime);
-    out << output;
+      this->BuildProject, { tar }, out, this->BuildMakeProgram, config,
+      buildOptions, false, remainingTime);
     // if the build failed then return
     if (retVal) {
       if (outstring) {
@@ -314,12 +306,11 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     return 1;
   }
 
-  std::vector<const char*> testCommand;
-  testCommand.push_back(fullPath.c_str());
+  std::vector<std::string> testCommand;
+  testCommand.push_back(fullPath);
   for (std::string const& testCommandArg : this->TestCommandArgs) {
-    testCommand.push_back(testCommandArg.c_str());
+    testCommand.push_back(testCommandArg);
   }
-  testCommand.push_back(nullptr);
   std::string outs;
   int retval = 0;
   // run the test from the this->BuildRunDir if set
@@ -355,10 +346,10 @@ int cmCTestBuildAndTestHandler::RunCMakeAndTest(std::string* outstring)
     }
   }
 
-  int runTestRes = this->CTest->RunTest(testCommand, &outs, &retval, nullptr,
-                                        remainingTime, nullptr);
+  bool runTestRes = this->CTest->RunTest(testCommand, &outs, &retval, nullptr,
+                                         remainingTime, nullptr);
 
-  if (runTestRes != cmsysProcess_State_Exited || retval != 0) {
+  if (!runTestRes || retval != 0) {
     out << "Test command failed: " << testCommand[0] << "\n";
     retval = 1;
   }

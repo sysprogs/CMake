@@ -1,6 +1,10 @@
 exec_program
 ------------
 
+.. versionchanged:: 3.28
+  This command is available only if policy :policy:`CMP0153` is not set to ``NEW``.
+  Port projects to the :command:`execute_process` command.
+
 .. deprecated:: 3.0
 
   Use the :command:`execute_process` command instead.
@@ -8,7 +12,7 @@ exec_program
 Run an executable program during the processing of the CMakeList.txt
 file.
 
-::
+.. code-block:: cmake
 
   exec_program(Executable [directory in which to run]
                [ARGS <arguments to executable>]

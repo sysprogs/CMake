@@ -12,7 +12,6 @@
 #include "cmIDEOptions.h"
 
 class cmLocalVisualStudioGenerator;
-class cmGeneratorTarget;
 
 using cmVS7FlagTable = cmIDEFlagTable;
 
@@ -25,6 +24,7 @@ public:
     Compiler,
     ResourceCompiler,
     CudaCompiler,
+    MarmasmCompiler,
     MasmCompiler,
     NasmCompiler,
     Linker,

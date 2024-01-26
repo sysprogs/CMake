@@ -9,14 +9,14 @@ Synopsis
 .. parsed-literal::
 
  cmake-gui [<options>]
- cmake-gui [<options>] {<path-to-source> | <path-to-existing-build>}
- cmake-gui [<options>] -S <path-to-source> -B <path-to-build>
- cmake-gui [<options>] --browse-manual
+ cmake-gui [<options>] -B <path-to-build> [-S <path-to-source>]
+ cmake-gui [<options>] <path-to-source | path-to-existing-build>
+ cmake-gui [<options>] --browse-manual [<filename>]
 
 Description
 ===========
 
-The **cmake-gui** executable is the CMake GUI.  Project configuration
+The :program:`cmake-gui` executable is the CMake GUI.  Project configuration
 settings may be specified interactively.  Brief instructions are
 provided at the bottom of the window when the program is running.
 
@@ -29,20 +29,28 @@ native tool on their platform.
 Options
 =======
 
-``-S <path-to-source>``
+.. program:: cmake-gui
+
+.. option:: -S <path-to-source>
+
  Path to root directory of the CMake project to build.
 
-``-B <path-to-build>``
+.. option:: -B <path-to-build>
+
  Path to directory which CMake will use as the root of build directory.
 
  If the directory doesn't already exist CMake will make it.
 
-``--preset=<preset-name>``
+.. option:: --preset=<preset-name>
+
  Name of the preset to use from the project's
  :manual:`presets <cmake-presets(7)>` files, if it has them.
 
-``--browse-manual``
- Open the CMake reference manual in a browser and immediately exit.
+.. option:: --browse-manual [<filename>]
+
+ Open the CMake reference manual in a browser and immediately exit. If
+ ``<filename>`` is specified, open that file within the reference manual
+ instead of ``index.html``.
 
 .. include:: OPTIONS_HELP.txt
 

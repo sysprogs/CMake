@@ -18,8 +18,10 @@ get_filename_component(__gcc_hints "${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPIL
 find_program(CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_AR NAMES
     "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar-${__version_x_y}"
     "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar-${__version_x}"
+    "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar${__version_x}"
     "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ar${_CMAKE_COMPILER_SUFFIX}"
     HINTS ${__gcc_hints}
+    NO_CMAKE_PATH NO_CMAKE_ENVIRONMENT_PATH
     DOC "A wrapper around 'ar' adding the appropriate '--plugin' option for the GCC compiler"
 )
 mark_as_advanced(CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_AR)
@@ -28,8 +30,10 @@ mark_as_advanced(CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_AR)
 find_program(CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_RANLIB NAMES
     "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib-${__version_x_y}"
     "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib-${__version_x}"
+    "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib${__version_x}"
     "${_CMAKE_TOOLCHAIN_PREFIX}gcc-ranlib${_CMAKE_COMPILER_SUFFIX}"
     HINTS ${__gcc_hints}
+    NO_CMAKE_PATH NO_CMAKE_ENVIRONMENT_PATH
     DOC "A wrapper around 'ranlib' adding the appropriate '--plugin' option for the GCC compiler"
 )
 mark_as_advanced(CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_RANLIB)

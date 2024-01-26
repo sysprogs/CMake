@@ -15,6 +15,7 @@ These commands are always available.
 .. toctree::
    :maxdepth: 1
 
+   /command/block
    /command/break
    /command/cmake_host_system_information
    /command/cmake_language
@@ -26,6 +27,7 @@ These commands are always available.
    /command/continue
    /command/else
    /command/elseif
+   /command/endblock
    /command/endforeach
    /command/endfunction
    /command/endif
@@ -85,6 +87,7 @@ These commands are available only in CMake projects.
    /command/add_test
    /command/aux_source_directory
    /command/build_command
+   /command/cmake_file_api
    /command/create_test_sourcelist
    /command/define_property
    /command/enable_language

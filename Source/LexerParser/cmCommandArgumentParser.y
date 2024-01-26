@@ -22,7 +22,6 @@ Run bison like this:
 # include <malloc.h>
 #endif
 
-#include <stdint.h>
 /* Make sure the parser uses standard memory allocation.  The default
    generated parser malloc/free declarations do not work on all
    platforms.  */
@@ -55,6 +54,11 @@ static void cmCommandArgument_yyerror(yyscan_t yyscanner, const char* message);
 #if defined(__GNUC__) && __GNUC__ >= 8
 # pragma GCC diagnostic ignored "-Wconversion"
 # pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
+#if defined(__clang__) && defined(__has_warning)
+# if __has_warning("-Wunused-but-set-variable")
+#  pragma clang diagnostic ignored "-Wunused-but-set-variable"
+# endif
 #endif
 %}
 

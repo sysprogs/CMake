@@ -1,17 +1,11 @@
-set(WIN32 1)
-
-if(CMAKE_SYSTEM_NAME STREQUAL "WindowsCE")
-  set(WINCE 1)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "WindowsPhone")
-  set(WINDOWS_PHONE 1)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-  set(WINDOWS_STORE 1)
-endif()
-
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 set(CMAKE_STATIC_LIBRARY_SUFFIX ".lib")
 set(CMAKE_SHARED_LIBRARY_PREFIX "")          # lib
-set(CMAKE_SHARED_LIBRARY_SUFFIX ".dll")          # .so
+if(CMAKE_SYSTEM_NAME STREQUAL "WindowsKernelModeDriver")
+  set(CMAKE_SHARED_LIBRARY_SUFFIX ".sys")          # .so
+else()
+  set(CMAKE_SHARED_LIBRARY_SUFFIX ".dll")          # .so
+endif()
 set(CMAKE_IMPORT_LIBRARY_PREFIX "")
 set(CMAKE_IMPORT_LIBRARY_SUFFIX ".lib")
 set(CMAKE_EXECUTABLE_SUFFIX ".exe")          # .exe

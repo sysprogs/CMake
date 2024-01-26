@@ -15,13 +15,14 @@
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
 #include "cmLinkItem.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
-#include "cmProperty.h"
 #include "cmState.h"
 #include "cmStateSnapshot.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmake.h"
 
 namespace {
@@ -109,18 +110,6 @@ cmGraphVizWriter::cmGraphVizWriter(std::string const& fileName,
   , GraphHeader("node [\n  fontsize = \"12\"\n];")
   , GraphNodePrefix("node")
   , GlobalGenerator(globalGenerator)
-  , NextNodeId(0)
-  , GenerateForExecutables(true)
-  , GenerateForStaticLibs(true)
-  , GenerateForSharedLibs(true)
-  , GenerateForModuleLibs(true)
-  , GenerateForInterfaceLibs(true)
-  , GenerateForObjectLibs(true)
-  , GenerateForUnknownLibs(true)
-  , GenerateForCustomTargets(false)
-  , GenerateForExternals(true)
-  , GeneratePerTarget(true)
-  , GenerateDependers(true)
 {
 }
 
@@ -232,7 +221,7 @@ void cmGraphVizWriter::ReadSettings(
 
 #define set_if_set(var, cmakeDefinition)                                      \
   do {                                                                        \
-    cmProp value = mf.GetDefinition(cmakeDefinition);                         \
+    cmValue value = mf.GetDefinition(cmakeDefinition);                        \
     if (value) {                                                              \
       (var) = *value;                                                         \
     }                                                                         \
@@ -244,7 +233,7 @@ void cmGraphVizWriter::ReadSettings(
 
 #define set_bool_if_set(var, cmakeDefinition)                                 \
   do {                                                                        \
-    cmProp value = mf.GetDefinition(cmakeDefinition);                         \
+    cmValue value = mf.GetDefinition(cmakeDefinition);                        \
     if (value) {                                                              \
       (var) = cmIsOn(*value);                                                 \
     }                                                                         \
@@ -267,9 +256,8 @@ void cmGraphVizWriter::ReadSettings(
 
   this->TargetsToIgnoreRegex.clear();
   if (!ignoreTargetsRegexes.empty()) {
-    std::vector<std::string> ignoreTargetsRegExVector =
-      cmExpandedList(ignoreTargetsRegexes);
-    for (std::string const& currentRegexString : ignoreTargetsRegExVector) {
+    cmList ignoreTargetsRegExList{ ignoreTargetsRegexes };
+    for (std::string const& currentRegexString : ignoreTargetsRegExList) {
       cmsys::RegularExpression currentRegex;
       if (!currentRegex.compile(currentRegexString)) {
         std::cerr << "Could not compile bad regex \"" << currentRegexString

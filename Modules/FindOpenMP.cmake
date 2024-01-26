@@ -102,6 +102,7 @@ function(_OPENMP_FLAG_CANDIDATES LANG)
     unset(OpenMP_FLAG_CANDIDATES)
 
     set(OMP_FLAG_GNU "-fopenmp")
+    set(OMP_FLAG_LCC "-fopenmp")
     set(OMP_FLAG_Clang "-fopenmp=libomp" "-fopenmp=libiomp5" "-fopenmp" "-Xclang -fopenmp")
     set(OMP_FLAG_AppleClang "-Xclang -fopenmp")
     set(OMP_FLAG_HP "+Oopenmp")
@@ -130,6 +131,8 @@ function(_OPENMP_FLAG_CANDIDATES LANG)
     set(OMP_FLAG_XL "-qsmp=omp")
     # Cray compiler activate OpenMP with -h omp, which is enabled by default.
     set(OMP_FLAG_Cray " " "-h omp")
+    set(OMP_FLAG_Fujitsu "-Kopenmp" "-KOMP")
+    set(OMP_FLAG_FujitsuClang "-fopenmp" "-Kopenmp")
 
     # If we know the correct flags, use those
     if(DEFINED OMP_FLAG_${CMAKE_${LANG}_COMPILER_ID})
@@ -175,27 +178,25 @@ set(OpenMP_Fortran_TEST_SOURCE
   "
 )
 
-function(_OPENMP_WRITE_SOURCE_FILE LANG SRC_FILE_CONTENT_VAR SRC_FILE_NAME SRC_FILE_FULLPATH)
-  set(WORK_DIR ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/FindOpenMP)
+macro(_OPENMP_PREPARE_SOURCE LANG CONTENT_ID NAME_PREFIX FULLNAME_VAR CONTENT_VAR)
   if("${LANG}" STREQUAL "C")
-    set(SRC_FILE "${WORK_DIR}/${SRC_FILE_NAME}.c")
-    file(WRITE "${SRC_FILE}" "${OpenMP_C_CXX_${SRC_FILE_CONTENT_VAR}}")
+    set(${FULLNAME_VAR} "${NAME_PREFIX}.c")
+    set(${CONTENT_VAR} "${OpenMP_C_CXX_${CONTENT_ID}}")
   elseif("${LANG}" STREQUAL "CXX")
-    set(SRC_FILE "${WORK_DIR}/${SRC_FILE_NAME}.cpp")
-    file(WRITE "${SRC_FILE}" "${OpenMP_C_CXX_${SRC_FILE_CONTENT_VAR}}")
+    set(${FULLNAME_VAR} "${NAME_PREFIX}.cpp")
+    set(${CONTENT_VAR} "${OpenMP_C_CXX_${CONTENT_ID}}")
   elseif("${LANG}" STREQUAL "Fortran")
-    set(SRC_FILE "${WORK_DIR}/${SRC_FILE_NAME}.f90")
-    file(WRITE "${SRC_FILE}_in" "${OpenMP_Fortran_${SRC_FILE_CONTENT_VAR}}")
-    configure_file("${SRC_FILE}_in" "${SRC_FILE}" @ONLY)
+    set(${FULLNAME_VAR} "${NAME_PREFIX}.F90")
+    string(CONFIGURE "${OpenMP_Fortran_${CONTENT_ID}}" ${CONTENT_VAR} @ONLY)
   endif()
-  set(${SRC_FILE_FULLPATH} "${SRC_FILE}" PARENT_SCOPE)
-endfunction()
+endmacro()
 
 include(${CMAKE_CURRENT_LIST_DIR}/CMakeParseImplicitLinkInfo.cmake)
 
 function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
   _OPENMP_FLAG_CANDIDATES("${LANG}")
-  _OPENMP_WRITE_SOURCE_FILE("${LANG}" "TEST_SOURCE" OpenMPTryFlag _OPENMP_TEST_SRC)
+  _OPENMP_PREPARE_SOURCE("${LANG}" TEST_SOURCE OpenMPTryFlag
+    _OPENMP_TEST_SRC_NAME _OPENMP_TEST_SRC_CONTENT)
 
   unset(OpenMP_VERBOSE_COMPILE_OPTIONS)
   separate_arguments(OpenMP_VERBOSE_OPTIONS NATIVE_COMMAND "${CMAKE_${LANG}_VERBOSE_FLAG}")
@@ -211,8 +212,14 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
       string(APPEND OPENMP_FLAGS_TEST " ${OpenMP_VERBOSE_COMPILE_OPTIONS}")
     endif()
     string(REGEX REPLACE "[-/=+]" "" OPENMP_PLAIN_FLAG "${OPENMP_FLAG}")
-    try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG} ${CMAKE_BINARY_DIR} ${_OPENMP_TEST_SRC}
-      CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OPENMP_FLAGS_TEST}"
+    unset(_includeDirFlags)
+    if(OpenMP_${LANG}_INCLUDE_DIR)
+      set(_includeDirFlags "-DINCLUDE_DIRECTORIES:STRING=${OpenMP_${LANG}_INCLUDE_DIR}")
+    endif()
+    try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG}
+      SOURCE_FROM_VAR "${_OPENMP_TEST_SRC_NAME}" _OPENMP_TEST_SRC_CONTENT
+      LOG_DESCRIPTION "Detecting ${LANG} OpenMP compiler info"
+      CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OPENMP_FLAGS_TEST}" ${_includeDirFlags}
       LINK_LIBRARIES ${CMAKE_${LANG}_VERBOSE_FLAG}
       OUTPUT_VARIABLE OpenMP_TRY_COMPILE_OUTPUT
     )
@@ -226,19 +233,34 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
         unset(OpenMP_${LANG}_IMPLICIT_FWK_DIRS)
         unset(OpenMP_${LANG}_LOG_VAR)
 
-        file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Detecting ${LANG} OpenMP compiler ABI info compiled with the following output:\n${OpenMP_TRY_COMPILE_OUTPUT}\n\n")
-
         cmake_parse_implicit_link_info("${OpenMP_TRY_COMPILE_OUTPUT}"
           OpenMP_${LANG}_IMPLICIT_LIBRARIES
           OpenMP_${LANG}_IMPLICIT_LINK_DIRS
           OpenMP_${LANG}_IMPLICIT_FWK_DIRS
           OpenMP_${LANG}_LOG_VAR
           "${CMAKE_${LANG}_IMPLICIT_OBJECT_REGEX}"
+          LANGUAGE ${LANG}
         )
 
-        file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Parsed ${LANG} OpenMP implicit link information from above output:\n${OpenMP_${LANG}_LOG_VAR}\n\n")
+        # For LCC we should additionally alanyze -print-search-dirs output
+        # to check for additional implicit_dirs.
+        # Note: This won't work if CMP0129 policy is set to OLD!
+        if("${CMAKE_${LANG}_COMPILER_ID}" STREQUAL "LCC")
+          execute_process(
+            COMMAND ${CMAKE_${LANG}_COMPILER} -print-search-dirs
+            OUTPUT_VARIABLE output_lines
+            COMMAND_ERROR_IS_FATAL ANY
+            ERROR_QUIET)
+          if("${output_lines}" MATCHES ".*\nlibraries:[ \t]+(.*:)\n.*")
+            string(REPLACE ":" ";" implicit_dirs_addon "${CMAKE_MATCH_1}")
+            list(PREPEND OpenMP_${LANG}_IMPLICIT_LINK_DIRS ${implicit_dirs_addon})
+            string(APPEND OpenMP_${LANG}_LOG_VAR
+              "  Extended OpenMP library search paths: [${implicit_dirs}]\n")
+          endif()
+        endif()
+
+        message(CONFIGURE_LOG
+          "Parsed ${LANG} OpenMP implicit link information from above output:\n${OpenMP_${LANG}_LOG_VAR}\n\n")
 
         unset(_OPENMP_LIB_NAMES)
         foreach(_OPENMP_IMPLICIT_LIB IN LISTS OpenMP_${LANG}_IMPLICIT_LIBRARIES)
@@ -259,7 +281,9 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
                 DOC "Path to the ${_OPENMP_IMPLICIT_LIB_PLAIN} library for OpenMP"
                 HINTS ${OpenMP_${LANG}_IMPLICIT_LINK_DIRS}
                 CMAKE_FIND_ROOT_PATH_BOTH
-                NO_DEFAULT_PATH
+                NO_PACKAGE_ROOT_PATH
+                NO_CMAKE_PATH
+                NO_CMAKE_ENVIRONMENT_PATH
               )
             endif()
             mark_as_advanced(OpenMP_${_OPENMP_IMPLICIT_LIB_PLAIN}_LIBRARY)
@@ -274,8 +298,9 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
         set("${OPENMP_LIB_NAMES_VAR}" "" PARENT_SCOPE)
       endif()
       break()
-    elseif(CMAKE_${LANG}_COMPILER_ID STREQUAL "AppleClang"
-      AND CMAKE_${LANG}_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
+    elseif((CMAKE_${LANG}_COMPILER_ID STREQUAL "AppleClang"
+      AND CMAKE_${LANG}_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0") OR
+      (CMAKE_${LANG}_COMPILER_ID STREQUAL "Clang" AND APPLE))
 
       # Check for separate OpenMP library on AppleClang 7+
       find_library(OpenMP_libomp_LIBRARY
@@ -288,21 +313,23 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
         # Try without specifying include directory first. We only want to
         # explicitly add a search path if the header can't be found on the
         # default header search path already.
-        try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG} ${CMAKE_BINARY_DIR} ${_OPENMP_TEST_SRC}
+        try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG}
+          SOURCE_FROM_VAR "${_OPENMP_TEST_SRC_NAME}" _OPENMP_TEST_SRC_CONTENT
+          LOG_DESCRIPTION "Trying ${LANG} OpenMP compiler with '${OpenMP_libomp_LIBRARY}'"
           CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OPENMP_FLAGS_TEST}"
           LINK_LIBRARIES ${CMAKE_${LANG}_VERBOSE_FLAG} ${OpenMP_libomp_LIBRARY}
-          OUTPUT_VARIABLE OpenMP_TRY_COMPILE_OUTPUT
         )
         if(NOT OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG})
           find_path(OpenMP_${LANG}_INCLUDE_DIR omp.h)
           mark_as_advanced(OpenMP_${LANG}_INCLUDE_DIR)
           set(OpenMP_${LANG}_INCLUDE_DIR "${OpenMP_${LANG}_INCLUDE_DIR}" PARENT_SCOPE)
           if(OpenMP_${LANG}_INCLUDE_DIR)
-            try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG} ${CMAKE_BINARY_DIR} ${_OPENMP_TEST_SRC}
+            try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG}
+              SOURCE_FROM_VAR "${_OPENMP_TEST_SRC_NAME}" _OPENMP_TEST_SRC_CONTENT
+              LOG_DESCRIPTION "Trying ${LANG} OpenMP compiler with '${OpenMP_libomp_LIBRARY}' and '${OpenMP_${LANG}_INCLUDE_DIR}'"
               CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OPENMP_FLAGS_TEST}"
                           "-DINCLUDE_DIRECTORIES:STRING=${OpenMP_${LANG}_INCLUDE_DIR}"
               LINK_LIBRARIES ${CMAKE_${LANG}_VERBOSE_FLAG} ${OpenMP_libomp_LIBRARY}
-              OUTPUT_VARIABLE OpenMP_TRY_COMPILE_OUTPUT
             )
           endif()
         endif()
@@ -320,10 +347,11 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
       )
       mark_as_advanced(OpenMP_libomp_LIBRARY)
       if(OpenMP_libomp_LIBRARY)
-        try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG} ${CMAKE_BINARY_DIR} ${_OPENMP_TEST_SRC}
+        try_compile( OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG}
+          SOURCE_FROM_VAR "${_OPENMP_TEST_SRC_NAME}" _OPENMP_TEST_SRC_CONTENT
+          LOG_DESCRIPTION "Trying ${LANG} OpenMP compiler with '${OpenMP_libomp_LIBRARY}'"
           CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OPENMP_FLAGS_TEST}"
           LINK_LIBRARIES ${CMAKE_${LANG}_VERBOSE_FLAG} ${OpenMP_libomp_LIBRARY}
-          OUTPUT_VARIABLE OpenMP_TRY_COMPILE_OUTPUT
         )
         if(OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG})
           set("${OPENMP_FLAG_VAR}" "${OPENMP_FLAG}" PARENT_SCOPE)
@@ -331,9 +359,6 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
           break()
         endif()
       endif()
-    else()
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Detecting ${LANG} OpenMP failed with the following output:\n${OpenMP_TRY_COMPILE_OUTPUT}\n\n")
     endif()
     set("${OPENMP_LIB_NAMES_VAR}" "NOTFOUND" PARENT_SCOPE)
     set("${OPENMP_FLAG_VAR}" "NOTFOUND" PARENT_SCOPE)
@@ -382,7 +407,8 @@ set(OpenMP_Fortran_CHECK_VERSION_SOURCE
 ")
 
 function(_OPENMP_GET_SPEC_DATE LANG SPEC_DATE)
-  _OPENMP_WRITE_SOURCE_FILE("${LANG}" "CHECK_VERSION_SOURCE" OpenMPCheckVersion _OPENMP_TEST_SRC)
+  _OPENMP_PREPARE_SOURCE("${LANG}" CHECK_VERSION_SOURCE OpenMPCheckVersion
+    _OPENMP_TEST_SRC_NAME _OPENMP_TEST_SRC_CONTENT)
 
   unset(_includeDirFlags)
   if(OpenMP_${LANG}_INCLUDE_DIR)
@@ -391,10 +417,12 @@ function(_OPENMP_GET_SPEC_DATE LANG SPEC_DATE)
 
   set(BIN_FILE "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/FindOpenMP/ompver_${LANG}.bin")
   string(REGEX REPLACE "[-/=+]" "" OPENMP_PLAIN_FLAG "${OPENMP_FLAG}")
-  try_compile(OpenMP_SPECTEST_${LANG}_${OPENMP_PLAIN_FLAG} "${CMAKE_BINARY_DIR}" "${_OPENMP_TEST_SRC}"
-              CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OpenMP_${LANG}_FLAGS}" ${_includeDirFlags}
-              COPY_FILE ${BIN_FILE}
-              OUTPUT_VARIABLE OpenMP_TRY_COMPILE_OUTPUT)
+  try_compile(OpenMP_SPECTEST_${LANG}_${OPENMP_PLAIN_FLAG}
+    SOURCE_FROM_VAR "${_OPENMP_TEST_SRC_NAME}" _OPENMP_TEST_SRC_CONTENT
+    LOG_DESCRIPTION "Detecting ${LANG} OpenMP version"
+    CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${OpenMP_${LANG}_FLAGS}" ${_includeDirFlags}
+    COPY_FILE "${BIN_FILE}"
+    )
 
   if(${OpenMP_SPECTEST_${LANG}_${OPENMP_PLAIN_FLAG}})
     file(STRINGS ${BIN_FILE} specstr LIMIT_COUNT 1 REGEX "INFO:OpenMP-date")
@@ -402,14 +430,13 @@ function(_OPENMP_GET_SPEC_DATE LANG SPEC_DATE)
     if("${specstr}" MATCHES "${regex_spec_date}")
       set(${SPEC_DATE} "${CMAKE_MATCH_1}" PARENT_SCOPE)
     endif()
-  else()
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Detecting ${LANG} OpenMP version failed with the following output:\n${OpenMP_TRY_COMPILE_OUTPUT}\n\n")
   endif()
 endfunction()
 
 macro(_OPENMP_SET_VERSION_BY_SPEC_DATE LANG)
   set(OpenMP_SPEC_DATE_MAP
+    "202111=5.2"
+    "202011=5.1"
     # Preview versions
     "201611=5.0" # OpenMP 5.0 preview 1
     # Combined versions, 2.5 onwards
@@ -457,10 +484,14 @@ foreach(LANG IN ITEMS C CXX)
     if(NOT DEFINED OpenMP_${LANG}_FLAGS OR "${OpenMP_${LANG}_FLAGS}" STREQUAL "NOTFOUND"
       OR NOT DEFINED OpenMP_${LANG}_LIB_NAMES OR "${OpenMP_${LANG}_LIB_NAMES}" STREQUAL "NOTFOUND")
       _OPENMP_GET_FLAGS("${LANG}" "${LANG}" OpenMP_${LANG}_FLAGS_WORK OpenMP_${LANG}_LIB_NAMES_WORK)
-      set(OpenMP_${LANG}_FLAGS "${OpenMP_${LANG}_FLAGS_WORK}"
-        CACHE STRING "${LANG} compiler flags for OpenMP parallelization" FORCE)
-      set(OpenMP_${LANG}_LIB_NAMES "${OpenMP_${LANG}_LIB_NAMES_WORK}"
-        CACHE STRING "${LANG} compiler libraries for OpenMP parallelization" FORCE)
+      if(NOT DEFINED OpenMP_${LANG}_FLAGS OR "${OpenMP_${LANG}_FLAGS}" STREQUAL "NOTFOUND")
+        set(OpenMP_${LANG}_FLAGS "${OpenMP_${LANG}_FLAGS_WORK}"
+          CACHE STRING "${LANG} compiler flags for OpenMP parallelization" FORCE)
+      endif()
+      if(NOT DEFINED OpenMP_${LANG}_LIB_NAMES OR "${OpenMP_${LANG}_LIB_NAMES}" STREQUAL "NOTFOUND")
+        set(OpenMP_${LANG}_LIB_NAMES "${OpenMP_${LANG}_LIB_NAMES_WORK}"
+          CACHE STRING "${LANG} compiler libraries for OpenMP parallelization" FORCE)
+      endif()
       mark_as_advanced(OpenMP_${LANG}_FLAGS OpenMP_${LANG}_LIB_NAMES)
     endif()
   endif()
@@ -476,10 +507,14 @@ if(CMAKE_Fortran_COMPILER_LOADED)
       set(OpenMP_Fortran_HAVE_OMPLIB_MODULE TRUE CACHE BOOL INTERNAL "")
     endif()
 
-    set(OpenMP_Fortran_FLAGS "${OpenMP_Fortran_FLAGS_WORK}"
-      CACHE STRING "Fortran compiler flags for OpenMP parallelization")
-    set(OpenMP_Fortran_LIB_NAMES "${OpenMP_Fortran_LIB_NAMES_WORK}"
-      CACHE STRING "Fortran compiler libraries for OpenMP parallelization")
+    if(NOT DEFINED OpenMP_Fortran_FLAGS OR "${OpenMP_Fortran_FLAGS}" STREQUAL "NOTFOUND")
+      set(OpenMP_Fortran_FLAGS "${OpenMP_Fortran_FLAGS_WORK}"
+        CACHE STRING "Fortran compiler flags for OpenMP parallelization" FORCE)
+    endif()
+    if(NOT DEFINED OpenMP_Fortran_LIB_NAMES OR "${OpenMP_Fortran_LIB_NAMES}" STREQUAL "NOTFOUND")
+      set(OpenMP_Fortran_LIB_NAMES "${OpenMP_Fortran_LIB_NAMES_WORK}"
+        CACHE STRING "Fortran compiler libraries for OpenMP parallelization" FORCE)
+    endif()
     mark_as_advanced(OpenMP_Fortran_FLAGS OpenMP_Fortran_LIB_NAMES)
   endif()
 
@@ -492,11 +527,14 @@ if(CMAKE_Fortran_COMPILER_LOADED)
       set(OpenMP_Fortran_HAVE_OMPLIB_HEADER TRUE CACHE BOOL INTERNAL "")
     endif()
 
-    set(OpenMP_Fortran_FLAGS "${OpenMP_Fortran_FLAGS_WORK}"
-      CACHE STRING "Fortran compiler flags for OpenMP parallelization")
-
-    set(OpenMP_Fortran_LIB_NAMES "${OpenMP_Fortran_LIB_NAMES}"
-      CACHE STRING "Fortran compiler libraries for OpenMP parallelization")
+    if(NOT DEFINED OpenMP_Fortran_FLAGS OR "${OpenMP_Fortran_FLAGS}" STREQUAL "NOTFOUND")
+      set(OpenMP_Fortran_FLAGS "${OpenMP_Fortran_FLAGS_WORK}"
+        CACHE STRING "Fortran compiler flags for OpenMP parallelization" FORCE)
+    endif()
+    if(NOT DEFINED OpenMP_Fortran_LIB_NAMES OR "${OpenMP_Fortran_LIB_NAMES}" STREQUAL "NOTFOUND")
+      set(OpenMP_Fortran_LIB_NAMES "${OpenMP_Fortran_LIB_NAMES_WORK}"
+        CACHE STRING "Fortran compiler libraries for OpenMP parallelization" FORCE)
+    endif()
   endif()
 
   if(OpenMP_Fortran_HAVE_OMPLIB_MODULE)
@@ -565,10 +603,13 @@ foreach(LANG IN LISTS OpenMP_FINDLIST)
         add_library(OpenMP::OpenMP_${LANG} INTERFACE IMPORTED)
       endif()
       if(OpenMP_${LANG}_FLAGS)
-        separate_arguments(_OpenMP_${LANG}_OPTIONS NATIVE_COMMAND "${OpenMP_${LANG}_FLAGS}")
         set_property(TARGET OpenMP::OpenMP_${LANG} PROPERTY
-          INTERFACE_COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:${LANG}>:${_OpenMP_${LANG}_OPTIONS}>")
-        unset(_OpenMP_${LANG}_OPTIONS)
+          INTERFACE_COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:${LANG}>:SHELL:${OpenMP_${LANG}_FLAGS}>")
+        if(CMAKE_${LANG}_COMPILER_ID STREQUAL "Fujitsu"
+          OR ${CMAKE_${LANG}_COMPILER_ID} STREQUAL "IntelLLVM")
+          set_property(TARGET OpenMP::OpenMP_${LANG} PROPERTY
+            INTERFACE_LINK_OPTIONS "SHELL:${OpenMP_${LANG}_FLAGS}")
+        endif()
       endif()
       if(OpenMP_${LANG}_INCLUDE_DIRS)
         set_property(TARGET OpenMP::OpenMP_${LANG} PROPERTY

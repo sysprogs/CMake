@@ -44,7 +44,7 @@ else()
     set(CMAKE_${lang}_LINKER_WRAPPER_FLAG "-Xlinker" " ")
     set(CMAKE_${lang}_LINKER_WRAPPER_FLAG_SEP)
 
-    if(CMAKE_${lang}_COMPILER_TARGET)
+    if(CMAKE_${lang}_COMPILER_TARGET AND "${lang}" STREQUAL "CXX")
       if(CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.4.0)
         list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "-target" "${CMAKE_${lang}_COMPILER_TARGET}")
       else()
@@ -56,6 +56,7 @@ else()
     set(_CMAKE_${lang}_IPO_MAY_BE_SUPPORTED_BY_COMPILER YES)
 
     string(COMPARE EQUAL "${CMAKE_${lang}_COMPILER_ID}" "AppleClang" __is_apple_clang)
+    string(COMPARE EQUAL "${CMAKE_${lang}_COMPILER_ID}" "FujitsuClang" __is_fujitsu_clang)
 
     # '-flto=thin' available since Clang 3.9 and Xcode 8
     # * http://clang.llvm.org/docs/ThinLTO.html#clang-llvm
@@ -65,6 +66,8 @@ else()
       if(CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 8.0)
         set(_CMAKE_LTO_THIN FALSE)
       endif()
+    elseif(__is_fujitsu_clang)
+      set(_CMAKE_LTO_THIN FALSE)
     else()
       if(CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.9)
         set(_CMAKE_LTO_THIN FALSE)
@@ -111,6 +114,18 @@ else()
     endif()
     set(CMAKE_${lang}_COMPILE_OPTIONS_USE_PCH -Xclang -include-pch -Xclang <PCH_FILE> -Xclang -include -Xclang <PCH_HEADER>)
     set(CMAKE_${lang}_COMPILE_OPTIONS_CREATE_PCH -Xclang -emit-pch -Xclang -include -Xclang <PCH_HEADER> -x ${__pch_header_${lang}})
+
+    # '-fcolor-diagnostics' introduced since Clang 2.6
+    if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 2.6)
+      # -fansi-escape-codes mentioned at https://releases.llvm.org/3.7.0/tools/clang/docs/UsersManual.html
+      if (CMAKE_HOST_WIN32 AND CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 3.7)
+        set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS -fansi-escape-codes -fcolor-diagnostics)
+        set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS_OFF -fno-ansi-escape-codes  -fno-color-diagnostics)
+      else()
+        set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS -fcolor-diagnostics)
+        set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS_OFF -fno-color-diagnostics)
+      endif()
+    endif()
   endmacro()
 endif()
 
@@ -164,10 +179,22 @@ macro(__compiler_clang_cxx_standards lang)
 
     unset(_clang_version_std17)
 
-    if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 12.0)
+    set(_clang_version_std23 17.0)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+      set(_clang_version_std23 18.0)
+    endif()
+
+    if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS "${_clang_version_std23}")
+      set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-std=c++23")
+      set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std=gnu++23")
+      set(CMAKE_${lang}26_STANDARD_COMPILE_OPTION "-std=c++26")
+      set(CMAKE_${lang}26_EXTENSION_COMPILE_OPTION "-std=gnu++26")
+    elseif(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 12.0)
       set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-std=c++2b")
       set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std=gnu++2b")
     endif()
+
+    unset(_clang_version_std23)
 
     if("x${CMAKE_${lang}_SIMULATE_ID}" STREQUAL "xMSVC")
       # The MSVC standard library requires C++14, and MSVC itself has no
@@ -194,14 +221,23 @@ macro(__compiler_clang_cxx_standards lang)
     set(CMAKE_${lang}11_EXTENSION_COMPILE_OPTION "")
     set(CMAKE_${lang}14_STANDARD_COMPILE_OPTION "-std:c++14")
     set(CMAKE_${lang}14_EXTENSION_COMPILE_OPTION "-std:c++14")
-    if (CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 6.0)
+
+    if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 6.0)
       set(CMAKE_${lang}17_STANDARD_COMPILE_OPTION "-std:c++17")
       set(CMAKE_${lang}17_EXTENSION_COMPILE_OPTION "-std:c++17")
-      set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std:c++latest")
-      set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std:c++latest")
     else()
       set(CMAKE_${lang}17_STANDARD_COMPILE_OPTION "-std:c++latest")
       set(CMAKE_${lang}17_EXTENSION_COMPILE_OPTION "-std:c++latest")
+    endif()
+
+    if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0)
+      set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-std:c++latest")
+      set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std:c++latest")
+      set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std:c++20")
+      set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std:c++20")
+    elseif(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 6.0)
+      set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std:c++latest")
+      set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std:c++latest")
     endif()
 
     __compiler_check_default_language_standard(${lang} 3.9 14)
@@ -237,6 +273,7 @@ macro(__compiler_clang_cxx_standards lang)
         cxx_std_17
         cxx_std_20
         cxx_std_23
+        cxx_std_26
         )
       _record_compiler_features(${lang} "" CMAKE_${lang}_COMPILE_FEATURES)
     endmacro()

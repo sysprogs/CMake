@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -20,6 +20,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -28,14 +30,7 @@
 #include "timeval.h" /* for timediff_t */
 #include "asyn.h"
 
-#ifdef HAVE_SETJMP_H
 #include <setjmp.h>
-#endif
-
-#ifdef NETWARE
-#undef in_addr_t
-#define in_addr_t unsigned long
-#endif
 
 /* Allocate enough memory to hold the full name information structs and
  * everything. OSF1 is known to require at least 8872 bytes. The buffer
@@ -71,6 +66,8 @@ struct Curl_dns_entry {
   long inuse;
 };
 
+bool Curl_host_is_ipnum(const char *hostname);
+
 /*
  * Curl_resolv() returns an entry with the info for the specified host
  * and port.
@@ -95,7 +92,7 @@ enum resolve_t Curl_resolv_timeout(struct Curl_easy *data,
                                    struct Curl_dns_entry **dnsentry,
                                    timediff_t timeoutms);
 
-#ifdef CURLRES_IPV6
+#ifdef ENABLE_IPV6
 /*
  * Curl_ipv6works() returns TRUE if IPv6 seems to work.
  */
@@ -127,23 +124,11 @@ struct Curl_addrinfo *Curl_getaddrinfo(struct Curl_easy *data,
 void Curl_resolv_unlock(struct Curl_easy *data,
                         struct Curl_dns_entry *dns);
 
-/* init a new dns cache and return success */
-int Curl_mk_dnscache(struct Curl_hash *hash);
+/* init a new dns cache */
+void Curl_init_dnscache(struct Curl_hash *hash, int hashsize);
 
 /* prune old entries from the DNS cache */
 void Curl_hostcache_prune(struct Curl_easy *data);
-
-/* Return # of addresses in a Curl_addrinfo struct */
-int Curl_num_addresses(const struct Curl_addrinfo *addr);
-
-#if defined(CURLDEBUG) && defined(HAVE_GETNAMEINFO)
-int curl_dogetnameinfo(GETNAMEINFO_QUAL_ARG1 GETNAMEINFO_TYPE_ARG1 sa,
-                       GETNAMEINFO_TYPE_ARG2 salen,
-                       char *host, GETNAMEINFO_TYPE_ARG46 hostlen,
-                       char *serv, GETNAMEINFO_TYPE_ARG46 servlen,
-                       GETNAMEINFO_TYPE_ARG7 flags,
-                       int line, const char *source);
-#endif
 
 /* IPv4 threadsafe resolve function used for synch and asynch builds */
 struct Curl_addrinfo *Curl_ipv4_resolve_r(const char *hostname, int port);
@@ -188,21 +173,12 @@ Curl_fetch_addr(struct Curl_easy *data,
  */
 struct Curl_dns_entry *
 Curl_cache_addr(struct Curl_easy *data, struct Curl_addrinfo *addr,
-                const char *hostname, int port);
+                const char *hostname, size_t hostlen, int port);
 
 #ifndef INADDR_NONE
 #define CURL_INADDR_NONE (in_addr_t) ~0
 #else
 #define CURL_INADDR_NONE INADDR_NONE
-#endif
-
-#ifdef HAVE_SIGSETJMP
-/* Forward-declaration of variable defined in hostip.c. Beware this
- * is a global and unique instance. This is used to store the return
- * address that we can jump back to from inside a signal handler.
- * This is not thread-safe stuff.
- */
-extern sigjmp_buf curl_jmpenv;
 #endif
 
 /*
@@ -245,4 +221,5 @@ CURLcode Curl_resolv_check(struct Curl_easy *data,
 int Curl_resolv_getsock(struct Curl_easy *data,
                         curl_socket_t *socks);
 
+CURLcode Curl_resolver_error(struct Curl_easy *data);
 #endif /* HEADER_CURL_HOSTIP_H */

@@ -40,6 +40,8 @@ int cmFortranParser_GetOldStartcond(cmFortranParser* parser);
 /* Callbacks for parser.  */
 void cmFortranParser_Error(cmFortranParser* parser, const char* message);
 void cmFortranParser_RuleUse(cmFortranParser* parser, const char* module_name);
+void cmFortranParser_RuleUseIntrinsic(cmFortranParser* parser,
+                                      const char* module_name);
 void cmFortranParser_RuleLineDirective(cmFortranParser* parser,
                                        const char* filename);
 void cmFortranParser_RuleInclude(cmFortranParser* parser, const char* name);
@@ -99,6 +101,9 @@ public:
   std::set<std::string> Provides;
   std::set<std::string> Requires;
 
+  // Set of intrinsic modules.
+  std::set<std::string> Intrinsics;
+
   // Set of files included in the translation unit.
   std::set<std::string> Includes;
 };
@@ -118,13 +123,12 @@ struct cmFortranFile
     : File(file)
     , Buffer(buffer)
     , Directory(std::move(dir))
-    , LastCharWasNewline(false)
   {
   }
   FILE* File;
   YY_BUFFER_STATE Buffer;
   std::string Directory;
-  bool LastCharWasNewline;
+  bool LastCharWasNewline = false;
 };
 
 struct cmFortranCompiler

@@ -38,7 +38,7 @@ endif()
 if(NOT CMAKE_C_COMPILER_WORKS)
   PrintTestCompilerStatus("C")
   __TestCompiler_setTryCompileTargetType()
-  file(WRITE ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testCCompiler.c
+  string(CONCAT __TestCompiler_testCCompilerSource
     "#ifdef __cplusplus\n"
     "# error \"The CMAKE_C_COMPILER is set to a C++ compiler\"\n"
     "#endif\n"
@@ -50,18 +50,19 @@ if(NOT CMAKE_C_COMPILER_WORKS)
     "int main(int argc, char* argv[])\n"
     "#endif\n"
     "{ (void)argv; return argc-1;}\n")
-  try_compile(CMAKE_C_COMPILER_WORKS ${CMAKE_BINARY_DIR}
-    ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testCCompiler.c
+  # Clear result from normal variable.
+  unset(CMAKE_C_COMPILER_WORKS)
+  # Puts test result in cache variable.
+  try_compile(CMAKE_C_COMPILER_WORKS
+    SOURCE_FROM_VAR testCCompiler.c __TestCompiler_testCCompilerSource
     OUTPUT_VARIABLE __CMAKE_C_COMPILER_OUTPUT)
+  unset(__TestCompiler_testCCompilerSource)
   # Move result from cache to normal variable.
   set(CMAKE_C_COMPILER_WORKS ${CMAKE_C_COMPILER_WORKS})
   unset(CMAKE_C_COMPILER_WORKS CACHE)
   __TestCompiler_restoreTryCompileTargetType()
   if(NOT CMAKE_C_COMPILER_WORKS)
     PrintTestCompilerResult(CHECK_FAIL "broken")
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-      "Determining if the C compiler works failed with "
-      "the following output:\n${__CMAKE_C_COMPILER_OUTPUT}\n\n")
     string(REPLACE "\n" "\n  " _output "${__CMAKE_C_COMPILER_OUTPUT}")
     message(FATAL_ERROR "The C compiler\n  \"${CMAKE_C_COMPILER}\"\n"
       "is not able to compile a simple test program.\nIt fails "
@@ -69,9 +70,6 @@ if(NOT CMAKE_C_COMPILER_WORKS)
       "CMake will not be able to correctly generate this project.")
   endif()
   PrintTestCompilerResult(CHECK_PASS "works")
-  file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-    "Determining if the C compiler works passed with "
-    "the following output:\n${__CMAKE_C_COMPILER_OUTPUT}\n\n")
 endif()
 
 # Try to identify the compiler features

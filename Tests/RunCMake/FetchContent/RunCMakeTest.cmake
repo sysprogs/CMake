@@ -7,13 +7,17 @@ run_cmake(DirectIgnoresDetails)
 run_cmake(FirstDetailsWin)
 run_cmake(DownloadTwice)
 run_cmake(DownloadFile)
+run_cmake(IgnoreToolchainFile)
 run_cmake(SameGenerator)
+run_cmake(System)
 run_cmake(VarDefinitions)
+run_cmake(VarPassthroughs)
 run_cmake(GetProperties)
 run_cmake(UsesTerminalOverride)
 run_cmake(MakeAvailable)
 run_cmake(MakeAvailableTwice)
 run_cmake(MakeAvailableUndeclared)
+run_cmake(VerifyHeaderSet)
 
 run_cmake_with_options(ManualSourceDirectory
   -D "FETCHCONTENT_SOURCE_DIR_WITHPROJECT=${CMAKE_CURRENT_LIST_DIR}/WithProject"
@@ -60,3 +64,15 @@ run_cmake_command(ScriptMode
     -DCMAKE_MAKE_PROGRAM=${RunCMake_MAKE_PROGRAM}
     -P ${CMAKE_CURRENT_LIST_DIR}/ScriptMode.cmake
 )
+
+function(run_FetchContent_ExcludeFromAll)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/ExcludeFromAll-build)
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+
+  run_cmake(ExcludeFromAll)
+
+  set(RunCMake_TEST_NO_CLEAN 1)
+  run_cmake_command(ExcludeFromAll-build ${CMAKE_COMMAND} --build .)
+endfunction()
+run_FetchContent_ExcludeFromAll()

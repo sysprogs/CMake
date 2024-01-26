@@ -6,6 +6,8 @@
 
 #include "cmGeneratorExpression.h"
 #include "cmInstallType.h"
+#include "cmList.h"
+#include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmStringAlgorithms.h"
@@ -18,8 +20,7 @@ cmInstallDirectoryGenerator::cmInstallDirectoryGenerator(
   MessageLevel message, bool exclude_from_all, std::string literal_args,
   bool optional, cmListFileBacktrace backtrace)
   : cmInstallGenerator(dest, configurations, component, message,
-                       exclude_from_all, std::move(backtrace))
-  , LocalGenerator(nullptr)
+                       exclude_from_all, false, std::move(backtrace))
   , Directories(dirs)
   , FilePermissions(std::move(file_permissions))
   , DirPermissions(std::move(dir_permissions))
@@ -53,17 +54,16 @@ bool cmInstallDirectoryGenerator::Compute(cmLocalGenerator* lg)
 std::vector<std::string> cmInstallDirectoryGenerator::GetDirectories(
   std::string const& config) const
 {
-  std::vector<std::string> directories;
+  cmList directories;
   if (this->ActionsPerConfig) {
     for (std::string const& f : this->Directories) {
-      cmExpandList(
-        cmGeneratorExpression::Evaluate(f, this->LocalGenerator, config),
-        directories);
+      directories.append(
+        cmGeneratorExpression::Evaluate(f, this->LocalGenerator, config));
     }
   } else {
     directories = this->Directories;
   }
-  return directories;
+  return std::move(directories.data());
 }
 
 void cmInstallDirectoryGenerator::GenerateScriptActions(std::ostream& os,

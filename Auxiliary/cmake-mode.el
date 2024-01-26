@@ -41,8 +41,8 @@ set the path with these commands:
   :group 'cmake)
 
 ;; Keywords
-(defconst cmake-keywords-block-open '("IF" "MACRO" "FOREACH" "ELSE" "ELSEIF" "WHILE" "FUNCTION"))
-(defconst cmake-keywords-block-close '("ENDIF" "ENDFOREACH" "ENDMACRO" "ELSE" "ELSEIF" "ENDWHILE" "ENDFUNCTION"))
+(defconst cmake-keywords-block-open '("BLOCK" "IF" "MACRO" "FOREACH" "ELSE" "ELSEIF" "WHILE" "FUNCTION"))
+(defconst cmake-keywords-block-close '("ENDBLOCK" "ENDIF" "ENDFOREACH" "ENDMACRO" "ELSE" "ELSEIF" "ENDWHILE" "ENDFUNCTION"))
 (defconst cmake-keywords
   (let ((kwds (append cmake-keywords-block-open cmake-keywords-block-close nil)))
     (delete-dups kwds)))
@@ -53,6 +53,9 @@ set the path with these commands:
 (defconst cmake-regex-comment "#.*")
 (defconst cmake-regex-paren-left "(")
 (defconst cmake-regex-paren-right ")")
+(defconst cmake-regex-closing-parens-line (concat "^[[:space:]]*\\("
+                                                  cmake-regex-paren-right
+                                                  "+\\)[[:space:]]*$"))
 (defconst cmake-regex-argument-quoted
   (rx ?\" (* (or (not (any ?\" ?\\)) (and ?\\ anything))) ?\"))
 (defconst cmake-regex-argument-unquoted
@@ -74,6 +77,8 @@ set the path with these commands:
 (defconst cmake-regex-close
   (rx-to-string `(and bol (* space) (regexp ,cmake-regex-block-close)
                       (* space) (regexp ,cmake-regex-paren-left))))
+(defconst cmake-regex-token-paren-left (concat "^" cmake-regex-paren-left "$"))
+(defconst cmake-regex-token-paren-right (concat "^" cmake-regex-paren-right "$"))
 
 ;------------------------------------------------------------------------------
 
@@ -130,30 +135,47 @@ set the path with these commands:
         (save-excursion
           (beginning-of-line)
           (let ((point-start (point))
+                (closing-parens-only (looking-at cmake-regex-closing-parens-line))
                 (case-fold-search t)  ;; case-insensitive
                 token)
-            ; Search back for the last indented line.
+            ;; Search back for the last indented line.
             (cmake-find-last-indented-line)
-            ; Start with the indentation on this line.
+            ;; Start with the indentation on this line.
             (setq cur-indent (current-indentation))
-            ; Search forward counting tokens that adjust indentation.
-            (while (re-search-forward cmake-regex-token point-start t)
-              (setq token (match-string 0))
-              (when (or (string-match (concat "^" cmake-regex-paren-left "$") token)
-                        (and (string-match cmake-regex-block-open token)
-                             (looking-at (concat "[ \t]*" cmake-regex-paren-left))))
-                (setq cur-indent (+ cur-indent cmake-tab-width)))
-              (when (string-match (concat "^" cmake-regex-paren-right "$") token)
-                (setq cur-indent (- cur-indent cmake-tab-width)))
-              )
-            (goto-char point-start)
-            ;; If next token closes the block, decrease indentation
-            (when (looking-at cmake-regex-close)
-              (setq cur-indent (- cur-indent cmake-tab-width))
+            (if closing-parens-only
+                (let ((open-parens 0))
+                  (while (re-search-forward cmake-regex-token point-start t)
+                    (setq token (match-string 0))
+                    (cond
+                     ((string-match cmake-regex-token-paren-left token)
+                      (setq open-parens (+ open-parens 1)))
+                     ((string-match cmake-regex-token-paren-right token)
+                      (setq open-parens (- open-parens 1)))))
+                  ;; Don't outdent if last indented line has open parens
+                  (unless (> open-parens 0)
+                    (setq cur-indent (- cur-indent cmake-tab-width))))
+              ;; Skip detailed analysis if last indented line is a 'closing
+              ;; parens only line'
+              (unless (looking-at cmake-regex-closing-parens-line)
+                ;; Search forward counting tokens that adjust indentation.
+                (while (re-search-forward cmake-regex-token point-start t)
+                  (setq token (match-string 0))
+                  (when (or (string-match cmake-regex-token-paren-left token)
+                            (and (string-match cmake-regex-block-open token)
+                                 (looking-at (concat "[ \t]*" cmake-regex-paren-left))))
+                    (setq cur-indent (+ cur-indent cmake-tab-width)))
+                  (when (string-match cmake-regex-token-paren-right token)
+                    (setq cur-indent (- cur-indent cmake-tab-width)))
+                  ))
+              (goto-char point-start)
+              ;; If next token closes the block, decrease indentation
+              (when (looking-at cmake-regex-close)
+                (setq cur-indent (- cur-indent cmake-tab-width))
+                )
               )
             )
           )
-        ; Indent this line by the amount selected.
+        ;; Indent this line by the amount selected.
         (cmake-indent-line-to (max cur-indent 0))
         )
       )
@@ -266,6 +288,39 @@ This puts the mark at the end, and point at the beginning."
 
 ;------------------------------------------------------------------------------
 
+(defun cmake--syntax-propertize-until-bracket-close (syntax)
+  ;; This function assumes that a previous search has matched the
+  ;; beginning of a bracket_comment or bracket_argument and that the
+  ;; second capture group has matched the equal signs between the two
+  ;; opening brackets
+  (let* ((mb (match-beginning 2))
+         (me (match-end 2))
+         (cb (format "]%s]" (buffer-substring mb me))))
+    (save-match-data
+      (if (search-forward cb end 'move)
+          (progn
+            (setq me (match-end 0))
+            (put-text-property
+             (1- me)
+             me
+             'syntax-table
+             (string-to-syntax syntax)))
+        (setq me end)))
+    (put-text-property
+     (match-beginning 1)
+     me
+     'syntax-multiline
+     t)))
+
+(defconst cmake--syntax-propertize-function
+  (syntax-propertize-rules
+   ("\\(#\\)\\[\\(=*\\)\\["
+    (1
+     (prog1 "!" (cmake--syntax-propertize-until-bracket-close "!"))))
+   ("\\(\\[\\)\\(=*\\)\\["
+    (1
+     (prog1 "|" (cmake--syntax-propertize-until-bracket-close "|"))))))
+
 ;; Syntax table for this mode.
 (defvar cmake-mode-syntax-table nil
   "Syntax table for CMake mode.")
@@ -296,7 +351,10 @@ This puts the mark at the end, and point at the beginning."
   ; Setup indentation function.
   (set (make-local-variable 'indent-line-function) 'cmake-indent)
   ; Setup comment syntax.
-  (set (make-local-variable 'comment-start) "#"))
+  (set (make-local-variable 'comment-start) "#")
+  ;; Setup syntax propertization
+  (set (make-local-variable 'syntax-propertize-function) cmake--syntax-propertize-function)
+  (add-hook 'syntax-propertize-extend-region-functions #'syntax-propertize-multiline nil t))
 
 ;; Default cmake-mode key bindings
 (define-key cmake-mode-map "\e\C-a" #'cmake-beginning-of-defun)
@@ -314,7 +372,7 @@ optional argument topic will be appended to the argument list."
   (interactive "s")
   (let* ((bufname (if buffer buffer (concat "*CMake" type (if topic "-") topic "*")))
          (buffer  (if (get-buffer bufname) (get-buffer bufname) (generate-new-buffer bufname)))
-         (command (concat cmake-mode-cmake-executable " " type " " topic))
+         (command (concat cmake-mode-cmake-executable " " type " " (if topic (shell-quote-argument topic) topic)))
          ;; Turn of resizing of mini-windows for shell-command.
          (resize-mini-windows nil)
          )
@@ -333,7 +391,7 @@ optional argument topic will be appended to the argument list."
   (interactive "s")
   (let* ((bufname (if buffer buffer (concat "*CMake" type (if topic "-") topic "*")))
          (buffer  (if (get-buffer bufname) (get-buffer bufname) (generate-new-buffer bufname)))
-         (command (concat cmake-mode-cmake-executable " " type " " topic))
+         (command (concat cmake-mode-cmake-executable " " type " " (if topic (shell-quote-argument topic) topic)))
          ;; Turn of resizing of mini-windows for shell-command.
          (resize-mini-windows nil)
          )

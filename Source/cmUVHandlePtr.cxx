@@ -11,6 +11,9 @@
 
 namespace cm {
 
+template <typename T>
+struct uv_handle_deleter;
+
 struct uv_loop_deleter
 {
   void operator()(uv_loop_t* loop) const;
@@ -128,7 +131,7 @@ template <>
 struct uv_handle_deleter<uv_async_t>
 {
   /***
-   * Wile uv_async_send is itself thread-safe, there are
+   * While uv_async_send is itself thread-safe, there are
    * no strong guarantees that close hasn't already been
    * called on the handle; and that it might be deleted
    * as the send call goes through. This mutex guards

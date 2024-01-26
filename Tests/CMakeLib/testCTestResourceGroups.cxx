@@ -104,7 +104,7 @@ static const std::vector<ExpectedParseResult> expectedResults{
   /* clang-format on */
 };
 
-bool TestExpectedParseResult(const ExpectedParseResult& expected)
+static bool TestExpectedParseResult(const ExpectedParseResult& expected)
 {
   std::vector<std::vector<cmCTestTestHandler::cmCTestTestResourceRequirement>>
     result;
@@ -127,7 +127,7 @@ bool TestExpectedParseResult(const ExpectedParseResult& expected)
   return true;
 }
 
-int testCTestResourceGroups(int /*unused*/, char* /*unused*/ [])
+int testCTestResourceGroups(int /*unused*/, char* /*unused*/[])
 {
   int retval = 0;
 

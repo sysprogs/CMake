@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "cmMakefile.h"
 #include "cmMessageType.h"
@@ -11,6 +12,8 @@
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
+#include "cmWindowsRegistry.h"
 
 class cmExecutionStatus;
 
@@ -20,9 +23,11 @@ class cmExecutionStatus;
 
 struct cmFindProgramHelper
 {
-  cmFindProgramHelper(cmMakefile* makefile, cmFindBase const* base)
-    : DebugSearches("find_program", base)
+  cmFindProgramHelper(std::string debugName, cmMakefile* makefile,
+                      cmFindBase const* base)
+    : DebugSearches(std::move(debugName), base)
     , Makefile(makefile)
+    , FindBase(base)
     , PolicyCMP0109(makefile->GetPolicyStatus(cmPolicies::CMP0109))
   {
 #if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
@@ -52,6 +57,7 @@ struct cmFindProgramHelper
   // Debug state
   cmFindBaseDebugState DebugSearches;
   cmMakefile* Makefile;
+  cmFindBase const* FindBase;
 
   cmPolicies::PolicyStatus PolicyCMP0109;
 
@@ -90,7 +96,7 @@ struct cmFindProgramHelper
                          this->TestNameExt = cmStrCat(name, ext);
                          this->TestPath = cmSystemTools::CollapseFullPath(
                            this->TestNameExt, path);
-                         bool exists = this->FileIsExecutable(this->TestPath);
+                         bool exists = this->FileIsValid(this->TestPath);
                          exists ? this->DebugSearches.FoundAt(this->TestPath)
                                 : this->DebugSearches.FailedAt(this->TestPath);
                          if (exists) {
@@ -100,7 +106,25 @@ struct cmFindProgramHelper
                          return false;
                        });
   }
-  bool FileIsExecutable(std::string const& file) const
+  bool FileIsValid(std::string const& file) const
+  {
+    if (!this->FileIsExecutableCMP0109(file)) {
+      return false;
+    }
+#ifdef _WIN32
+    // Pretend the Windows "python" app installer alias does not exist.
+    if (cmSystemTools::LowerCase(file).find("/windowsapps/python") !=
+        std::string::npos) {
+      std::string dest;
+      if (cmSystemTools::ReadSymlink(file, dest) &&
+          cmHasLiteralSuffix(dest, "\\AppInstallerPythonRedirector.exe")) {
+        return false;
+      }
+    }
+#endif
+    return this->FindBase->Validate(file);
+  }
+  bool FileIsExecutableCMP0109(std::string const& file) const
   {
     switch (this->PolicyCMP0109) {
       case cmPolicies::OLD:
@@ -145,52 +169,44 @@ struct cmFindProgramHelper
 };
 
 cmFindProgramCommand::cmFindProgramCommand(cmExecutionStatus& status)
-  : cmFindBase(status)
+  : cmFindBase("find_program", status)
 {
   this->NamesPerDirAllowed = true;
+  this->VariableDocumentation = "Path to a program.";
+  this->VariableType = cmStateEnums::FILEPATH;
+  // Windows Registry views
+  // When policy CMP0134 is not NEW, rely on previous behavior:
+  if (this->Makefile->GetPolicyStatus(cmPolicies::CMP0134) !=
+      cmPolicies::NEW) {
+    if (this->Makefile->GetDefinition("CMAKE_SIZEOF_VOID_P") == "8") {
+      this->RegistryView = cmWindowsRegistry::View::Reg64_32;
+    } else {
+      this->RegistryView = cmWindowsRegistry::View::Reg32_64;
+    }
+  } else {
+    this->RegistryView = cmWindowsRegistry::View::Both;
+  }
 }
 
 // cmFindProgramCommand
 bool cmFindProgramCommand::InitialPass(std::vector<std::string> const& argsIn)
 {
-  this->DebugMode = this->ComputeIfDebugModeWanted();
-  this->VariableDocumentation = "Path to a program.";
+
   this->CMakePathName = "PROGRAM";
+
   // call cmFindBase::ParseArguments
   if (!this->ParseArguments(argsIn)) {
     return false;
   }
-  if (this->AlreadyInCache) {
-    // If the user specifies the entry on the command line without a
-    // type we should add the type and docstring but keep the original
-    // value.
-    if (this->AlreadyInCacheWithoutMetaInfo) {
-      this->Makefile->AddCacheDefinition(this->VariableName, "",
-                                         this->VariableDocumentation.c_str(),
-                                         cmStateEnums::FILEPATH);
-    }
+  this->DebugMode = this->ComputeIfDebugModeWanted(this->VariableName);
+
+  if (this->AlreadyDefined) {
+    this->NormalizeFindResult();
     return true;
   }
 
   std::string const result = this->FindProgram();
-  if (!result.empty()) {
-    // Save the value in the cache
-    this->Makefile->AddCacheDefinition(this->VariableName, result,
-                                       this->VariableDocumentation.c_str(),
-                                       cmStateEnums::FILEPATH);
-
-    return true;
-  }
-  this->Makefile->AddCacheDefinition(
-    this->VariableName, this->VariableName + "-NOTFOUND",
-    this->VariableDocumentation.c_str(), cmStateEnums::FILEPATH);
-  if (this->Required) {
-    this->Makefile->IssueMessage(
-      MessageType::FATAL_ERROR,
-      "Could not find " + this->VariableName +
-        " using the following names: " + cmJoin(this->Names, ", "));
-    cmSystemTools::SetFatalErrorOccured();
-  }
+  this->StoreFindResult(result);
   return true;
 }
 
@@ -222,7 +238,7 @@ std::string cmFindProgramCommand::FindNormalProgram()
 std::string cmFindProgramCommand::FindNormalProgramNamesPerDir()
 {
   // Search for all names in each directory.
-  cmFindProgramHelper helper(this->Makefile, this);
+  cmFindProgramHelper helper(this->FindCommandName, this->Makefile, this);
   for (std::string const& n : this->Names) {
     helper.AddName(n);
   }
@@ -245,7 +261,7 @@ std::string cmFindProgramCommand::FindNormalProgramNamesPerDir()
 std::string cmFindProgramCommand::FindNormalProgramDirsPerName()
 {
   // Search the entire path for each name.
-  cmFindProgramHelper helper(this->Makefile, this);
+  cmFindProgramHelper helper(this->FindCommandName, this->Makefile, this);
   for (std::string const& n : this->Names) {
     // Switch to searching for this name.
     helper.SetName(n);

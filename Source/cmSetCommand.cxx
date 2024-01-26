@@ -3,14 +3,15 @@
 #include "cmSetCommand.h"
 
 #include "cmExecutionStatus.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmProperty.h"
 #include "cmRange.h"
 #include "cmState.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 // cmSetCommand
 bool cmSetCommand(std::vector<std::string> const& args,
@@ -79,8 +80,8 @@ bool cmSetCommand(std::vector<std::string> const& args,
   bool force = false; // optional
   bool parentScope = false;
   cmStateEnums::CacheEntryType type =
-    cmStateEnums::STRING;          // required if cache
-  const char* docstring = nullptr; // required if cache
+    cmStateEnums::STRING; // required if cache
+  cmValue docstring;      // required if cache
 
   unsigned int ignoreLastArgs = 0;
   // look for PARENT_SCOPE argument
@@ -103,7 +104,8 @@ bool cmSetCommand(std::vector<std::string> const& args,
   }
 
   // collect any values into a single semi-colon separated value list
-  value = cmJoin(cmMakeRange(args).advance(1).retreat(ignoreLastArgs), ";");
+  value =
+    cmList::to_string(cmMakeRange(args).advance(1).retreat(ignoreLastArgs));
 
   if (parentScope) {
     status.GetMakefile().RaiseScope(variable, value.c_str());
@@ -113,10 +115,18 @@ bool cmSetCommand(std::vector<std::string> const& args,
   // we should be nice and try to catch some simple screwups if the last or
   // next to last args are CACHE then they screwed up.  If they used FORCE
   // without CACHE they screwed up
-  if ((args.back() == "CACHE") ||
-      (args.size() > 1 && args[args.size() - 2] == "CACHE") ||
-      (force && !cache)) {
-    status.SetError("given invalid arguments for CACHE mode.");
+  if (args.back() == "CACHE") {
+    status.SetError(
+      "given invalid arguments for CACHE mode: missing type and docstring");
+    return false;
+  }
+  if (args.size() > 1 && args[args.size() - 2] == "CACHE") {
+    status.SetError(
+      "given invalid arguments for CACHE mode: missing type or docstring");
+    return false;
+  }
+  if (force && !cache) {
+    status.SetError("given invalid arguments: FORCE specified without CACHE");
     return false;
   }
 
@@ -131,12 +141,12 @@ bool cmSetCommand(std::vector<std::string> const& args,
       // ensure that the type is actually converting to a string.
       type = cmStateEnums::STRING;
     }
-    docstring = args[cacheStart + 2].c_str();
+    docstring = cmValue{ args[cacheStart + 2] };
   }
 
   // see if this is already in the cache
   cmState* state = status.GetMakefile().GetState();
-  cmProp existingValue = state->GetCacheEntryValue(variable);
+  cmValue existingValue = state->GetCacheEntryValue(variable);
   if (existingValue &&
       (state->GetCacheEntryType(variable) != cmStateEnums::UNINITIALIZED)) {
     // if the set is trying to CACHE the value but the value
@@ -150,8 +160,8 @@ bool cmSetCommand(std::vector<std::string> const& args,
 
   // if it is meant to be in the cache then define it in the cache
   if (cache) {
-    status.GetMakefile().AddCacheDefinition(variable, value, docstring, type,
-                                            force);
+    status.GetMakefile().AddCacheDefinition(variable, cmValue{ value },
+                                            docstring, type, force);
   } else {
     // add the definition
     status.GetMakefile().AddDefinition(variable, value);

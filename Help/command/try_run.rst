@@ -13,86 +13,126 @@ Try Compiling and Running Source Files
 .. code-block:: cmake
 
   try_run(<runResultVar> <compileResultVar>
-          <bindir> <srcfile> [CMAKE_FLAGS <flags>...]
+          [SOURCES_TYPE <type>]
+          <SOURCES <srcfile...>                 |
+           SOURCE_FROM_CONTENT <name> <content> |
+           SOURCE_FROM_VAR <name> <var>         |
+           SOURCE_FROM_FILE <name> <path>       >...
+          [LOG_DESCRIPTION <text>]
+          [NO_CACHE]
+          [NO_LOG]
+          [CMAKE_FLAGS <flags>...]
           [COMPILE_DEFINITIONS <defs>...]
           [LINK_OPTIONS <options>...]
           [LINK_LIBRARIES <libs>...]
           [COMPILE_OUTPUT_VARIABLE <var>]
+          [COPY_FILE <fileName> [COPY_FILE_ERROR <var>]]
+          [<LANG>_STANDARD <std>]
+          [<LANG>_STANDARD_REQUIRED <bool>]
+          [<LANG>_EXTENSIONS <bool>]
+          [RUN_OUTPUT_VARIABLE <var>]
+          [RUN_OUTPUT_STDOUT_VARIABLE <var>]
+          [RUN_OUTPUT_STDERR_VARIABLE <var>]
+          [WORKING_DIRECTORY <var>]
+          [ARGS <args>...]
+          )
+
+.. versionadded:: 3.25
+
+Try building an executable from one or more source files.  Build success
+returns ``TRUE`` and build failure returns ``FALSE`` in ``<compileResultVar>``.
+If the build succeeds, this runs the executable and stores the exit code in
+``<runResultVar>``.  If the executable was built, but failed to run, then
+``<runResultVar>`` will be set to ``FAILED_TO_RUN``.  See command
+:command:`try_compile` for documentation of options common to both commands,
+and for information on how the test project is constructed to build the source
+file.
+
+One or more source files must be provided. Additionally, one of ``SOURCES``
+and/or ``SOURCE_FROM_*`` must precede other keywords.
+
+.. versionadded:: 3.26
+  This command records a
+  :ref:`configure-log try_run event <try_run configure-log event>`
+  if the ``NO_LOG`` option is not specified.
+
+This command supports an alternate signature for CMake older than 3.25.
+The signature above is recommended for clarity.
+
+.. code-block:: cmake
+
+  try_run(<runResultVar> <compileResultVar>
+          <bindir> <srcfile|SOURCES srcfile...>
+          [CMAKE_FLAGS <flags>...]
+          [COMPILE_DEFINITIONS <defs>...]
+          [LINK_OPTIONS <options>...]
+          [LINK_LIBRARIES <libs>...]
+          [COMPILE_OUTPUT_VARIABLE <var>]
+          [COPY_FILE <fileName> [COPY_FILE_ERROR <var>]]
+          [<LANG>_STANDARD <std>]
+          [<LANG>_STANDARD_REQUIRED <bool>]
+          [<LANG>_EXTENSIONS <bool>]
           [RUN_OUTPUT_VARIABLE <var>]
           [OUTPUT_VARIABLE <var>]
           [WORKING_DIRECTORY <var>]
-          [ARGS <args>...])
+          [ARGS <args>...]
+          )
 
-Try compiling a ``<srcfile>``.  Returns ``TRUE`` or ``FALSE`` for success
-or failure in ``<compileResultVar>``.  If the compile succeeded, runs the
-executable and returns its exit code in ``<runResultVar>``.  If the
-executable was built, but failed to run, then ``<runResultVar>`` will be
-set to ``FAILED_TO_RUN``.  See the :command:`try_compile` command for
-information on how the test project is constructed to build the source file.
+.. _`try_run Options`:
 
-.. versionadded:: 3.14
-  The names of the result variables ``<runResultVar>`` and
-  ``<compileResultVar>`` are defined by the user.  Previously, they had
-  fixed names ``RUN_RESULT_VAR`` and ``COMPILE_RESULT_VAR``.
+Options
+^^^^^^^
 
-The options are:
-
-``CMAKE_FLAGS <flags>...``
-  Specify flags of the form ``-DVAR:TYPE=VALUE`` to be passed to
-  the ``cmake`` command-line used to drive the test build.
-  The example in :command:`try_compile` shows how values for variables
-  ``INCLUDE_DIRECTORIES``, ``LINK_DIRECTORIES``, and ``LINK_LIBRARIES``
-  are used.
-
-``COMPILE_DEFINITIONS <defs>...``
-  Specify ``-Ddefinition`` arguments to pass to :command:`add_definitions`
-  in the generated test project.
+The options specific to ``try_run`` are:
 
 ``COMPILE_OUTPUT_VARIABLE <var>``
   Report the compile step build output in a given variable.
 
-``LINK_LIBRARIES <libs>...``
-  .. versionadded:: 3.2
-
-  Specify libraries to be linked in the generated project.
-  The list of libraries may refer to system libraries and to
-  :ref:`Imported Targets <Imported Targets>` from the calling project.
-
-  If this option is specified, any ``-DLINK_LIBRARIES=...`` value
-  given to the ``CMAKE_FLAGS`` option will be ignored.
-
-``LINK_OPTIONS <options>...``
-  .. versionadded:: 3.14
-
-  Specify link step options to pass to :command:`target_link_options` in the
-  generated project.
-
 ``OUTPUT_VARIABLE <var>``
   Report the compile build output and the output from running the executable
-  in the given variable.  This option exists for legacy reasons.  Prefer
-  ``COMPILE_OUTPUT_VARIABLE`` and ``RUN_OUTPUT_VARIABLE`` instead.
+  in the given variable.  This option exists for legacy reasons and is only
+  supported by the old ``try_run`` signature.
+  Prefer ``COMPILE_OUTPUT_VARIABLE`` and ``RUN_OUTPUT_VARIABLE`` instead.
 
 ``RUN_OUTPUT_VARIABLE <var>``
   Report the output from running the executable in a given variable.
+
+``RUN_OUTPUT_STDOUT_VARIABLE <var>``
+  .. versionadded:: 3.25
+
+  Report the output of stdout from running the executable in a given variable.
+
+``RUN_OUTPUT_STDERR_VARIABLE <var>``
+  .. versionadded:: 3.25
+
+  Report the output of stderr from running the executable in a given variable.
 
 ``WORKING_DIRECTORY <var>``
   .. versionadded:: 3.20
 
   Run the executable in the given directory. If no ``WORKING_DIRECTORY`` is
-  specified, the executable will run in ``<bindir>``.
+  specified, the executable will run in ``<bindir>`` or the current build
+  directory.
+
+``ARGS <args>...``
+  Additional arguments to pass to the executable when running it.
 
 Other Behavior Settings
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Set the :variable:`CMAKE_TRY_COMPILE_CONFIGURATION` variable to choose
-a build configuration.
+Set variable :variable:`CMAKE_TRY_COMPILE_CONFIGURATION` to choose a build
+configuration:
+
+* For multi-config generators, this selects which configuration to build.
+
+* For single-config generators, this sets :variable:`CMAKE_BUILD_TYPE` in
+  the test project.
 
 Behavior when Cross Compiling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. versionadded:: 3.3
-  Use ``CMAKE_CROSSCOMPILING_EMULATOR`` when running cross-compiled
-  binaries.
+  Use ``CMAKE_CROSSCOMPILING_EMULATOR`` when running cross-compiled binaries.
 
 When cross compiling, the executable compiled in the first step
 usually cannot be run on the build host.  The ``try_run`` command checks
@@ -115,6 +155,7 @@ These cache entries are:
 
 In order to make cross compiling your project easier, use ``try_run``
 only if really required.  If you use ``try_run``, use the
+``RUN_OUTPUT_STDOUT_VARIABLE``, ``RUN_OUTPUT_STDERR_VARIABLE``,
 ``RUN_OUTPUT_VARIABLE`` or ``OUTPUT_VARIABLE`` options only if really
 required.  Using them will require that when cross-compiling, the cache
 variables will have to be set manually to the output of the executable.

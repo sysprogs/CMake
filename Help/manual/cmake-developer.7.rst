@@ -18,6 +18,85 @@ See https://cmake.org/get-involved/ to get involved in development of
 CMake upstream.  It includes links to contribution instructions, which
 in turn link to developer guides for CMake itself.
 
+Accessing Windows Registry
+==========================
+
+CMake offers some facilities to access the registry on ``Windows`` platforms.
+
+Query Windows Registry
+----------------------
+
+.. versionadded:: 3.24
+
+The :command:`cmake_host_system_information` command offers the possibility to
+query the registry on the local computer. See
+:ref:`cmake_host_system(QUERY_WINDOWS_REGISTRY) <Query Windows registry>` for
+more information.
+
+.. _`Find Using Windows Registry`:
+
+Find Using Windows Registry
+---------------------------
+
+.. versionchanged:: 3.24
+
+Options ``HINTS`` and ``PATHS`` of :command:`find_file`,
+:command:`find_library`, :command:`find_path`, :command:`find_program`, and
+:command:`find_package` commands offer the possibility, on ``Windows``
+platform, to query the registry.
+
+The formal syntax, as specified using
+`BNF <https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form>`_ notation with
+the regular extensions, for registry query is the following:
+
+.. raw:: latex
+
+   \begin{small}
+
+.. productionlist::
+  registry_query: '[' `sep_definition`? `root_key`
+                :     ((`key_separator` `sub_key`)? (`value_separator` `value_name`_)?)? ']'
+  sep_definition: '{' `value_separator` '}'
+  root_key: 'HKLM' | 'HKEY_LOCAL_MACHINE' | 'HKCU' | 'HKEY_CURRENT_USER' |
+          : 'HKCR' | 'HKEY_CLASSES_ROOT' | 'HKCC' | 'HKEY_CURRENT_CONFIG' |
+          : 'HKU' | 'HKEY_USERS'
+  sub_key: `element` (`key_separator` `element`)*
+  key_separator: '/' | '\\'
+  value_separator: `element` | ';'
+  value_name: `element` | '(default)'
+  element: `character`\+
+  character: <any character except `key_separator` and `value_separator`>
+
+.. raw:: latex
+
+   \end{small}
+
+The :token:`sep_definition` optional item offers the possibility to specify
+the string used to separate the :token:`sub_key` from the :token:`value_name`
+item. If not specified, the character ``;`` is used. Multiple
+:token:`registry_query` items can be specified as part of a path.
+
+.. code-block:: cmake
+
+  # example using default separator
+  find_file(... PATHS "/root/[HKLM/Stuff;InstallDir]/lib[HKLM\\\\Stuff;Architecture]")
+
+  # example using different specified separators
+  find_library(... HINTS "/root/[{|}HKCU/Stuff|InstallDir]/lib[{@@}HKCU\\\\Stuff@@Architecture]")
+
+If the :token:`value_name` item is not specified or has the special name
+``(default)``, the content of the default value, if any, will be returned. The
+supported types for the :token:`value_name` are:
+
+* ``REG_SZ``.
+* ``REG_EXPAND_SZ``. The returned data is expanded.
+* ``REG_DWORD``.
+* ``REG_QWORD``.
+
+When the registry query failed, typically because the key does not exist or
+the data type is not supported, the string ``/REGISTRY-NOTFOUND`` is substituted
+to the ``[]`` query expression.
+
 .. _`Find Modules`:
 
 Find Modules
@@ -242,7 +321,6 @@ backwards compatibility for any old names that were actually in use.
 Make sure you comment them as deprecated, so that no-one starts using
 them.
 
-
 A Sample Find Module
 --------------------
 
@@ -349,6 +427,24 @@ look.
     NAMES foo
     PATHS ${PC_Foo_LIBRARY_DIRS}
   )
+
+Alternatively, if the library is available with multiple configurations, you can
+use :module:`SelectLibraryConfigurations` to automatically set the
+``Foo_LIBRARY`` variable instead:
+
+.. code-block:: cmake
+
+  find_library(Foo_LIBRARY_RELEASE
+    NAMES foo
+    PATHS ${PC_Foo_LIBRARY_DIRS}/Release
+  )
+  find_library(Foo_LIBRARY_DEBUG
+    NAMES foo
+    PATHS ${PC_Foo_LIBRARY_DIRS}/Debug
+  )
+
+  include(SelectLibraryConfigurations)
+  select_library_configurations(Foo)
 
 If you have a good way of getting the version (from a header file, for
 example), you can use that information to set ``Foo_VERSION`` (although
@@ -464,7 +560,7 @@ The ``RELEASE`` variant should be listed first in the property
 so that the variant is chosen if the user uses a configuration which is
 not an exact match for any listed ``IMPORTED_CONFIGURATIONS``.
 
-Most of the cache variables should be hidden in the ``ccmake`` interface unless
+Most of the cache variables should be hidden in the :program:`ccmake` interface unless
 the user explicitly asks to edit them.
 
 .. code-block:: cmake

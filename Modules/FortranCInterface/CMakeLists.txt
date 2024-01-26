@@ -6,11 +6,11 @@ project(FortranCInterface C Fortran)
 include(${FortranCInterface_BINARY_DIR}/Input.cmake OPTIONAL)
 
 # Check if the C compiler supports '$' in identifiers.
-include(CheckCSourceCompiles)
-check_c_source_compiles("
-extern int dollar$(void);
-int main() { return 0; }
-" C_SUPPORTS_DOLLAR)
+include(CheckSourceCompiles)
+check_source_compiles(C
+"extern int dollar$(void);
+int main() { return 0; }"
+C_SUPPORTS_DOLLAR)
 
 # List manglings of global symbol names to try.
 set(global_symbols
@@ -43,6 +43,8 @@ set(module_symbols
   MYMODULE_mp_MYSUB       # Intel on Windows
   mymodule_mysub_         # PGI
   mymodule_MP_mysub       # NAG
+  _QMmy_modulePmy_sub     # LLVMFlang
+  _QMmymodulePmysub       # LLVMFlang
   ${FortranCInterface_MODULE_SYMBOLS}
   )
 list(REMOVE_DUPLICATES module_symbols)
@@ -101,6 +103,22 @@ set_property(TARGET symbols PROPERTY POSITION_INDEPENDENT_CODE 1)
 # Require symbols through Fortran.
 add_executable(FortranCInterface main.F call_sub.f ${call_mod})
 target_link_libraries(FortranCInterface PUBLIC symbols)
+
+# If IPO is enabled here, GCC gfortran >= 12.0 will obfuscate
+# the strings of the return values in the compiled executable,
+# which we use to regex match against later.
+# The static libraries must be build with IPO and non-IPO objects,
+# as that will ensure the verify step will operate on IPO objects,
+# if requested by the system compiler flags.
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU" AND
+  CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 12)
+  target_compile_options(FortranCInterface PRIVATE "-fno-lto")
+  target_compile_options(myfort PRIVATE "-flto=auto" "-ffat-lto-objects")
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND
+  CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 12)
+  target_compile_options(symbols PRIVATE "-flto=auto" "-ffat-lto-objects")
+endif()
 
 file(GENERATE OUTPUT exe-$<CONFIG>.cmake CONTENT [[
 set(FortranCInterface_EXE "$<TARGET_FILE:FortranCInterface>")

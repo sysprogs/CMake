@@ -1,16 +1,16 @@
 # Disable warnings to avoid changing 3rd party code.
 if(CMAKE_C_COMPILER_ID MATCHES
-    "^(GNU|Clang|AppleClang|XLClang|XL|VisualAge|SunPro|HP|Intel|IntelLLVM)$")
+    "^(GNU|LCC|Clang|AppleClang|IBMClang|XLClang|XL|VisualAge|SunPro|HP|Intel|IntelLLVM|NVHPC)$")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
 elseif(CMAKE_C_COMPILER_ID STREQUAL "PathScale")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -woffall")
 endif()
 
 # Re-use some check result cache entries from cmcurl:
-# * HAVE_ARPA_INET_H
-# * HAVE_NETINET_IN_H
-# * HAVE_SSIZE_T
-if(NOT HAVE_SSIZE_T)
+# * HAVE_ARPA_INET_H    (referenced in cmakeconfig.h.in)
+# * HAVE_NETINET_IN_H   (referenced in cmakeconfig.h.in)
+# * HAVE_SIZEOF_SSIZE_T (referenced here)
+if(NOT HAVE_SIZEOF_SSIZE_T)
   set(ssize_t KWIML_INT_intptr_t)
 endif()
 configure_file(cmakeconfig.h.in config.h)
@@ -19,6 +19,7 @@ add_library(cmnghttp2 STATIC
   lib/nghttp2_buf.c
   lib/nghttp2_callbacks.c
   lib/nghttp2_debug.c
+  lib/nghttp2_extpri.c
   lib/nghttp2_frame.c
   lib/nghttp2_hd.c
   lib/nghttp2_hd_huffman.c

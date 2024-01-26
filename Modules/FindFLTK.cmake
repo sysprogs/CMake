@@ -108,7 +108,7 @@ if(APPLE)
   set( FLTK_PLATFORM_DEPENDENT_LIBS  "-framework Carbon -framework Cocoa -framework ApplicationServices -lz")
 endif()
 
-# If FLTK_INCLUDE_DIR is already defined we assigne its value to FLTK_DIR
+# If FLTK_INCLUDE_DIR is already defined we assign its value to FLTK_DIR.
 if(FLTK_INCLUDE_DIR)
   set(FLTK_DIR ${FLTK_INCLUDE_DIR})
 endif()
@@ -152,13 +152,17 @@ if(NOT FLTK_DIR)
 endif()
 
 # Check if FLTK was built using CMake
-if(EXISTS ${FLTK_DIR}/FLTKConfig.cmake)
-  set(FLTK_BUILT_WITH_CMAKE 1)
-endif()
+foreach(fltk_include IN LISTS FLTK_DIR)
+  if(EXISTS "${fltk_include}/FLTKConfig.cmake")
+    set(FLTK_BUILT_WITH_CMAKE 1)
+    set(FLTK_CMAKE_PATH "${fltk_include}/FLTKConfig.cmake")
+    break()
+  endif()
+endforeach()
 
 if(FLTK_BUILT_WITH_CMAKE)
   set(FLTK_FOUND 1)
-  include(${FLTK_DIR}/FLTKConfig.cmake)
+  include("${FLTK_CMAKE_PATH}")
 
   # Fluid
   if(FLUID_COMMAND)
@@ -228,7 +232,7 @@ else()
     find_program(FLTK_CONFIG_SCRIPT fltk-config PATHS ${FLTK_BIN_DIR})
     if(FLTK_CONFIG_SCRIPT)
       if(NOT FLTK_INCLUDE_DIR)
-        exec_program(${FLTK_CONFIG_SCRIPT} ARGS --cxxflags OUTPUT_VARIABLE FLTK_CXXFLAGS)
+        execute_process(COMMAND ${FLTK_CONFIG_SCRIPT} --cxxflags OUTPUT_VARIABLE FLTK_CXXFLAGS)
         if(FLTK_CXXFLAGS)
           string(REGEX MATCHALL "-I[^ ]*" _fltk_temp_dirs ${FLTK_CXXFLAGS})
           string(REPLACE "-I" "" _fltk_temp_dirs "${_fltk_temp_dirs}")
@@ -252,7 +256,7 @@ else()
   # Try to find FLTK library
   if(UNIX)
     if(FLTK_CONFIG_SCRIPT)
-      exec_program(${FLTK_CONFIG_SCRIPT} ARGS --libs OUTPUT_VARIABLE _FLTK_POSSIBLE_LIBS)
+      execute_process(COMMAND ${FLTK_CONFIG_SCRIPT} --libs OUTPUT_VARIABLE _FLTK_POSSIBLE_LIBS)
       if(_FLTK_POSSIBLE_LIBS)
         get_filename_component(_FLTK_POSSIBLE_LIBRARY_DIR ${_FLTK_POSSIBLE_LIBS} PATH)
       endif()
@@ -288,12 +292,12 @@ else()
   # Find the extra libraries needed for the fltk_images library.
   if(UNIX)
     if(FLTK_CONFIG_SCRIPT)
-      exec_program(${FLTK_CONFIG_SCRIPT} ARGS --use-images --ldflags
+      execute_process(COMMAND ${FLTK_CONFIG_SCRIPT} --use-images --ldflags
         OUTPUT_VARIABLE FLTK_IMAGES_LDFLAGS)
       set(FLTK_LIBS_EXTRACT_REGEX ".*-lfltk_images (.*) -lfltk.*")
       if("${FLTK_IMAGES_LDFLAGS}" MATCHES "${FLTK_LIBS_EXTRACT_REGEX}")
         string(REGEX REPLACE " +" ";" FLTK_IMAGES_LIBS "${CMAKE_MATCH_1}")
-        # The EXEC_PROGRAM will not be inherited into subdirectories from
+        # The execute_process() will not be inherited into subdirectories from
         # the file that originally included this module.  Save the answer.
         set(FLTK_IMAGES_LIBS "${FLTK_IMAGES_LIBS}" CACHE INTERNAL
           "Extra libraries for fltk_images library.")

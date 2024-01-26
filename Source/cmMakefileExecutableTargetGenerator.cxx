@@ -16,12 +16,12 @@
 #include "cmGlobalUnixMakefileGenerator3.h"
 #include "cmLinkLineComputer.h"
 #include "cmLinkLineDeviceComputer.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmLocalUnixMakefileGenerator3.h"
 #include "cmMakefile.h"
 #include "cmOSXBundleGenerator.h"
 #include "cmOutputConverter.h"
-#include "cmProperty.h"
 #include "cmRulePlaceholderExpander.h"
 #include "cmState.h"
 #include "cmStateDirectory.h"
@@ -29,6 +29,7 @@
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 cmMakefileExecutableTargetGenerator::cmMakefileExecutableTargetGenerator(
   cmGeneratorTarget* target)
@@ -69,6 +70,8 @@ void cmMakefileExecutableTargetGenerator::WriteRuleFiles()
     this->WriteExecutableRule(true);
   }
 
+  this->WriteTargetLinkDependRules();
+
   // Write clean target
   this->WriteTargetCleanRules();
 
@@ -104,13 +107,11 @@ void cmMakefileExecutableTargetGenerator::WriteDeviceExecutableRule(
     cmLocalUnixMakefileGenerator3::EchoProgress progress;
     this->MakeEchoProgress(progress);
     // Add the link message.
-    std::string buildEcho =
-      cmStrCat("Linking CUDA device code ",
-               this->LocalGenerator->ConvertToOutputFormat(
-                 this->LocalGenerator->MaybeConvertToRelativePath(
-                   this->LocalGenerator->GetCurrentBinaryDirectory(),
-                   this->DeviceLinkObject),
-                 cmOutputConverter::SHELL));
+    std::string buildEcho = cmStrCat(
+      "Linking CUDA device code ",
+      this->LocalGenerator->ConvertToOutputFormat(
+        this->LocalGenerator->MaybeRelativeToCurBinDir(this->DeviceLinkObject),
+        cmOutputConverter::SHELL));
     this->LocalGenerator->AppendEcho(
       commands, buildEcho, cmLocalUnixMakefileGenerator3::EchoLink, &progress);
   }
@@ -138,32 +139,25 @@ void cmMakefileExecutableTargetGenerator::WriteNvidiaDeviceExecutableRule(
   std::vector<std::string> depends;
   this->AppendLinkDepends(depends, linkLanguage);
 
-  // Build a list of compiler flags and linker flags.
-  std::string langFlags;
-  std::string linkFlags;
-
   // Add language feature flags.
+  std::string langFlags;
   this->LocalGenerator->AddLanguageFlagsForLinking(
     langFlags, this->GeneratorTarget, linkLanguage, this->GetConfigName());
-
-  // Add device-specific linker flags.
-  this->GetDeviceLinkFlags(linkFlags, linkLanguage);
 
   // Construct a list of files associated with this executable that
   // may need to be cleaned.
   std::vector<std::string> exeCleanFiles;
-  exeCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
-    this->LocalGenerator->GetCurrentBinaryDirectory(), targetOutput));
+  exeCleanFiles.push_back(
+    this->LocalGenerator->MaybeRelativeToCurBinDir(targetOutput));
 
   // Determine whether a link script will be used.
   bool useLinkScript = this->GlobalGenerator->GetUseLinkScript();
 
   // Construct the main link rule.
-  std::vector<std::string> real_link_commands;
   const std::string linkRuleVar = "CMAKE_CUDA_DEVICE_LINK_EXECUTABLE";
   const std::string linkRule = this->GetLinkRule(linkRuleVar);
   std::vector<std::string> commands1;
-  cmExpandList(linkRule, real_link_commands);
+  cmList real_link_commands(linkRule);
 
   bool useResponseFileForObjects =
     this->CheckUseResponseFileForObjects(linkLanguage);
@@ -172,48 +166,47 @@ void cmMakefileExecutableTargetGenerator::WriteNvidiaDeviceExecutableRule(
 
   // Expand the rule variables.
   {
-    bool useWatcomQuote =
-      this->Makefile->IsOn(linkRuleVar + "_USE_WATCOM_QUOTE");
-
     // Set path conversion for link script shells.
     this->LocalGenerator->SetLinkScriptShell(useLinkScript);
 
-    std::unique_ptr<cmLinkLineComputer> linkLineComputer(
+    std::unique_ptr<cmLinkLineDeviceComputer> linkLineComputer(
       new cmLinkLineDeviceComputer(
         this->LocalGenerator,
         this->LocalGenerator->GetStateSnapshot().GetDirectory()));
     linkLineComputer->SetForResponse(useResponseFileForLibs);
-    linkLineComputer->SetUseWatcomQuote(useWatcomQuote);
     linkLineComputer->SetRelink(relink);
+
+    // Create set of linking flags.
+    std::string linkFlags;
+    std::string ignored_;
+    this->LocalGenerator->GetDeviceLinkFlags(
+      *linkLineComputer, this->GetConfigName(), ignored_, linkFlags, ignored_,
+      ignored_, this->GeneratorTarget);
 
     // Collect up flags to link in needed libraries.
     std::string linkLibs;
-    this->CreateLinkLibs(linkLineComputer.get(), linkLibs,
-                         useResponseFileForLibs, depends);
+    this->CreateLinkLibs(
+      linkLineComputer.get(), linkLibs, useResponseFileForLibs, depends,
+      linkLanguage, cmMakefileTargetGenerator::ResponseFlagFor::DeviceLink);
 
     // Construct object file lists that may be needed to expand the
     // rule.
     std::string buildObjs;
-    this->CreateObjectLists(useLinkScript, false, useResponseFileForObjects,
-                            buildObjs, depends, useWatcomQuote);
-
-    std::string const& aixExports = this->GetAIXExports(this->GetConfigName());
+    this->CreateObjectLists(
+      useLinkScript, false, useResponseFileForObjects, buildObjs, depends,
+      false, linkLanguage,
+      cmMakefileTargetGenerator::ResponseFlagFor::DeviceLink);
 
     cmRulePlaceholderExpander::RuleVariables vars;
     std::string objectDir = this->GeneratorTarget->GetSupportDirectory();
 
     objectDir = this->LocalGenerator->ConvertToOutputFormat(
-      this->LocalGenerator->MaybeConvertToRelativePath(
-        this->LocalGenerator->GetCurrentBinaryDirectory(), objectDir),
+      this->LocalGenerator->MaybeRelativeToCurBinDir(objectDir),
       cmOutputConverter::SHELL);
 
-    cmOutputConverter::OutputFormat output = (useWatcomQuote)
-      ? cmOutputConverter::WATCOMQUOTE
-      : cmOutputConverter::SHELL;
     std::string target = this->LocalGenerator->ConvertToOutputFormat(
-      this->LocalGenerator->MaybeConvertToRelativePath(
-        this->LocalGenerator->GetCurrentBinaryDirectory(), targetOutput),
-      output);
+      this->LocalGenerator->MaybeRelativeToCurBinDir(targetOutput),
+      cmOutputConverter::SHELL);
 
     std::string targetFullPathCompilePDB =
       this->ComputeTargetCompilePDB(this->GetConfigName());
@@ -222,7 +215,6 @@ void cmMakefileExecutableTargetGenerator::WriteNvidiaDeviceExecutableRule(
                                                   cmOutputConverter::SHELL);
 
     vars.Language = linkLanguage.c_str();
-    vars.AIXExports = aixExports.c_str();
     vars.Objects = buildObjs.c_str();
     vars.ObjectDir = objectDir.c_str();
     vars.Target = target.c_str();
@@ -233,18 +225,19 @@ void cmMakefileExecutableTargetGenerator::WriteNvidiaDeviceExecutableRule(
 
     std::string launcher;
 
-    cmProp val = this->LocalGenerator->GetRuleLauncher(this->GeneratorTarget,
-                                                       "RULE_LAUNCH_LINK");
+    std::string val = this->LocalGenerator->GetRuleLauncher(
+      this->GeneratorTarget, "RULE_LAUNCH_LINK",
+      this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE"));
     if (cmNonempty(val)) {
-      launcher = cmStrCat(*val, ' ');
+      launcher = cmStrCat(val, ' ');
     }
 
-    std::unique_ptr<cmRulePlaceholderExpander> rulePlaceholderExpander(
-      this->LocalGenerator->CreateRulePlaceholderExpander());
+    auto rulePlaceholderExpander =
+      this->LocalGenerator->CreateRulePlaceholderExpander();
 
     // Expand placeholders in the commands.
     rulePlaceholderExpander->SetTargetImpLib(targetOutput);
-    for (std::string& real_link_command : real_link_commands) {
+    for (auto& real_link_command : real_link_commands) {
       real_link_command = cmStrCat(launcher, real_link_command);
       rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator,
                                                    real_link_command, vars);
@@ -330,18 +323,14 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     targetFullPathPDB, cmOutputConverter::SHELL);
   // Convert to the output path to use in constructing commands.
   std::string targetOutPath = this->LocalGenerator->ConvertToOutputFormat(
-    this->LocalGenerator->MaybeConvertToRelativePath(
-      this->LocalGenerator->GetCurrentBinaryDirectory(), targetFullPath),
+    this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPath),
     cmOutputConverter::SHELL);
   std::string targetOutPathReal = this->LocalGenerator->ConvertToOutputFormat(
-    this->LocalGenerator->MaybeConvertToRelativePath(
-      this->LocalGenerator->GetCurrentBinaryDirectory(), targetFullPathReal),
+    this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPathReal),
     cmOutputConverter::SHELL);
   std::string targetOutPathImport =
     this->LocalGenerator->ConvertToOutputFormat(
-      this->LocalGenerator->MaybeConvertToRelativePath(
-        this->LocalGenerator->GetCurrentBinaryDirectory(),
-        targetFullPathImport),
+      this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPathImport),
       cmOutputConverter::SHELL);
 
   // Get the language to use for linking this executable.
@@ -384,11 +373,14 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   if (this->GeneratorTarget->IsWin32Executable(
         this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE"))) {
     this->LocalGenerator->AppendFlags(
-      linkFlags, this->Makefile->GetSafeDefinition("CMAKE_CREATE_WIN32_EXE"));
+      linkFlags,
+      this->Makefile->GetSafeDefinition(
+        cmStrCat("CMAKE_", linkLanguage, "_CREATE_WIN32_EXE")));
   } else {
     this->LocalGenerator->AppendFlags(
       linkFlags,
-      this->Makefile->GetSafeDefinition("CMAKE_CREATE_CONSOLE_EXE"));
+      this->Makefile->GetSafeDefinition(
+        cmStrCat("CMAKE_", linkLanguage, "_CREATE_CONSOLE_EXE")));
   }
 
   // Add symbol export flags if necessary.
@@ -403,9 +395,8 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
                                     this->LocalGenerator->GetLinkLibsCMP0065(
                                       linkLanguage, *this->GeneratorTarget));
 
-  if (this->GeneratorTarget->GetPropertyAsBool("LINK_WHAT_YOU_USE")) {
-    this->LocalGenerator->AppendFlags(linkFlags, " -Wl,--no-as-needed");
-  }
+  this->UseLWYU = this->LocalGenerator->AppendLWYUFlags(
+    linkFlags, this->GeneratorTarget, linkLanguage);
 
   // Add language feature flags.
   this->LocalGenerator->AddLanguageFlagsForLinking(
@@ -423,8 +414,9 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
         this->LocalGenerator,
         this->LocalGenerator->GetStateSnapshot().GetDirectory());
 
-    this->AddModuleDefinitionFlag(linkLineComputer.get(), linkFlags,
-                                  this->GetConfigName());
+    this->LocalGenerator->AppendModuleDefinitionFlag(
+      linkFlags, this->GeneratorTarget, linkLineComputer.get(),
+      this->GetConfigName());
   }
 
   this->LocalGenerator->AppendIPOLinkerFlags(
@@ -433,36 +425,34 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   // Construct a list of files associated with this executable that
   // may need to be cleaned.
   std::vector<std::string> exeCleanFiles;
-  exeCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
-    this->LocalGenerator->GetCurrentBinaryDirectory(), targetFullPath));
+  exeCleanFiles.push_back(
+    this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPath));
 #ifdef _WIN32
   // There may be a manifest file for this target.  Add it to the
   // clean set just in case.
-  exeCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
-    this->LocalGenerator->GetCurrentBinaryDirectory(),
+  exeCleanFiles.push_back(this->LocalGenerator->MaybeRelativeToCurBinDir(
     targetFullPath + ".manifest"));
 #endif
   if (this->TargetNames.Real != this->TargetNames.Output) {
-    exeCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
-      this->LocalGenerator->GetCurrentBinaryDirectory(), targetFullPathReal));
+    exeCleanFiles.push_back(
+      this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPathReal));
   }
   if (!this->TargetNames.ImportLibrary.empty()) {
-    exeCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
-      this->LocalGenerator->GetCurrentBinaryDirectory(),
-      targetFullPathImport));
+    exeCleanFiles.push_back(
+      this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPathImport));
     std::string implib;
     if (this->GeneratorTarget->GetImplibGNUtoMS(
           this->GetConfigName(), targetFullPathImport, implib)) {
-      exeCleanFiles.push_back(this->LocalGenerator->MaybeConvertToRelativePath(
-        this->LocalGenerator->GetCurrentBinaryDirectory(), implib));
+      exeCleanFiles.push_back(
+        this->LocalGenerator->MaybeRelativeToCurBinDir(implib));
     }
   }
 
   // List the PDB for cleaning only when the whole target is
   // cleaned.  We do not want to delete the .pdb file just before
   // linking the target.
-  this->CleanFiles.insert(this->LocalGenerator->MaybeConvertToRelativePath(
-    this->LocalGenerator->GetCurrentBinaryDirectory(), targetFullPathPDB));
+  this->CleanFiles.insert(
+    this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPathPDB));
 
   // Add the pre-build and pre-link rules building but not when relinking.
   if (!relink) {
@@ -478,18 +468,18 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
   bool useLinkScript = this->GlobalGenerator->GetUseLinkScript();
 
   // Construct the main link rule.
-  std::vector<std::string> real_link_commands;
   std::string linkRuleVar = this->GeneratorTarget->GetCreateRuleVariable(
     linkLanguage, this->GetConfigName());
   std::string linkRule = this->GetLinkRule(linkRuleVar);
   std::vector<std::string> commands1;
-  cmExpandList(linkRule, real_link_commands);
+  cmList real_link_commands(linkRule);
+
   if (this->GeneratorTarget->IsExecutableWithExports()) {
     // If a separate rule for creating an import library is specified
     // add it now.
     std::string implibRuleVar =
       cmStrCat("CMAKE_", linkLanguage, "_CREATE_IMPORT_LIBRARY");
-    this->Makefile->GetDefExpandList(implibRuleVar, real_link_commands);
+    real_link_commands.append(this->Makefile->GetDefinition(implibRuleVar));
   }
 
   bool useResponseFileForObjects =
@@ -516,18 +506,17 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     // Collect up flags to link in needed libraries.
     std::string linkLibs;
     this->CreateLinkLibs(linkLineComputer.get(), linkLibs,
-                         useResponseFileForLibs, depends);
+                         useResponseFileForLibs, depends, linkLanguage);
 
     // Construct object file lists that may be needed to expand the
     // rule.
     std::string buildObjs;
     this->CreateObjectLists(useLinkScript, false, useResponseFileForObjects,
-                            buildObjs, depends, useWatcomQuote);
+                            buildObjs, depends, useWatcomQuote, linkLanguage);
     if (!this->DeviceLinkObject.empty()) {
       buildObjs += " " +
         this->LocalGenerator->ConvertToOutputFormat(
-          this->LocalGenerator->MaybeConvertToRelativePath(
-            this->LocalGenerator->GetCurrentBinaryDirectory(),
+          this->LocalGenerator->MaybeRelativeToCurBinDir(
             this->DeviceLinkObject),
           cmOutputConverter::SHELL);
     }
@@ -537,26 +526,24 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
 
     std::string manifests = this->GetManifests(this->GetConfigName());
 
+    std::string const& aixExports = this->GetAIXExports(this->GetConfigName());
+
     cmRulePlaceholderExpander::RuleVariables vars;
     vars.CMTargetName = this->GeneratorTarget->GetName().c_str();
     vars.CMTargetType =
       cmState::GetTargetTypeName(this->GeneratorTarget->GetType()).c_str();
     vars.Language = linkLanguage.c_str();
+    vars.AIXExports = aixExports.c_str();
     vars.Objects = buildObjs.c_str();
     std::string objectDir = this->GeneratorTarget->GetSupportDirectory();
 
     objectDir = this->LocalGenerator->ConvertToOutputFormat(
-      this->LocalGenerator->MaybeConvertToRelativePath(
-        this->LocalGenerator->GetCurrentBinaryDirectory(), objectDir),
+      this->LocalGenerator->MaybeRelativeToCurBinDir(objectDir),
       cmOutputConverter::SHELL);
     vars.ObjectDir = objectDir.c_str();
-    cmOutputConverter::OutputFormat output = (useWatcomQuote)
-      ? cmOutputConverter::WATCOMQUOTE
-      : cmOutputConverter::SHELL;
     std::string target = this->LocalGenerator->ConvertToOutputFormat(
-      this->LocalGenerator->MaybeConvertToRelativePath(
-        this->LocalGenerator->GetCurrentBinaryDirectory(), targetFullPathReal),
-      output);
+      this->LocalGenerator->MaybeRelativeToCurBinDir(targetFullPathReal),
+      cmOutputConverter::SHELL, useWatcomQuote);
     vars.Target = target.c_str();
     vars.TargetPDB = targetOutPathPDB.c_str();
 
@@ -582,28 +569,41 @@ void cmMakefileExecutableTargetGenerator::WriteExecutableRule(bool relink)
     vars.LinkFlags = linkFlags.c_str();
     vars.Manifests = manifests.c_str();
 
-    if (this->GeneratorTarget->GetPropertyAsBool("LINK_WHAT_YOU_USE")) {
-      std::string cmakeCommand =
-        cmStrCat(this->LocalGenerator->ConvertToOutputFormat(
-                   cmSystemTools::GetCMakeCommand(), cmLocalGenerator::SHELL),
-                 " -E __run_co_compile --lwyu=", targetOutPathReal);
-      real_link_commands.push_back(std::move(cmakeCommand));
+    std::string linkerLauncher =
+      this->GetLinkerLauncher(this->GetConfigName());
+    if (cmNonempty(linkerLauncher)) {
+      vars.Launcher = linkerLauncher.c_str();
+    }
+
+    if (this->UseLWYU) {
+      cmValue lwyuCheck =
+        this->Makefile->GetDefinition("CMAKE_LINK_WHAT_YOU_USE_CHECK");
+      if (lwyuCheck) {
+        std::string cmakeCommand = cmStrCat(
+          this->LocalGenerator->ConvertToOutputFormat(
+            cmSystemTools::GetCMakeCommand(), cmLocalGenerator::SHELL),
+          " -E __run_co_compile --lwyu=");
+        cmakeCommand += this->LocalGenerator->EscapeForShell(*lwyuCheck);
+        cmakeCommand += cmStrCat(" --source=", targetOutPathReal);
+        real_link_commands.push_back(std::move(cmakeCommand));
+      }
     }
 
     std::string launcher;
 
-    cmProp val = this->LocalGenerator->GetRuleLauncher(this->GeneratorTarget,
-                                                       "RULE_LAUNCH_LINK");
+    std::string val = this->LocalGenerator->GetRuleLauncher(
+      this->GeneratorTarget, "RULE_LAUNCH_LINK",
+      this->Makefile->GetSafeDefinition("CMAKE_BUILD_TYPE"));
     if (cmNonempty(val)) {
-      launcher = cmStrCat(*val, ' ');
+      launcher = cmStrCat(val, ' ');
     }
 
-    std::unique_ptr<cmRulePlaceholderExpander> rulePlaceholderExpander(
-      this->LocalGenerator->CreateRulePlaceholderExpander());
+    auto rulePlaceholderExpander =
+      this->LocalGenerator->CreateRulePlaceholderExpander();
 
     // Expand placeholders in the commands.
     rulePlaceholderExpander->SetTargetImpLib(targetOutPathImport);
-    for (std::string& real_link_command : real_link_commands) {
+    for (auto& real_link_command : real_link_commands) {
       real_link_command = cmStrCat(launcher, real_link_command);
       rulePlaceholderExpander->ExpandRuleVariables(this->LocalGenerator,
                                                    real_link_command, vars);

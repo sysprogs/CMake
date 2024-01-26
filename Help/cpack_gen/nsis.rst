@@ -3,8 +3,8 @@ CPack NSIS Generator
 
 CPack Nullsoft Scriptable Install System (NSIS) generator specific options.
 
-.. versionchanged:: 3.17
- The NSIS generator requires NSIS 3.0 or newer.
+.. versionchanged:: 3.22
+ The NSIS generator requires NSIS 3.03 or newer.
 
 Variables specific to CPack NSIS generator
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -195,3 +195,46 @@ on Windows Nullsoft Scriptable Install System.
  If set, trim down the size of the control to the size of the branding text string.
  Allowed values for this variable are ``LEFT``, ``CENTER`` or ``RIGHT``.
  If not specified, the default behavior is ``LEFT``.
+
+.. variable:: CPACK_NSIS_EXECUTABLE
+
+ .. versionadded:: 3.21
+
+ If set, specify the name of the NSIS executable. Default is ``makensis``.
+
+.. variable:: CPACK_NSIS_IGNORE_LICENSE_PAGE
+
+ .. versionadded:: 3.22
+
+ If set, do not display the page containing the license during installation.
+
+.. variable:: CPACK_NSIS_EXECUTABLE_PRE_ARGUMENTS
+
+ .. versionadded:: 3.25
+
+ This variable is a :ref:`semicolon-separated list <CMake Language Lists>` of
+ arguments to prepend to the nsis script to run.
+ If the arguments do not start with a ``/`` or a ``-``, it will add one
+ automatically to the corresponding arguments.
+ The command that will be run is::
+
+    makensis.exe <preArgs>... "nsisFileName.nsi" <postArgs>...
+
+ where ``<preArgs>...`` is constructed from ``CPACK_NSIS_EXECUTABLE_PRE_ARGUMENTS``
+ and ``<postArgs>...``  is constructed from ``CPACK_NSIS_EXECUTABLE_POST_ARGUMENTS``.
+
+
+.. variable:: CPACK_NSIS_EXECUTABLE_POST_ARGUMENTS
+
+ .. versionadded:: 3.25
+
+ This variable is a :ref:`semicolon-separated list <CMake Language Lists>` of
+ arguments to append to the nsis script to run.
+ If the arguments do not start with a ``/`` or a ``-``, it will add one
+ automatically to the corresponding arguments.
+ The command that will be run is::
+
+    makensis.exe <preArgs>... "nsisFileName.nsi" <postArgs>...
+
+ where ``<preArgs>...`` is constructed from ``CPACK_NSIS_EXECUTABLE_PRE_ARGUMENTS``
+ and ``<postArgs>...``  is constructed from ``CPACK_NSIS_EXECUTABLE_POST_ARGUMENTS``.

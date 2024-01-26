@@ -22,6 +22,7 @@ class cmFindPathCommand : public cmFindBase
 {
 public:
   cmFindPathCommand(cmExecutionStatus& status);
+  cmFindPathCommand(std::string findCommandName, cmExecutionStatus& status);
 
   bool InitialPass(std::vector<std::string> const& args);
 
@@ -29,7 +30,8 @@ public:
 
 private:
   std::string FindHeaderInFramework(std::string const& file,
-                                    std::string const& dir) const;
+                                    std::string const& dir,
+                                    cmFindBaseDebugState& debug) const;
   std::string FindHeader();
   std::string FindNormalHeader(cmFindBaseDebugState& debug);
   std::string FindFrameworkHeader(cmFindBaseDebugState& debug);

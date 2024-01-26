@@ -1,7 +1,7 @@
 set(CMAKE_BUILD_WITH_INSTALL_RPATH 1)
 
 # Some compilers do not add build id to binaries by default.
-if(CMAKE_CXX_COMPILER_ID MATCHES "^(IntelLLVM|PGI|NVHPC)$")
+if(CMAKE_CXX_COMPILER_ID MATCHES "^(LCC|IntelLLVM|PGI|NVHPC)$")
   string(APPEND CMAKE_EXE_LINKER_FLAGS "-Wl,--build-id")
   string(APPEND CMAKE_SHARED_LINKER_FLAGS "-Wl,--build-id")
 endif()
@@ -27,6 +27,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/test_lib.hpp" DESTINATION include COM
 install(TARGETS test_prog DESTINATION foo COMPONENT applications)
 install(FILES CMakeLists.txt DESTINATION bar COMPONENT headers)
 install(TARGETS test_lib DESTINATION bas COMPONENT libs)
+
+set(CPACK_DEBIAN_DEBUGINFO_PACKAGE ON)
 
 set(CPACK_RPM_APPLICATIONS_FILE_NAME "RPM-DEFAULT")
 set(CPACK_RPM_APPLICATIONS_DEBUGINFO_PACKAGE ON)

@@ -36,7 +36,7 @@ __FBSDID("$FreeBSD$");
 #elif HAVE_BSDXML_H
 #include <bsdxml.h>
 #elif HAVE_EXPAT_H
-#include <expat.h>
+#include <cm3p/expat.h>
 #endif
 #ifdef HAVE_BZLIB_H
 #include <cm3p/bzlib.h>
@@ -458,6 +458,11 @@ archive_read_support_format_xar(struct archive *_a)
 		return (ARCHIVE_FATAL);
 	}
 
+	/* initialize xar->file_queue */
+	xar->file_queue.allocated = 0;
+	xar->file_queue.used = 0;
+	xar->file_queue.files = NULL;
+
 	r = __archive_read_register_format(a,
 	    xar,
 	    "xar",
@@ -619,7 +624,9 @@ read_toc(struct archive_read *a)
 		__archive_read_consume(a, xar->toc_chksum_size);
 		xar->offset += xar->toc_chksum_size;
 		if (r != ARCHIVE_OK)
+#ifndef DONT_FAIL_ON_CRC_ERROR
 			return (ARCHIVE_FATAL);
+#endif
 	}
 
 	/*
@@ -822,10 +829,12 @@ xar_read_header(struct archive_read *a, struct archive_entry *entry)
 		    xattr->a_sum.val, xattr->a_sum.len,
 		    xattr->e_sum.val, xattr->e_sum.len);
 		if (r != ARCHIVE_OK) {
+#ifndef DONT_FAIL_ON_CRC_ERROR
 			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
 			    "Xattr checksum error");
 			r = ARCHIVE_WARN;
 			break;
+#endif
 		}
 		if (xattr->name.s == NULL) {
 			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
@@ -1221,10 +1230,12 @@ heap_add_entry(struct archive_read *a,
 	/* Expand our pending files list as necessary. */
 	if (heap->used >= heap->allocated) {
 		struct xar_file **new_pending_files;
-		int new_size = heap->allocated * 2;
+		int new_size;
 
 		if (heap->allocated < 1024)
 			new_size = 1024;
+		else
+			new_size = heap->allocated * 2;
 		/* Overflow might keep us from growing the list. */
 		if (new_size <= heap->allocated) {
 			archive_set_error(&a->archive,
@@ -1238,9 +1249,11 @@ heap_add_entry(struct archive_read *a,
 			    ENOMEM, "Out of memory");
 			return (ARCHIVE_FATAL);
 		}
-		memcpy(new_pending_files, heap->files,
-		    heap->allocated * sizeof(new_pending_files[0]));
-		free(heap->files);
+		if (heap->allocated) {
+			memcpy(new_pending_files, heap->files,
+			    heap->allocated * sizeof(new_pending_files[0]));
+			free(heap->files);
+		}
 		heap->files = new_pending_files;
 		heap->allocated = new_size;
 	}

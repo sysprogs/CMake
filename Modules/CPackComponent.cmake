@@ -149,7 +149,7 @@ installed or not.
 REQUIRED indicates that this component is required, and therefore will
 always be installed.  It will be visible in the graphical installer,
 but it cannot be unselected.  (Typically, required components are
-shown greyed out).
+shown grayed out).
 
 DISABLED indicates that this component should be disabled (unselected)
 by default.  The user is free to select this component for
@@ -301,7 +301,7 @@ be built and installed on system using macOS 10.5 or later.
 
 The site argument is a URL where the archives for downloadable
 components will reside, e.g.,
-https://cmake.org/files/2.6.1/installer/ All of the archives
+https://cmake.org/files/v3.25/ All of the archives
 produced by CPack should be uploaded to that location.
 
 UPLOAD_DIRECTORY is the local directory where CPack will create the
@@ -327,32 +327,34 @@ OS X.
 if(NOT CPackComponent_CMake_INCLUDED)
 set(CPackComponent_CMake_INCLUDED 1)
 
-# Macro that appends a SET command for the given variable name (var)
-# to the macro named strvar, but only if the variable named "var"
+# Function that appends a SET command for the given variable name (var)
+# to the string named strvar, but only if the variable named "var"
 # has been defined. The string will eventually be appended to a CPack
 # configuration file.
-macro(cpack_append_variable_set_command var strvar)
+function(cpack_append_variable_set_command var strvar)
   if (DEFINED ${var})
     string(APPEND ${strvar} "set(${var}")
     foreach(APPENDVAL ${${var}})
       string(APPEND ${strvar} " ${APPENDVAL}")
     endforeach()
     string(APPEND ${strvar} ")\n")
+    set(${strvar} "${${strvar}}" PARENT_SCOPE)
   endif ()
-endmacro()
+endfunction()
 
-# Macro that appends a SET command for the given variable name (var)
-# to the macro named strvar, but only if the variable named "var"
+# Function that appends a SET command for the given variable name (var)
+# to the string named strvar, but only if the variable named "var"
 # has been defined and is a string. The string will eventually be
 # appended to a CPack configuration file.
-macro(cpack_append_string_variable_set_command var strvar)
+function(cpack_append_string_variable_set_command var strvar)
   if (DEFINED ${var})
     list(LENGTH ${var} CPACK_APP_VALUE_LEN)
     if(${CPACK_APP_VALUE_LEN} EQUAL 1)
       string(APPEND ${strvar} "set(${var} \"${${var}}\")\n")
     endif()
+    set(${strvar} "${${strvar}}" PARENT_SCOPE)
   endif ()
-endmacro()
+endfunction()
 
 # Macro that appends a SET command for the given list variable name (var)
 # to the macro named strvar, but only if the variable named "var"

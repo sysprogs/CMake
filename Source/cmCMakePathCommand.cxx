@@ -2,7 +2,6 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCMakePathCommand.h"
 
-#include <algorithm>
 #include <functional>
 #include <iomanip>
 #include <map>
@@ -11,17 +10,21 @@
 #include <utility>
 #include <vector>
 
+#include <cm/optional>
 #include <cm/string_view>
 #include <cmext/string_view>
 
 #include "cmArgumentParser.h"
+#include "cmArgumentParserTypes.h"
 #include "cmCMakePath.h"
 #include "cmExecutionStatus.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmRange.h"
 #include "cmStringAlgorithms.h"
 #include "cmSubcommandTable.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 namespace {
 // Helper classes for argument parsing
@@ -42,15 +45,12 @@ public:
   }
 
   template <int Advance = 2>
-  Result Parse(std::vector<std::string> const& args,
-               std::vector<std::string>* keywordsMissingValue = nullptr,
-               std::vector<std::string>* parsedKeywords = nullptr) const
+  Result Parse(std::vector<std::string> const& args) const
   {
     this->Inputs.clear();
 
     return this->cmArgumentParser<Result>::Parse(
-      cmMakeRange(args).advance(Advance), &this->Inputs, keywordsMissingValue,
-      parsedKeywords);
+      cmMakeRange(args).advance(Advance), &this->Inputs);
   }
 
   const std::vector<std::string>& GetInputs() const { return this->Inputs; }
@@ -81,52 +81,14 @@ public:
   template <int Advance = 2>
   Result Parse(std::vector<std::string> const& args) const
   {
-    this->KeywordsMissingValue.clear();
-    this->ParsedKeywords.clear();
-
     return this->CMakePathArgumentParser<Result>::template Parse<Advance>(
-      args, &this->KeywordsMissingValue, &this->ParsedKeywords);
+      args);
   }
-
-  const std::vector<std::string>& GetKeywordsMissingValue() const
-  {
-    return this->KeywordsMissingValue;
-  }
-  const std::vector<std::string>& GetParsedKeywords() const
-  {
-    return this->ParsedKeywords;
-  }
-
-  bool checkOutputVariable(const Result& arguments,
-                           cmExecutionStatus& status) const
-  {
-    if (std::find(this->GetKeywordsMissingValue().begin(),
-                  this->GetKeywordsMissingValue().end(),
-                  "OUTPUT_VARIABLE"_s) !=
-        this->GetKeywordsMissingValue().end()) {
-      status.SetError("OUTPUT_VARIABLE requires an argument.");
-      return false;
-    }
-
-    if (std::find(this->GetParsedKeywords().begin(),
-                  this->GetParsedKeywords().end(),
-                  "OUTPUT_VARIABLE"_s) != this->GetParsedKeywords().end() &&
-        arguments.Output.empty()) {
-      status.SetError("Invalid name for output variable.");
-      return false;
-    }
-
-    return true;
-  }
-
-private:
-  mutable std::vector<std::string> KeywordsMissingValue;
-  mutable std::vector<std::string> ParsedKeywords;
 };
 
-struct OutputVariable
+struct OutputVariable : public ArgumentParser::ParseResult
 {
-  std::string Output;
+  cm::optional<ArgumentParser::NonEmpty<std::string>> Output;
 };
 // Usable when OUTPUT_VARIABLE is the only option
 class OutputVariableParser
@@ -149,8 +111,8 @@ public:
 bool getInputPath(const std::string& arg, cmExecutionStatus& status,
                   std::string& path)
 {
-  const auto* def = status.GetMakefile().GetDefinition(arg);
-  if (def == nullptr) {
+  cmValue def = status.GetMakefile().GetDefinition(arg);
+  if (!def) {
     status.SetError("undefined variable for input path.");
     return false;
   }
@@ -296,8 +258,8 @@ bool HandleAppendCommand(std::vector<std::string> const& args,
 
   const auto arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   cmCMakePath path(status.GetMakefile().GetSafeDefinition(args[1]));
@@ -306,7 +268,7 @@ bool HandleAppendCommand(std::vector<std::string> const& args,
   }
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -318,8 +280,8 @@ bool HandleAppendStringCommand(std::vector<std::string> const& args,
 
   const auto arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   std::string inputPath;
@@ -333,7 +295,7 @@ bool HandleAppendStringCommand(std::vector<std::string> const& args,
   }
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -345,8 +307,8 @@ bool HandleRemoveFilenameCommand(std::vector<std::string> const& args,
 
   const auto arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   if (!parser.GetInputs().empty()) {
@@ -363,7 +325,7 @@ bool HandleRemoveFilenameCommand(std::vector<std::string> const& args,
   path.RemoveFileName();
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -375,8 +337,8 @@ bool HandleReplaceFilenameCommand(std::vector<std::string> const& args,
 
   const auto arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   if (parser.GetInputs().size() > 1) {
@@ -394,7 +356,7 @@ bool HandleReplaceFilenameCommand(std::vector<std::string> const& args,
     parser.GetInputs().empty() ? "" : parser.GetInputs().front());
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -402,9 +364,9 @@ bool HandleReplaceFilenameCommand(std::vector<std::string> const& args,
 bool HandleRemoveExtensionCommand(std::vector<std::string> const& args,
                                   cmExecutionStatus& status)
 {
-  struct Arguments
+  struct Arguments : public ArgumentParser::ParseResult
   {
-    std::string Output;
+    cm::optional<ArgumentParser::NonEmpty<std::string>> Output;
     bool LastOnly = false;
   };
 
@@ -414,8 +376,8 @@ bool HandleRemoveExtensionCommand(std::vector<std::string> const& args,
 
   Arguments const arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   if (!parser.GetInputs().empty()) {
@@ -437,7 +399,7 @@ bool HandleRemoveExtensionCommand(std::vector<std::string> const& args,
   }
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -445,9 +407,9 @@ bool HandleRemoveExtensionCommand(std::vector<std::string> const& args,
 bool HandleReplaceExtensionCommand(std::vector<std::string> const& args,
                                    cmExecutionStatus& status)
 {
-  struct Arguments
+  struct Arguments : public ArgumentParser::ParseResult
   {
-    std::string Output;
+    cm::optional<ArgumentParser::NonEmpty<std::string>> Output;
     bool LastOnly = false;
   };
 
@@ -457,8 +419,8 @@ bool HandleReplaceExtensionCommand(std::vector<std::string> const& args,
 
   Arguments const arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   if (parser.GetInputs().size() > 1) {
@@ -482,7 +444,7 @@ bool HandleReplaceExtensionCommand(std::vector<std::string> const& args,
   }
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -494,8 +456,8 @@ bool HandleNormalPathCommand(std::vector<std::string> const& args,
 
   const auto arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   if (!parser.GetInputs().empty()) {
@@ -511,7 +473,7 @@ bool HandleNormalPathCommand(std::vector<std::string> const& args,
   auto path = cmCMakePath(inputPath).Normal();
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -522,10 +484,10 @@ bool HandleTransformPathCommand(
                                   const std::string& base)>& transform,
   bool normalizeOption = false)
 {
-  struct Arguments
+  struct Arguments : public ArgumentParser::ParseResult
   {
-    std::string Output;
-    std::string BaseDirectory;
+    cm::optional<ArgumentParser::NonEmpty<std::string>> Output;
+    cm::optional<std::string> BaseDirectory;
     bool Normalize = false;
   };
 
@@ -537,8 +499,8 @@ bool HandleTransformPathCommand(
 
   Arguments arguments = parser.Parse(args);
 
-  if (!parser.checkOutputVariable(arguments, status)) {
-    return false;
+  if (arguments.MaybeReportError(status.GetMakefile())) {
+    return true;
   }
 
   if (!parser.GetInputs().empty()) {
@@ -546,17 +508,11 @@ bool HandleTransformPathCommand(
     return false;
   }
 
-  if (std::find(parser.GetKeywordsMissingValue().begin(),
-                parser.GetKeywordsMissingValue().end(), "BASE_DIRECTORY"_s) !=
-      parser.GetKeywordsMissingValue().end()) {
-    status.SetError("BASE_DIRECTORY requires an argument.");
-    return false;
-  }
-
-  if (std::find(parser.GetParsedKeywords().begin(),
-                parser.GetParsedKeywords().end(),
-                "BASE_DIRECTORY"_s) == parser.GetParsedKeywords().end()) {
-    arguments.BaseDirectory = status.GetMakefile().GetCurrentSourceDirectory();
+  std::string baseDirectory;
+  if (arguments.BaseDirectory) {
+    baseDirectory = *arguments.BaseDirectory;
+  } else {
+    baseDirectory = status.GetMakefile().GetCurrentSourceDirectory();
   }
 
   std::string inputPath;
@@ -564,13 +520,13 @@ bool HandleTransformPathCommand(
     return false;
   }
 
-  auto path = transform(cmCMakePath(inputPath), arguments.BaseDirectory);
+  auto path = transform(cmCMakePath(inputPath), baseDirectory);
   if (arguments.Normalize) {
     path = path.Normal();
   }
 
   status.GetMakefile().AddDefinition(
-    arguments.Output.empty() ? args[1] : arguments.Output, path.String());
+    arguments.Output ? *arguments.Output : args[1], path.String());
 
   return true;
 }
@@ -671,12 +627,12 @@ bool HandleConvertCommand(std::vector<std::string> const& args,
     return false;
   }
 
-  std::vector<std::string> paths;
+  cmList paths;
 
   if (action == cmakePath) {
     paths = cmSystemTools::SplitString(args[1], pathSep.front());
   } else {
-    cmExpandList(args[1], paths);
+    paths.assign(args[1]);
   }
 
   for (auto& path : paths) {
@@ -693,7 +649,7 @@ bool HandleConvertCommand(std::vector<std::string> const& args,
     }
   }
 
-  auto value = cmJoin(paths, action == cmakePath ? ";"_s : pathSep);
+  auto value = action == cmakePath ? paths.to_string() : paths.join(pathSep);
   status.GetMakefile().AddDefinition(args[3], value);
 
   return true;

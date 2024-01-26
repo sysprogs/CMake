@@ -1,12 +1,19 @@
 #include "cmVisualStudioGeneratorOptions.h"
 
+#include <algorithm>
+#include <map>
+#include <sstream>
+#include <utility>
+#include <vector>
+
 #include <cm/iterator>
+#include <cmext/string_view>
 
 #include "cmAlgorithms.h"
-#include "cmGeneratorExpression.h"
-#include "cmGeneratorTarget.h"
 #include "cmLocalVisualStudioGenerator.h"
 #include "cmOutputConverter.h"
+#include "cmRange.h"
+#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 
 static void cmVS10EscapeForMSBuild(std::string& ret)
@@ -45,9 +52,9 @@ cmVisualStudioGeneratorOptions::cmVisualStudioGeneratorOptions(
 void cmVisualStudioGeneratorOptions::AddTable(cmVS7FlagTable const* table)
 {
   if (table) {
-    for (int i = 0; i < FlagTableCount; ++i) {
-      if (!this->FlagTable[i]) {
-        this->FlagTable[i] = table;
+    for (auto& flag : this->FlagTable) {
+      if (!flag) {
+        flag = table;
         break;
       }
     }
@@ -56,8 +63,8 @@ void cmVisualStudioGeneratorOptions::AddTable(cmVS7FlagTable const* table)
 
 void cmVisualStudioGeneratorOptions::ClearTables()
 {
-  for (int i = 0; i < FlagTableCount; ++i) {
-    this->FlagTable[i] = nullptr;
+  for (auto& flag : this->FlagTable) {
+    flag = nullptr;
   }
 }
 
@@ -69,12 +76,11 @@ void cmVisualStudioGeneratorOptions::FixExceptionHandlingDefault()
   // the flag to disable exception handling.  When the user does
   // remove the flag we need to override the IDE default of on.
   switch (this->Version) {
-    case cmGlobalVisualStudioGenerator::VS10:
-    case cmGlobalVisualStudioGenerator::VS11:
-    case cmGlobalVisualStudioGenerator::VS12:
-    case cmGlobalVisualStudioGenerator::VS14:
-    case cmGlobalVisualStudioGenerator::VS15:
-    case cmGlobalVisualStudioGenerator::VS16:
+    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
+    case cmGlobalVisualStudioGenerator::VSVersion::VS14:
+    case cmGlobalVisualStudioGenerator::VSVersion::VS15:
+    case cmGlobalVisualStudioGenerator::VSVersion::VS16:
+    case cmGlobalVisualStudioGenerator::VSVersion::VS17:
       // by default VS puts <ExceptionHandling></ExceptionHandling> empty
       // for a project, to make our projects look the same put a new line
       // and space over for the closing </ExceptionHandling> as the default
@@ -94,14 +100,13 @@ void cmVisualStudioGeneratorOptions::SetVerboseMakefile(bool verbose)
   // to the generated project to disable logo suppression.  Otherwise
   // the GUI default is to enable suppression.
   //
-  // On Visual Studio 10 (and later!), the value of this attribute should be
-  // an empty string, instead of "FALSE", in order to avoid a warning:
-  //   "cl ... warning D9035: option 'nologo-' has been deprecated"
-  //
+  // On Visual Studio 9, the value of this attribute should be
+  // "FALSE", instead of an empty string.
   if (verbose &&
       this->FlagMap.find("SuppressStartupBanner") == this->FlagMap.end()) {
     this->FlagMap["SuppressStartupBanner"] =
-      this->Version < cmGlobalVisualStudioGenerator::VS10 ? "FALSE" : "";
+      this->Version == cmGlobalVisualStudioGenerator::VSVersion::VS9 ? "FALSE"
+                                                                     : "";
   }
 }
 
@@ -110,11 +115,10 @@ bool cmVisualStudioGeneratorOptions::IsDebug() const
   if (this->CurrentTool != CSharpCompiler) {
     return this->FlagMap.find("DebugInformationFormat") != this->FlagMap.end();
   }
-  std::map<std::string, FlagValue>::const_iterator i =
-    this->FlagMap.find("DebugType");
+  auto i = this->FlagMap.find("DebugType");
   if (i != this->FlagMap.end()) {
     if (i->second.size() == 1) {
-      return i->second[0] != "none";
+      return i->second[0] != "none"_s;
     }
   }
   return false;
@@ -133,85 +137,24 @@ bool cmVisualStudioGeneratorOptions::IsManaged() const
 bool cmVisualStudioGeneratorOptions::UsingUnicode() const
 {
   // Look for a _UNICODE definition.
-  for (std::string const& di : this->Defines) {
-    if (di == "_UNICODE") {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(this->Defines.begin(), this->Defines.end(),
+                     [](std::string const& di) { return di == "_UNICODE"_s; });
 }
 bool cmVisualStudioGeneratorOptions::UsingSBCS() const
 {
   // Look for a _SBCS definition.
-  for (std::string const& di : this->Defines) {
-    if (di == "_SBCS") {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(this->Defines.begin(), this->Defines.end(),
+                     [](std::string const& di) { return di == "_SBCS"_s; });
 }
 
 void cmVisualStudioGeneratorOptions::FixCudaCodeGeneration()
 {
-  // Extract temporary values stored by our flag table.
-  FlagValue arch = this->TakeFlag("cmake-temp-arch");
-  FlagValue code = this->TakeFlag("cmake-temp-code");
-  FlagValue gencode = this->TakeFlag("cmake-temp-gencode");
-
-  // No -code allowed without -arch.
-  if (arch.empty()) {
-    code.clear();
-  }
-
-  if (arch.empty() && gencode.empty()) {
-    return;
-  }
-
-  // Create a CodeGeneration field with [arch],[code] syntax in each entry.
-  // CUDA will convert it to `-gencode=arch=[arch],code="[code],[arch]"`.
-  FlagValue& result = this->FlagMap["CodeGeneration"];
-
-  // First entries for the -arch=<arch> [-code=<code>,...] pair.
-  if (!arch.empty()) {
-    std::string arch_name = arch[0];
-    std::vector<std::string> codes;
-    if (!code.empty()) {
-      codes = cmTokenize(code[0], ",");
-    }
-    if (codes.empty()) {
-      codes.push_back(arch_name);
-      // nvcc -arch=<arch> has a special case that allows a real
-      // architecture to be specified instead of a virtual arch.
-      // It translates to -arch=<virtual> -code=<real>.
-      cmSystemTools::ReplaceString(arch_name, "sm_", "compute_");
-    }
-    for (std::string const& c : codes) {
-      std::string entry = arch_name + "," + c;
-      result.push_back(entry);
-    }
-  }
-
-  // Now add entries for the following signatures:
-  // -gencode=<arch>,<code>
-  // -gencode=<arch>,[<code1>,<code2>]
-  // -gencode=<arch>,"<code1>,<code2>"
-  for (std::string const& e : gencode) {
-    std::string entry = e;
-    cmSystemTools::ReplaceString(entry, "arch=", "");
-    cmSystemTools::ReplaceString(entry, "code=", "");
-    cmSystemTools::ReplaceString(entry, "[", "");
-    cmSystemTools::ReplaceString(entry, "]", "");
-    cmSystemTools::ReplaceString(entry, "\"", "");
-
-    std::vector<std::string> codes = cmTokenize(entry, ",");
-    if (codes.size() >= 2) {
-      auto gencode_arch = cm::cbegin(codes);
-      for (auto ci = gencode_arch + 1; ci != cm::cend(codes); ++ci) {
-        std::string code_entry = *gencode_arch + "," + *ci;
-        result.push_back(code_entry);
-      }
-    }
-  }
+  // Create an empty CodeGeneration field, and pass the the actual
+  // compile flags via additional options so that we have consistent
+  // behavior and avoid issues with MSBuild extensions injecting
+  // virtual code when we request real only.
+  FlagValue& code_gen_flag = this->FlagMap["CodeGeneration"];
+  code_gen_flag = "";
 }
 
 void cmVisualStudioGeneratorOptions::FixManifestUACFlags()
@@ -229,7 +172,7 @@ void cmVisualStudioGeneratorOptions::FixManifestUACFlags()
     return;
   }
 
-  if (subOptions.size() == 1 && subOptions[0] == "NO") {
+  if (subOptions.size() == 1 && subOptions[0] == "NO"_s) {
     AddFlag(ENABLE_UAC, "false");
     return;
   }
@@ -256,7 +199,7 @@ void cmVisualStudioGeneratorOptions::FixManifestUACFlags()
         1, std::max(std::string::size_type(0), keyValue[1].length() - 2));
     }
 
-    if (keyValue[0] == "level") {
+    if (keyValue[0] == "level"_s) {
       if (uacExecuteLevelMap.find(keyValue[1]) == uacExecuteLevelMap.end()) {
         // unknown level value
         continue;
@@ -266,8 +209,8 @@ void cmVisualStudioGeneratorOptions::FixManifestUACFlags()
       continue;
     }
 
-    if (keyValue[0] == "uiAccess") {
-      if (keyValue[1] != "true" && keyValue[1] != "false") {
+    if (keyValue[0] == "uiAccess"_s) {
+      if (keyValue[1] != "true"_s && keyValue[1] != "false"_s) {
         // unknown uiAccess value
         continue;
       }
@@ -315,15 +258,14 @@ void cmVisualStudioGeneratorOptions::ParseFinish()
   }
 
   if (this->CurrentTool == CudaCompiler) {
-    std::map<std::string, FlagValue>::iterator i =
-      this->FlagMap.find("CudaRuntime");
+    auto i = this->FlagMap.find("CudaRuntime");
     if (i != this->FlagMap.end() && i->second.size() == 1) {
       std::string& cudaRuntime = i->second[0];
-      if (cudaRuntime == "static") {
+      if (cudaRuntime == "static"_s) {
         cudaRuntime = "Static";
-      } else if (cudaRuntime == "shared") {
+      } else if (cudaRuntime == "shared"_s) {
         cudaRuntime = "Shared";
-      } else if (cudaRuntime == "none") {
+      } else if (cudaRuntime == "none"_s) {
         cudaRuntime = "None";
       }
     }
@@ -333,17 +275,17 @@ void cmVisualStudioGeneratorOptions::ParseFinish()
 void cmVisualStudioGeneratorOptions::PrependInheritedString(
   std::string const& key)
 {
-  std::map<std::string, FlagValue>::iterator i = this->FlagMap.find(key);
+  auto i = this->FlagMap.find(key);
   if (i == this->FlagMap.end() || i->second.size() != 1) {
     return;
   }
   std::string& value = i->second[0];
-  value = "%(" + key + ") " + value;
+  value = cmStrCat("%(", key, ") ", value);
 }
 
 void cmVisualStudioGeneratorOptions::Reparse(std::string const& key)
 {
-  std::map<std::string, FlagValue>::iterator i = this->FlagMap.find(key);
+  auto i = this->FlagMap.find(key);
   if (i == this->FlagMap.end() || i->second.size() != 1) {
     return;
   }
@@ -357,19 +299,19 @@ void cmVisualStudioGeneratorOptions::StoreUnknownFlag(std::string const& flag)
 {
   // Look for Intel Fortran flags that do not map well in the flag table.
   if (this->CurrentTool == FortranCompiler) {
-    if (flag == "/dbglibs" || flag == "-dbglibs") {
+    if (flag == "/dbglibs"_s || flag == "-dbglibs"_s) {
       this->FortranRuntimeDebug = true;
       return;
     }
-    if (flag == "/threads" || flag == "-threads") {
+    if (flag == "/threads"_s || flag == "-threads"_s) {
       this->FortranRuntimeMT = true;
       return;
     }
-    if (flag == "/libs:dll" || flag == "-libs:dll") {
+    if (flag == "/libs:dll"_s || flag == "-libs:dll"_s) {
       this->FortranRuntimeDLL = true;
       return;
     }
-    if (flag == "/libs:static" || flag == "-libs:static") {
+    if (flag == "/libs:static"_s || flag == "-libs:static"_s) {
       this->FortranRuntimeDLL = false;
       return;
     }
@@ -387,7 +329,7 @@ cmIDEOptions::FlagValue cmVisualStudioGeneratorOptions::TakeFlag(
   std::string const& key)
 {
   FlagValue value;
-  std::map<std::string, FlagValue>::iterator i = this->FlagMap.find(key);
+  auto i = this->FlagMap.find(key);
   if (i != this->FlagMap.end()) {
     value = i->second;
     this->FlagMap.erase(i);
@@ -413,35 +355,32 @@ void cmVisualStudioGeneratorOptions::OutputPreprocessorDefinitions(
     return;
   }
   std::string tag = "PreprocessorDefinitions";
-  if (lang == "CUDA") {
+  if (lang == "CUDA"_s) {
     tag = "Defines";
   }
 
   std::ostringstream oss;
-  const char* sep = "";
-  std::vector<std::string>::const_iterator de =
-    cmRemoveDuplicates(this->Defines);
+  if (this->Version != cmGlobalVisualStudioGenerator::VSVersion::VS9) {
+    oss << "%(" << tag << ')';
+  }
+  auto de = cmRemoveDuplicates(this->Defines);
   for (std::string const& di : cmMakeRange(this->Defines.cbegin(), de)) {
     // Escape the definition for the compiler.
     std::string define;
-    if (this->Version < cmGlobalVisualStudioGenerator::VS10) {
+    if (this->Version == cmGlobalVisualStudioGenerator::VSVersion::VS9) {
       define = this->LocalGenerator->EscapeForShell(di, true);
     } else {
       define = di;
     }
     // Escape this flag for the MSBuild.
-    if (this->Version >= cmGlobalVisualStudioGenerator::VS10) {
+    if (this->Version != cmGlobalVisualStudioGenerator::VSVersion::VS9) {
       cmVS10EscapeForMSBuild(define);
-      if (lang == "RC") {
+      if (lang == "RC"_s) {
         cmSystemTools::ReplaceString(define, "\"", "\\\"");
       }
     }
     // Store the flag in the project file.
-    oss << sep << define;
-    sep = ";";
-  }
-  if (this->Version >= cmGlobalVisualStudioGenerator::VS10) {
-    oss << ";%(" << tag << ")";
+    oss << ';' << define;
   }
 
   this->OutputFlag(fout, indent, tag, oss.str());
@@ -455,9 +394,9 @@ void cmVisualStudioGeneratorOptions::OutputAdditionalIncludeDirectories(
   }
 
   std::string tag = "AdditionalIncludeDirectories";
-  if (lang == "CUDA") {
+  if (lang == "CUDA"_s) {
     tag = "Include";
-  } else if (lang == "ASM_MASM" || lang == "ASM_NASM") {
+  } else if (lang == "ASM_MASM"_s || lang == "ASM_NASM"_s) {
     tag = "IncludePaths";
   }
 
@@ -471,25 +410,25 @@ void cmVisualStudioGeneratorOptions::OutputAdditionalIncludeDirectories(
       pos++;
     }
 
-    if (lang == "ASM_NASM") {
-      include += "\\";
+    if (lang == "ASM_NASM"_s) {
+      include += '\\';
     }
 
     // Escape this include for the MSBuild.
-    if (this->Version >= cmGlobalVisualStudioGenerator::VS10) {
+    if (this->Version != cmGlobalVisualStudioGenerator::VSVersion::VS9) {
       cmVS10EscapeForMSBuild(include);
     }
     oss << sep << include;
     sep = ";";
 
-    if (lang == "Fortran") {
+    if (lang == "Fortran"_s) {
       include += "/$(ConfigurationName)";
       oss << sep << include;
     }
   }
 
-  if (this->Version >= cmGlobalVisualStudioGenerator::VS10) {
-    oss << sep << "%(" << tag << ")";
+  if (this->Version != cmGlobalVisualStudioGenerator::VSVersion::VS9) {
+    oss << sep << "%(" << tag << ')';
   }
 
   this->OutputFlag(fout, indent, tag, oss.str());
@@ -502,7 +441,7 @@ void cmVisualStudioGeneratorOptions::OutputFlagMap(std::ostream& fout,
     std::ostringstream oss;
     const char* sep = "";
     for (std::string i : m.second) {
-      if (this->Version >= cmGlobalVisualStudioGenerator::VS10) {
+      if (this->Version != cmGlobalVisualStudioGenerator::VSVersion::VS9) {
         cmVS10EscapeForMSBuild(i);
       }
       oss << sep << i;

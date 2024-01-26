@@ -44,6 +44,7 @@ namespace {
 
 const char* LastName = nullptr;
 
+extern "C" void TrapsForSignals(int sig);
 extern "C" void TrapsForSignals(int sig)
 {
   fprintf(stderr, "CMake loaded command %s crashed with signal: %d.\n",
@@ -90,6 +91,9 @@ struct LoadedCommandImpl : cmLoadedCommandInfo
   {
     if (this->Destructor) {
       SignalHandlerGuard guard(this->Name);
+#if defined(__NVCOMPILER) || defined(__LCC__)
+      static_cast<void>(guard); // convince compiler var is used
+#endif
       this->Destructor(this);
     }
     if (this->Error != nullptr) {
@@ -103,12 +107,18 @@ struct LoadedCommandImpl : cmLoadedCommandInfo
   int DoInitialPass(cmMakefile* mf, int argc, char* argv[])
   {
     SignalHandlerGuard guard(this->Name);
+#if defined(__NVCOMPILER) || defined(__LCC__)
+    static_cast<void>(guard); // convince compiler var is used
+#endif
     return this->InitialPass(this, mf, argc, argv);
   }
 
   void DoFinalPass(cmMakefile* mf)
   {
     SignalHandlerGuard guard(this->Name);
+#if defined(__NVCOMPILER) || defined(__LCC__)
+    static_cast<void>(guard); // convince compiler var is used
+#endif
     this->FinalPass(this, mf);
   }
 };

@@ -32,7 +32,7 @@ macro(_cmake_find_compiler lang)
   endif()
 
   # Look for directories containing compilers of reference languages.
-  set(_${lang}_COMPILER_HINTS)
+  set(_${lang}_COMPILER_HINTS "${CMAKE_${lang}_COMPILER_HINTS}")
   foreach(l ${_languages})
     if(CMAKE_${l}_COMPILER AND IS_ABSOLUTE "${CMAKE_${l}_COMPILER}")
       get_filename_component(_hint "${CMAKE_${l}_COMPILER}" PATH)
@@ -53,10 +53,9 @@ macro(_cmake_find_compiler lang)
       NO_DEFAULT_PATH
       DOC "${lang} compiler")
   endif()
-  if(CMAKE_HOST_WIN32 AND CMAKE_GENERATOR MATCHES "Ninja")
-    # On Windows command-line builds, the Makefile generators each imply
-    # a preferred compiler tool.  The Ninja generator does not imply a
-    # compiler tool, so use the compiler that occurs first in PATH.
+  if(CMAKE_HOST_WIN32 AND CMAKE_GENERATOR MATCHES "Ninja|MSYS Makefiles|MinGW Makefiles")
+    # On Windows command-line builds, some generators imply a preferred compiler tool.
+    # These generators do not, so use the compiler that occurs first in PATH.
     find_program(CMAKE_${lang}_COMPILER
       NAMES ${CMAKE_${lang}_COMPILER_LIST}
       NAMES_PER_DIR
@@ -68,6 +67,16 @@ macro(_cmake_find_compiler lang)
       )
   endif()
   find_program(CMAKE_${lang}_COMPILER NAMES ${CMAKE_${lang}_COMPILER_LIST} DOC "${lang} compiler")
+  if(_CMAKE_${lang}_COMPILER_PATHS)
+    # As a last fall-back, search in language-specific paths
+    find_program(CMAKE_${lang}_COMPILER
+      NAMES ${CMAKE_${lang}_COMPILER_LIST}
+      NAMES_PER_DIR
+      PATHS ${_CMAKE_${lang}_COMPILER_PATHS}
+      DOC "${lang} compiler"
+      NO_DEFAULT_PATH
+      )
+  endif()
   if(CMAKE_${lang}_COMPILER_INIT AND NOT CMAKE_${lang}_COMPILER)
     set_property(CACHE CMAKE_${lang}_COMPILER PROPERTY VALUE "${CMAKE_${lang}_COMPILER_INIT}")
   endif()
@@ -109,9 +118,15 @@ macro(_cmake_find_compiler_path lang)
     # (e.g. via ctest) or set in CMAKE_TOOLCHAIN_FILE
     # if CMAKE_${lang}_COMPILER is a list, use the first item as
     # CMAKE_${lang}_COMPILER and the rest as CMAKE_${lang}_COMPILER_ARG1
-    set(CMAKE_${lang}_COMPILER_ARG1 "${CMAKE_${lang}_COMPILER}")
-    list(POP_FRONT CMAKE_${lang}_COMPILER_ARG1 CMAKE_${lang}_COMPILER)
-    list(JOIN CMAKE_${lang}_COMPILER_ARG1 " " CMAKE_${lang}_COMPILER_ARG1)
+    # Otherwise, preserve any existing CMAKE_${lang}_COMPILER_ARG1 that might
+    # have been saved by CMakeDetermine${lang}Compiler in a previous run.
+    list(LENGTH CMAKE_${lang}_COMPILER _CMAKE_${lang}_COMPILER_LENGTH)
+    if(_CMAKE_${lang}_COMPILER_LENGTH GREATER 1)
+      set(CMAKE_${lang}_COMPILER_ARG1 "${CMAKE_${lang}_COMPILER}")
+      list(POP_FRONT CMAKE_${lang}_COMPILER_ARG1 CMAKE_${lang}_COMPILER)
+      list(JOIN CMAKE_${lang}_COMPILER_ARG1 " " CMAKE_${lang}_COMPILER_ARG1)
+    endif()
+    unset(_CMAKE_${lang}_COMPILER_LENGTH)
 
     # find the compiler in the PATH if necessary
     # if compiler (and arguments) comes from cache then synchronize cache with updated CMAKE_<LANG>_COMPILER
@@ -138,7 +153,7 @@ macro(_cmake_find_compiler_path lang)
 endmacro()
 
 function(_cmake_find_compiler_sysroot lang)
-  if(CMAKE_${lang}_COMPILER_ID STREQUAL "GNU")
+  if(CMAKE_${lang}_COMPILER_ID STREQUAL "GNU" OR CMAKE_${lang}_COMPILER_ID STREQUAL "LCC")
     execute_process(COMMAND "${CMAKE_${lang}_COMPILER}" -print-sysroot
       OUTPUT_STRIP_TRAILING_WHITESPACE
       OUTPUT_VARIABLE _cmake_sysroot_run_out

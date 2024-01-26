@@ -26,18 +26,16 @@ Check if the variable exists.
 The following variables may be set before calling this macro to modify
 the way the check is run:
 
-``CMAKE_REQUIRED_FLAGS``
-  string of compile command line flags.
-``CMAKE_REQUIRED_DEFINITIONS``
-  list of macros to define (-DFOO=bar).
-``CMAKE_REQUIRED_LINK_OPTIONS``
-  .. versionadded:: 3.14
-    list of options to pass to link command.
-``CMAKE_REQUIRED_LIBRARIES``
-  list of libraries to link.
-``CMAKE_REQUIRED_QUIET``
-  .. versionadded:: 3.1
-    execute quietly without messages.
+.. include:: /module/CMAKE_REQUIRED_FLAGS.txt
+
+.. include:: /module/CMAKE_REQUIRED_DEFINITIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_LINK_OPTIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_LIBRARIES.txt
+
+.. include:: /module/CMAKE_REQUIRED_QUIET.txt
+
 #]=======================================================================]
 
 include_guard(GLOBAL)
@@ -62,29 +60,22 @@ macro(CHECK_VARIABLE_EXISTS VAR VARIABLE)
       set(CHECK_VARIABLE_EXISTS_ADD_LIBRARIES)
     endif()
     try_compile(${VARIABLE}
-      ${CMAKE_BINARY_DIR}
-      ${CMAKE_ROOT}/Modules/CheckVariableExists.c
+      SOURCES ${CMAKE_ROOT}/Modules/CheckVariableExists.c
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
       ${CHECK_VARIABLE_EXISTS_ADD_LINK_OPTIONS}
       ${CHECK_VARIABLE_EXISTS_ADD_LIBRARIES}
       CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_VARIABLE_DEFINITIONS}
-      OUTPUT_VARIABLE OUTPUT)
+      )
     if(${VARIABLE})
       set(${VARIABLE} 1 CACHE INTERNAL "Have variable ${VAR}")
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_PASS "found")
       endif()
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Determining if the variable ${VAR} exists passed with the following output:\n"
-        "${OUTPUT}\n\n")
     else()
       set(${VARIABLE} "" CACHE INTERNAL "Have variable ${VAR}")
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_FAIL "not found")
       endif()
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Determining if the variable ${VAR} exists failed with the following output:\n"
-        "${OUTPUT}\n\n")
     endif()
   endif()
 endmacro()

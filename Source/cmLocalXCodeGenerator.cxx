@@ -2,14 +2,19 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmLocalXCodeGenerator.h"
 
+#include <memory>
+#include <ostream>
+#include <utility>
+
+#include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalXCodeGenerator.h"
 #include "cmMakefile.h"
 #include "cmSourceFile.h"
+#include "cmStringAlgorithms.h"
+#include "cmSystemTools.h"
 
-class cmGeneratorTarget;
 class cmGlobalGenerator;
-class cmMakefile;
 
 cmLocalXCodeGenerator::cmLocalXCodeGenerator(cmGlobalGenerator* gg,
                                              cmMakefile* mf)
@@ -26,7 +31,7 @@ std::string cmLocalXCodeGenerator::GetTargetDirectory(
   cmGeneratorTarget const*) const
 {
   // No per-target directory for this generator (yet).
-  return "";
+  return std::string{};
 }
 
 void cmLocalXCodeGenerator::AppendFlagEscape(std::string& flags,
@@ -78,6 +83,12 @@ void cmLocalXCodeGenerator::AddGeneratorSpecificInstallSetup(std::ostream& os)
       case cmMakefile::AppleSDK::WatchSimulator:
         platformName = "watchsimulator";
         break;
+      case cmMakefile::AppleSDK::XROS:
+        platformName = "xros";
+        break;
+      case cmMakefile::AppleSDK::XRSimulator:
+        platformName = "xrsimulator";
+        break;
       case cmMakefile::AppleSDK::MacOS:
         break;
     }
@@ -128,5 +139,24 @@ void cmLocalXCodeGenerator::ComputeObjectFilenames(
       // TODO: emit warning about duplicate name?
     }
     si.second = objectName;
+  }
+}
+
+void cmLocalXCodeGenerator::AddXCConfigSources(cmGeneratorTarget* target)
+{
+  auto xcconfig = target->GetProperty("XCODE_XCCONFIG");
+  if (!xcconfig) {
+    return;
+  }
+  auto configs = target->Makefile->GetGeneratorConfigs(
+                          cmMakefile::IncludeEmptyConfig);
+
+  for (auto& config : configs) {
+    auto file = cmGeneratorExpression::Evaluate(
+      *xcconfig,
+      this, config);
+    if (!file.empty()) {
+      target->AddSource(file);
+    }
   }
 }

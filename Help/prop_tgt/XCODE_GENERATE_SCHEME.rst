@@ -30,6 +30,9 @@ at target creation time.
 - :prop_tgt:`XCODE_SCHEME_THREAD_SANITIZER_STOP`
 - :prop_tgt:`XCODE_SCHEME_UNDEFINED_BEHAVIOUR_SANITIZER`
 - :prop_tgt:`XCODE_SCHEME_UNDEFINED_BEHAVIOUR_SANITIZER_STOP`
+- :prop_tgt:`XCODE_SCHEME_LAUNCH_CONFIGURATION`
+- :prop_tgt:`XCODE_SCHEME_ENABLE_GPU_API_VALIDATION`
+- :prop_tgt:`XCODE_SCHEME_ENABLE_GPU_SHADER_VALIDATION`
 - :prop_tgt:`XCODE_SCHEME_ZOMBIE_OBJECTS`
 
 The following target properties will be applied on the
@@ -38,6 +41,8 @@ The following target properties will be applied on the
 - :prop_tgt:`XCODE_SCHEME_ARGUMENTS`
 - :prop_tgt:`XCODE_SCHEME_DEBUG_AS_ROOT`
 - :prop_tgt:`XCODE_SCHEME_DEBUG_DOCUMENT_VERSIONING`
+- :prop_tgt:`XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE`
 - :prop_tgt:`XCODE_SCHEME_ENVIRONMENT`
 - :prop_tgt:`XCODE_SCHEME_EXECUTABLE`
+- :prop_tgt:`XCODE_SCHEME_LAUNCH_MODE`
 - :prop_tgt:`XCODE_SCHEME_WORKING_DIRECTORY`

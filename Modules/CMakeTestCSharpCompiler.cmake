@@ -12,8 +12,6 @@ include(CMakeTestCompilerCommon)
 
 unset(CMAKE_CSharp_COMPILER_WORKS CACHE)
 
-set(test_compile_file "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testCSharpCompiler.cs")
-
 # This file is used by EnableLanguage in cmGlobalGenerator to
 # determine that the selected C# compiler can actually compile
 # and link the most basic of programs. If not, a fatal error
@@ -23,16 +21,21 @@ if(NOT CMAKE_CSharp_COMPILER_WORKS)
   # Don't call PrintTestCompilerStatus() because the "C#" we want to pass
   # as the LANG doesn't match with the variable name "CMAKE_CSharp_COMPILER"
   message(CHECK_START "Check for working C# compiler: ${CMAKE_CSharp_COMPILER}")
-  file(WRITE "${test_compile_file}"
-    "namespace Test {"
-    "   public class CSharp {"
-    "       static void Main(string[] args) {}"
-    "   }"
-    "}"
+  string(CONCAT __TestCompiler_testCSharpCompilerSource
+    "namespace Test {\n"
+    "   public class CSharp {\n"
+    "       static void Main(string[] args) {}\n"
+    "   }\n"
+    "}\n"
     )
-  try_compile(CMAKE_CSharp_COMPILER_WORKS ${CMAKE_BINARY_DIR} "${test_compile_file}"
+  # Clear result from normal variable.
+  unset(CMAKE_CSharp_COMPILER_WORKS)
+  # Puts test result in cache variable.
+  try_compile(CMAKE_CSharp_COMPILER_WORKS
+    SOURCE_FROM_VAR testCSharpCompiler.cs __TestCompiler_testCSharpCompilerSource
     OUTPUT_VARIABLE __CMAKE_CSharp_COMPILER_OUTPUT
     )
+  unset(__TestCompiler_testCSharpCompilerSource)
   # Move result from cache to normal variable.
   set(CMAKE_CSharp_COMPILER_WORKS ${CMAKE_CSharp_COMPILER_WORKS})
   unset(CMAKE_CSharp_COMPILER_WORKS CACHE)
@@ -41,9 +44,6 @@ endif()
 
 if(NOT CMAKE_CSharp_COMPILER_WORKS)
   PrintTestCompilerResult(CHECK_FAIL "broken")
-  file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-    "Determining if the C# compiler works failed with "
-    "the following output:\n${__CMAKE_CSharp_COMPILER_OUTPUT}\n\n")
   string(REPLACE "\n" "\n  " _output "${__CMAKE_CSharp_COMPILER_OUTPUT}")
   message(FATAL_ERROR "The C# compiler\n  \"${CMAKE_CSharp_COMPILER}\"\n"
     "is not able to compile a simple test program.\nIt fails "
@@ -52,9 +52,6 @@ if(NOT CMAKE_CSharp_COMPILER_WORKS)
 else()
   if(CSharp_TEST_WAS_RUN)
     PrintTestCompilerResult(CHECK_PASS "works")
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-      "Determining if the C# compiler works passed with "
-      "the following output:\n${__CMAKE_CSharp_COMPILER_OUTPUT}\n\n")
   endif()
 
   # Re-configure to save learned information.

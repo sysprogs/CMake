@@ -26,6 +26,10 @@
 
 #include <stdio.h>
 
+#ifdef __clang_analyzer__
+#include <assert.h>
+#endif
+
 #include "nghttp2_helper.h"
 #include "nghttp2_debug.h"
 
@@ -82,8 +86,10 @@ void nghttp2_buf_reset(nghttp2_buf *buf) {
 }
 
 void nghttp2_buf_wrap_init(nghttp2_buf *buf, uint8_t *begin, size_t len) {
-  buf->begin = buf->pos = buf->last = buf->mark = begin;
-  buf->end = begin + len;
+  buf->begin = buf->pos = buf->last = buf->mark = buf->end = begin;
+  if (len) {
+    buf->end += len;
+  }
 }
 
 static int buf_chain_new(nghttp2_buf_chain **chain, size_t chunk_length,
@@ -384,6 +390,10 @@ int nghttp2_bufs_addb(nghttp2_bufs *bufs, uint8_t b) {
     return rv;
   }
 
+#ifdef __clang_analyzer__
+  assert(bufs->cur->buf.last);
+#endif
+
   *bufs->cur->buf.last++ = b;
 
   return 0;
@@ -397,6 +407,10 @@ int nghttp2_bufs_addb_hold(nghttp2_bufs *bufs, uint8_t b) {
     return rv;
   }
 
+#ifdef __clang_analyzer__
+  assert(bufs->cur->buf.last);
+#endif
+
   *bufs->cur->buf.last = b;
 
   return 0;
@@ -409,6 +423,10 @@ int nghttp2_bufs_orb(nghttp2_bufs *bufs, uint8_t b) {
   if (rv != 0) {
     return rv;
   }
+
+#ifdef __clang_analyzer__
+  assert(bufs->cur->buf.last);
+#endif
 
   *bufs->cur->buf.last++ |= b;
 

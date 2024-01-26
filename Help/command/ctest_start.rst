@@ -3,7 +3,7 @@ ctest_start
 
 Starts the testing for a given model
 
-::
+.. code-block:: cmake
 
   ctest_start(<model> [<source> [<binary>]] [GROUP <group>] [QUIET])
 
@@ -45,7 +45,7 @@ The parameters are as follows:
 
     ctest_start(Experimental GROUP GroupExperimental)
 
-  Later, in another ``ctest -S`` script:
+  Later, in another :option:`ctest -S` script:
 
   .. code-block:: cmake
 

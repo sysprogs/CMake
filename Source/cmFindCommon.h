@@ -11,6 +11,7 @@
 
 #include "cmPathLabel.h"
 #include "cmSearchPath.h"
+#include "cmWindowsRegistry.h"
 
 class cmExecutionStatus;
 class cmMakefile;
@@ -82,12 +83,21 @@ protected:
   /** Place a set of search paths under the search roots.  */
   void RerootPaths(std::vector<std::string>& paths);
 
-  /** Get ignored paths from CMAKE_[SYSTEM_]IGNORE_path variables.  */
+  /** Get ignored paths from CMAKE_[SYSTEM_]IGNORE_PATH variables.  */
   void GetIgnoredPaths(std::vector<std::string>& ignore);
   void GetIgnoredPaths(std::set<std::string>& ignore);
 
+  /** Get ignored paths from CMAKE_[SYSTEM_]IGNORE_PREFIX_PATH variables.  */
+  void GetIgnoredPrefixPaths(std::vector<std::string>& ignore);
+  void GetIgnoredPrefixPaths(std::set<std::string>& ignore);
+
   /** Compute final search path list (reroot + trailing slash).  */
-  void ComputeFinalPaths();
+  enum class IgnorePaths
+  {
+    No,
+    Yes,
+  };
+  void ComputeFinalPaths(IgnorePaths ignorePaths);
 
   /** Compute the current default root path mode.  */
   void SelectDefaultRootPathMode();
@@ -99,8 +109,9 @@ protected:
   void SelectDefaultSearchModes();
 
   /** The `InitialPass` functions of the child classes should set
-      this->DebugMode to the result of this.  */
+      this->DebugMode to the result of these.  */
   bool ComputeIfDebugModeWanted();
+  bool ComputeIfDebugModeWanted(std::string const& var);
 
   // Path arguments prior to path manipulation routines
   std::vector<std::string> UserHintsArgs;
@@ -120,6 +131,8 @@ protected:
   bool NoCMakeEnvironmentPath;
   bool NoSystemEnvironmentPath;
   bool NoCMakeSystemPath;
+  bool NoCMakeInstallPath;
+  cmWindowsRegistry::View RegistryView = cmWindowsRegistry::View::Target;
 
   std::vector<std::string> SearchPathSuffixes;
 
@@ -129,7 +142,7 @@ protected:
   std::map<PathLabel, cmSearchPath> LabeledPaths;
 
   std::vector<std::string> SearchPaths;
-  std::set<std::string> SearchPathsEmitted;
+  std::set<cmSearchPath::PathWithPrefix> SearchPathsEmitted;
 
   bool SearchFrameworkFirst;
   bool SearchFrameworkOnly;

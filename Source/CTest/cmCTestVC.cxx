@@ -7,11 +7,10 @@
 #include <sstream>
 #include <vector>
 
-#include "cmsys/Process.h"
-
 #include "cmCTest.h"
-#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmUVProcessChain.h"
+#include "cmValue.h"
 #include "cmXMLWriter.h"
 
 cmCTestVC::cmCTestVC(cmCTest* ct, std::ostream& log)
@@ -55,18 +54,12 @@ bool cmCTestVC::InitialCheckout(const std::string& command)
 
   // Construct the initial checkout command line.
   std::vector<std::string> args = cmSystemTools::ParseArguments(command);
-  std::vector<char const*> vc_co;
-  vc_co.reserve(args.size() + 1);
-  for (std::string const& arg : args) {
-    vc_co.push_back(arg.c_str());
-  }
-  vc_co.push_back(nullptr);
 
   // Run the initial checkout command and log its output.
   this->Log << "--- Begin Initial Checkout ---\n";
   OutputLogger out(this->Log, "co-out> ");
   OutputLogger err(this->Log, "co-err> ");
-  bool result = this->RunChild(&vc_co[0], &out, &err, parent.c_str());
+  bool result = this->RunChild(args, &out, &err, parent);
   this->Log << "--- End Initial Checkout ---\n";
   if (!result) {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
@@ -75,35 +68,35 @@ bool cmCTestVC::InitialCheckout(const std::string& command)
   return result;
 }
 
-bool cmCTestVC::RunChild(char const* const* cmd, OutputParser* out,
-                         OutputParser* err, const char* workDir,
-                         Encoding encoding)
+bool cmCTestVC::RunChild(const std::vector<std::string>& cmd,
+                         OutputParser* out, OutputParser* err,
+                         std::string workDir, Encoding encoding)
 {
   this->Log << cmCTestVC::ComputeCommandLine(cmd) << "\n";
 
-  cmsysProcess* cp = cmsysProcess_New();
-  cmsysProcess_SetCommand(cp, cmd);
-  workDir = workDir ? workDir : this->SourceDirectory.c_str();
-  cmsysProcess_SetWorkingDirectory(cp, workDir);
-  cmCTestVC::RunProcess(cp, out, err, encoding);
-  int result = cmsysProcess_GetExitValue(cp);
-  cmsysProcess_Delete(cp);
-  return result == 0;
+  cmUVProcessChainBuilder builder;
+  if (workDir.empty()) {
+    workDir = this->SourceDirectory;
+  }
+  builder.AddCommand(cmd).SetWorkingDirectory(workDir);
+  auto status = cmCTestVC::RunProcess(builder, out, err, encoding);
+  return status.front().SpawnResult == 0 && status.front().ExitStatus == 0;
 }
 
-std::string cmCTestVC::ComputeCommandLine(char const* const* cmd)
+std::string cmCTestVC::ComputeCommandLine(const std::vector<std::string>& cmd)
 {
   std::ostringstream line;
   const char* sep = "";
-  for (const char* const* arg = cmd; *arg; ++arg) {
-    line << sep << "\"" << *arg << "\"";
+  for (auto const& arg : cmd) {
+    line << sep << "\"" << arg << "\"";
     sep = " ";
   }
   return line.str();
 }
 
-bool cmCTestVC::RunUpdateCommand(char const* const* cmd, OutputParser* out,
-                                 OutputParser* err, Encoding encoding)
+bool cmCTestVC::RunUpdateCommand(const std::vector<std::string>& cmd,
+                                 OutputParser* out, OutputParser* err,
+                                 Encoding encoding)
 {
   // Report the command line.
   this->UpdateCommandLine = this->ComputeCommandLine(cmd);
@@ -113,7 +106,7 @@ bool cmCTestVC::RunUpdateCommand(char const* const* cmd, OutputParser* out,
   }
 
   // Run the command.
-  return this->RunChild(cmd, out, err, nullptr, encoding);
+  return this->RunChild(cmd, out, err, "", encoding);
 }
 
 std::string cmCTestVC::GetNightlyTime()
@@ -123,9 +116,10 @@ std::string cmCTestVC::GetNightlyTime()
     this->CTest->GetCTestConfiguration("NightlyStartTime"),
     this->CTest->GetTomorrowTag());
   char current_time[1024];
-  sprintf(current_time, "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year + 1900,
-          t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-  return std::string(current_time);
+  snprintf(current_time, sizeof(current_time), "%04d-%02d-%02d %02d:%02d:%02d",
+           t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min,
+           t->tm_sec);
+  return { current_time };
 }
 
 void cmCTestVC::Cleanup()

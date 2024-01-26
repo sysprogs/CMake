@@ -83,7 +83,7 @@ to 1 all prerequisites will be found recursively, if set to 0 only
 direct prerequisites are listed.  <exclude_system> must be 0 or 1
 indicating whether to include or exclude "system" prerequisites.  With
 <verbose> set to 0 only the full path names of the prerequisites are
-printed, set to 1 extra informatin will be displayed.
+printed, set to 1 extra information will be displayed.
 
 ::
 
@@ -746,7 +746,7 @@ function(get_prerequisites target prerequisites_var exclude_system recurse exepa
     set(gp_regex_error "")
     set(gp_regex_fallback "")
     set(gp_regex_cmp_count 1)
-  elseif(gp_tool MATCHES "objdump$")
+  elseif(gp_tool MATCHES "objdump(\\.exe)?$")
     set(gp_cmd_args "-p")
     set(gp_regex "^\t*DLL Name: (.*\\.[Dd][Ll][Ll])${eol_char}$")
     set(gp_regex_error "")
@@ -755,11 +755,13 @@ function(get_prerequisites target prerequisites_var exclude_system recurse exepa
     # objdump generates copious output so we create a grep filter to pre-filter results
     if(WIN32)
       find_program(gp_grep_cmd findstr)
+      set(gp_grep_cmd_arg "")
     else()
       find_program(gp_grep_cmd grep)
+      set(gp_grep_cmd_arg "-a")
     endif()
     if(gp_grep_cmd)
-      set(gp_cmd_maybe_filter COMMAND ${gp_grep_cmd} "-a" "^[[:blank:]]*DLL Name: ")
+      set(gp_cmd_maybe_filter COMMAND ${gp_grep_cmd} "${gp_grep_cmd_arg}" "^[[:blank:]]*DLL Name: ")
     endif()
   else()
     message(STATUS "warning: gp_tool='${gp_tool}' is an unknown tool...")

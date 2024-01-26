@@ -12,6 +12,7 @@
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 
 bool cmAddLibraryCommand(std::vector<std::string> const& args,
                          cmExecutionStatus& status)
@@ -128,6 +129,10 @@ bool cmAddLibraryCommand(std::vector<std::string> const& args,
     } else {
       break;
     }
+  }
+
+  if (importTarget && !importGlobal) {
+    importGlobal = mf.IsImportedTargetGlobalScope();
   }
 
   if (type == cmStateEnums::INTERFACE_LIBRARY) {

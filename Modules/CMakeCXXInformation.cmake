@@ -193,6 +193,15 @@ foreach(type SHARED_LIBRARY SHARED_MODULE EXE)
   endif()
 endforeach()
 
+if(CMAKE_EXECUTABLE_FORMAT STREQUAL "ELF")
+  if(NOT DEFINED CMAKE_CXX_LINK_WHAT_YOU_USE_FLAG)
+    set(CMAKE_CXX_LINK_WHAT_YOU_USE_FLAG "LINKER:--no-as-needed")
+  endif()
+  if(NOT DEFINED CMAKE_LINK_WHAT_YOU_USE_CHECK)
+    set(CMAKE_LINK_WHAT_YOU_USE_CHECK ldd -u -r)
+  endif()
+endif()
+
 # add the flags to the cache based
 # on the initial values computed in the platform/*.cmake files
 # use _INIT variables so that this only happens the first time
@@ -210,6 +219,11 @@ endif()
 if(NOT CMAKE_CXX_COMPILER_LAUNCHER AND DEFINED ENV{CMAKE_CXX_COMPILER_LAUNCHER})
   set(CMAKE_CXX_COMPILER_LAUNCHER "$ENV{CMAKE_CXX_COMPILER_LAUNCHER}"
     CACHE STRING "Compiler launcher for CXX.")
+endif()
+
+if(NOT CMAKE_CXX_LINKER_LAUNCHER AND DEFINED ENV{CMAKE_CXX_LINKER_LAUNCHER})
+  set(CMAKE_CXX_LINKER_LAUNCHER "$ENV{CMAKE_CXX_LINKER_LAUNCHER}"
+    CACHE STRING "Linker launcher for CXX.")
 endif()
 
 include(CMakeCommonLanguageInclude)

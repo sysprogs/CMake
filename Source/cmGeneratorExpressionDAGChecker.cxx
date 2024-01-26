@@ -27,6 +27,7 @@ cmGeneratorExpressionDAGChecker::cmGeneratorExpressionDAGChecker(
   , Content(content)
   , Backtrace(std::move(backtrace))
   , TransitivePropertiesOnly(false)
+  , CMP0131(false)
 {
   this->Initialize();
 }
@@ -41,6 +42,7 @@ cmGeneratorExpressionDAGChecker::cmGeneratorExpressionDAGChecker(
   , Content(content)
   , Backtrace()
   , TransitivePropertiesOnly(false)
+  , CMP0131(false)
 {
   this->Initialize();
 }
@@ -143,6 +145,12 @@ bool cmGeneratorExpressionDAGChecker::GetTransitivePropertiesOnly() const
   return this->Top()->TransitivePropertiesOnly;
 }
 
+bool cmGeneratorExpressionDAGChecker::GetTransitivePropertiesOnlyCMP0131()
+  const
+{
+  return this->Top()->CMP0131;
+}
+
 bool cmGeneratorExpressionDAGChecker::EvaluatingGenexExpression() const
 {
   return cmHasLiteralPrefix(this->Property, "TARGET_GENEX_EVAL:") ||
@@ -167,7 +175,7 @@ bool cmGeneratorExpressionDAGChecker::EvaluatingLinkExpression() const
   cm::string_view property(this->Top()->Property);
 
   return property == "LINK_DIRECTORIES"_s || property == "LINK_OPTIONS"_s ||
-    property == "LINK_DEPENDS"_s;
+    property == "LINK_DEPENDS"_s || property == "LINK_LIBRARY_OVERRIDE"_s;
 }
 
 bool cmGeneratorExpressionDAGChecker::EvaluatingLinkOptionsExpression() const
@@ -177,8 +185,17 @@ bool cmGeneratorExpressionDAGChecker::EvaluatingLinkOptionsExpression() const
   return property == "LINK_OPTIONS"_s;
 }
 
+bool cmGeneratorExpressionDAGChecker::EvaluatingLinkerLauncher() const
+{
+  cm::string_view property(this->Top()->Property);
+
+  return property.length() > cmStrLen("_LINKER_LAUNCHER") &&
+    property.substr(property.length() - cmStrLen("_LINKER_LAUNCHER")) ==
+    "_LINKER_LAUNCHER"_s;
+}
+
 bool cmGeneratorExpressionDAGChecker::EvaluatingLinkLibraries(
-  cmGeneratorTarget const* tgt) const
+  cmGeneratorTarget const* tgt, ForGenex genex) const
 {
   const auto* top = this->Top();
 
@@ -188,11 +205,17 @@ bool cmGeneratorExpressionDAGChecker::EvaluatingLinkLibraries(
     return top->Target == tgt && prop == "LINK_LIBRARIES"_s;
   }
 
-  return prop == "LINK_LIBRARIES"_s || prop == "LINK_INTERFACE_LIBRARIES"_s ||
+  auto result = prop == "LINK_LIBRARIES"_s ||
+    prop == "INTERFACE_LINK_LIBRARIES"_s ||
+    prop == "INTERFACE_LINK_LIBRARIES_DIRECT"_s ||
+    prop == "LINK_INTERFACE_LIBRARIES"_s ||
     prop == "IMPORTED_LINK_INTERFACE_LIBRARIES"_s ||
     cmHasLiteralPrefix(prop, "LINK_INTERFACE_LIBRARIES_") ||
-    cmHasLiteralPrefix(prop, "IMPORTED_LINK_INTERFACE_LIBRARIES_") ||
-    prop == "INTERFACE_LINK_LIBRARIES"_s;
+    cmHasLiteralPrefix(prop, "IMPORTED_LINK_INTERFACE_LIBRARIES_");
+
+  return genex == ForGenex::LINK_LIBRARY || genex == ForGenex::LINK_GROUP
+    ? result
+    : (result || prop == "INTERFACE_LINK_LIBRARIES_DIRECT_EXCLUDE"_s);
 }
 
 cmGeneratorExpressionDAGChecker const* cmGeneratorExpressionDAGChecker::Top()

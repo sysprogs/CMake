@@ -11,9 +11,11 @@
 
 #include "cmExportFileGenerator.h"
 
+class cmFileSet;
 class cmGeneratorTarget;
 class cmGlobalGenerator;
 class cmMakefile;
+class cmTargetExport;
 
 class cmExportTryCompileFileGenerator : public cmExportFileGenerator
 {
@@ -31,12 +33,11 @@ protected:
   bool GenerateMainFile(std::ostream& os) override;
 
   void GenerateImportTargetsConfig(std::ostream&, const std::string&,
-                                   std::string const&,
-                                   std::vector<std::string>&) override
+                                   std::string const&) override
   {
   }
-  void HandleMissingTarget(std::string&, std::vector<std::string>&,
-                           cmGeneratorTarget*, cmGeneratorTarget*) override
+  void HandleMissingTarget(std::string&, cmGeneratorTarget const*,
+                           cmGeneratorTarget*) override
   {
   }
 
@@ -44,8 +45,18 @@ protected:
                           ImportPropertyMap& properties,
                           std::set<const cmGeneratorTarget*>& emitted);
 
-  std::string InstallNameDir(cmGeneratorTarget* target,
+  std::string InstallNameDir(cmGeneratorTarget const* target,
                              const std::string& config) override;
+
+  std::string GetFileSetDirectories(cmGeneratorTarget* target,
+                                    cmFileSet* fileSet,
+                                    cmTargetExport* te) override;
+
+  std::string GetFileSetFiles(cmGeneratorTarget* target, cmFileSet* fileSet,
+                              cmTargetExport* te) override;
+
+  std::string GetCxxModulesDirectory() const override { return {}; }
+  void GenerateCxxModuleConfigInformation(std::ostream&) const override {}
 
 private:
   std::string FindTargets(const std::string& prop,

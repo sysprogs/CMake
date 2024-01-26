@@ -14,6 +14,7 @@
 #include "cmExportFileGenerator.h"
 #include "cmStateTypes.h"
 
+class cmFileSet;
 class cmGeneratorTarget;
 class cmGlobalGenerator;
 class cmInstallExportGenerator;
@@ -49,6 +50,23 @@ public:
     return this->ConfigImportFiles;
   }
 
+  /** Get the per-config C++ module file generated for each configuration.
+      This maps from the configuration name to the file temporary location
+      for installation.  */
+  std::map<std::string, std::string> const& GetConfigCxxModuleFiles()
+  {
+    return this->ConfigCxxModuleFiles;
+  }
+
+  /** Get the per-config C++ module file generated for each configuration.
+      This maps from the configuration name to the file temporary location
+      for installation for each target in the export set.  */
+  std::map<std::string, std::vector<std::string>> const&
+  GetConfigCxxModuleTargetFiles()
+  {
+    return this->ConfigCxxModuleTargetFiles;
+  }
+
   /** Compute the globbing expression used to load per-config import
       files from the main file.  */
   std::string GetConfigImportFileGlob();
@@ -56,20 +74,18 @@ public:
 protected:
   // Implement virtual methods from the superclass.
   bool GenerateMainFile(std::ostream& os) override;
-  void GenerateImportTargetsConfig(
-    std::ostream& os, const std::string& config, std::string const& suffix,
-    std::vector<std::string>& missingTargets) override;
+  void GenerateImportTargetsConfig(std::ostream& os, const std::string& config,
+                                   std::string const& suffix) override;
   cmStateEnums::TargetType GetExportTargetType(
     cmTargetExport const* targetExport) const;
   void HandleMissingTarget(std::string& link_libs,
-                           std::vector<std::string>& missingTargets,
-                           cmGeneratorTarget* depender,
+                           cmGeneratorTarget const* depender,
                            cmGeneratorTarget* dependee) override;
 
   void ReplaceInstallPrefix(std::string& input) override;
 
-  void ComplainAboutMissingTarget(cmGeneratorTarget* depender,
-                                  cmGeneratorTarget* dependee,
+  void ComplainAboutMissingTarget(cmGeneratorTarget const* depender,
+                                  cmGeneratorTarget const* dependee,
                                   std::vector<std::string> const& exportFiles);
 
   std::pair<std::vector<std::string>, std::string> FindNamespaces(
@@ -84,8 +100,7 @@ protected:
   virtual void CleanupTemporaryVariables(std::ostream&);
 
   /** Generate a per-configuration file for the targets.  */
-  virtual bool GenerateImportFileConfig(
-    const std::string& config, std::vector<std::string>& missingTargets);
+  virtual bool GenerateImportFileConfig(const std::string& config);
 
   /** Fill in properties indicating installed file locations.  */
   void SetImportLocationProperty(const std::string& config,
@@ -94,11 +109,24 @@ protected:
                                  ImportPropertyMap& properties,
                                  std::set<std::string>& importedLocations);
 
-  std::string InstallNameDir(cmGeneratorTarget* target,
+  std::string InstallNameDir(cmGeneratorTarget const* target,
                              const std::string& config) override;
+
+  std::string GetFileSetDirectories(cmGeneratorTarget* gte, cmFileSet* fileSet,
+                                    cmTargetExport* te) override;
+  std::string GetFileSetFiles(cmGeneratorTarget* gte, cmFileSet* fileSet,
+                              cmTargetExport* te) override;
+
+  std::string GetCxxModulesDirectory() const override;
+  void GenerateCxxModuleConfigInformation(std::ostream&) const override;
+  bool GenerateImportCxxModuleConfigTargetInclusion(std::string const&);
 
   cmInstallExportGenerator* IEGen;
 
   // The import file generated for each configuration.
   std::map<std::string, std::string> ConfigImportFiles;
+  // The C++ module property file generated for each configuration.
+  std::map<std::string, std::string> ConfigCxxModuleFiles;
+  // The C++ module property target files generated for each configuration.
+  std::map<std::string, std::vector<std::string>> ConfigCxxModuleTargetFiles;
 };

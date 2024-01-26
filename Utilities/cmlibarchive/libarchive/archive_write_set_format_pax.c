@@ -1028,10 +1028,8 @@ archive_write_pax_header(struct archive_write *a,
 	archive_string_init(&entry_name);
 	archive_strcpy(&entry_name, archive_entry_pathname(entry_main));
 
-	/* If file size is too large, add 'size' to pax extended attrs. */
+	/* If file size is too large, we need pax extended attrs. */
 	if (archive_entry_size(entry_main) >= (((int64_t)1) << 33)) {
-		add_pax_attr_int(&(pax->pax_header), "size",
-		    archive_entry_size(entry_main));
 		need_extension = 1;
 	}
 
@@ -1345,6 +1343,12 @@ archive_write_pax_header(struct archive_write *a,
 		pax->sparse_map_padding = 0x1ff & (-(ssize_t)mapsize);
 		archive_entry_set_size(entry_main,
 		    mapsize + pax->sparse_map_padding + sparse_total);
+	}
+
+	/* If file size is too large, add 'size' to pax extended attrs. */
+	if (archive_entry_size(entry_main) >= (((int64_t)1) << 33)) {
+		add_pax_attr_int(&(pax->pax_header), "size",
+		    archive_entry_size(entry_main));
 	}
 
 	/* Format 'ustar' header for main entry.
@@ -1713,7 +1717,7 @@ build_pax_attribute_name(char *dest, const char *src)
 	 * to having clients override it.
 	 */
 #if HAVE_GETPID && 0  /* Disable this for now; see above comment. */
-	sprintf(buff, "PaxHeader.%d", getpid());
+	snprintf(buff, sizeof(buff), "PaxHeader.%d", getpid());
 #else
 	/* If the platform can't fetch the pid, don't include it. */
 	strcpy(buff, "PaxHeader");

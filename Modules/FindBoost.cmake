@@ -189,7 +189,7 @@ This module defines the following :prop_tgt:`IMPORTED` targets:
   (adds ``-DBOOST_ALL_NO_LIB``).
 
 ``Boost::dynamic_linking``
-  Interface target to enable dynamic linking linking with MSVC
+  Interface target to enable dynamic linking with MSVC
   (adds ``-DBOOST_ALL_DYN_LINK``).
 
 Implicit dependencies such as ``Boost::filesystem`` requiring
@@ -390,7 +390,7 @@ cmake_policy(SET CMP0102 NEW) # if mark_as_advanced(non_cache_var)
 
 function(_boost_get_existing_target component target_var)
   set(names "${component}")
-  if(component MATCHES "^([a-z_]*)(python|numpy)([1-9])\\.?([0-9])?$")
+  if(component MATCHES "^([a-z_]*)(python|numpy)([1-9])\\.?([0-9]+)?$")
     # handle pythonXY and numpyXY versioned components and also python X.Y, mpi_python etc.
     list(APPEND names
       "${CMAKE_MATCH_1}${CMAKE_MATCH_2}" # python
@@ -407,7 +407,7 @@ function(_boost_get_existing_target component target_var)
       if(TARGET "${prefix}::${name}")
         # The target may be an INTERFACE library that wraps around a single other
         # target for compatibility.  Unwrap this layer so we can extract real info.
-        if("${name}" MATCHES "^(python|numpy|mpi_python)([1-9])([0-9])$")
+        if("${name}" MATCHES "^(python|numpy|mpi_python)([1-9])([0-9]+)$")
           set(name_nv "${CMAKE_MATCH_1}")
           if(TARGET "${prefix}::${name_nv}")
             get_property(type TARGET "${prefix}::${name}" PROPERTY TYPE)
@@ -430,7 +430,7 @@ endfunction()
 
 function(_boost_get_canonical_target_name component target_var)
   string(TOLOWER "${component}" component)
-  if(component MATCHES "^([a-z_]*)(python|numpy)([1-9])\\.?([0-9])?$")
+  if(component MATCHES "^([a-z_]*)(python|numpy)([1-9])\\.?([0-9]+)?$")
     # handle pythonXY and numpyXY versioned components and also python X.Y, mpi_python etc.
     set(${target_var} "Boost::${CMAKE_MATCH_1}${CMAKE_MATCH_2}" PARENT_SCOPE)
   else()
@@ -917,14 +917,14 @@ function(_Boost_GUESS_COMPILER_PREFIX _ret)
     if(NOT Boost_VERSION_STRING VERSION_LESS 1.69.0)
       # From GCC 5 and clang 4, versioning changes and minor becomes patch.
       # For those compilers, patch is exclude from compiler tag in Boost 1.69+ library naming.
-      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND _boost_COMPILER_VERSION_MAJOR VERSION_GREATER 4)
+      if((CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND _boost_COMPILER_VERSION_MAJOR VERSION_GREATER 4) OR CMAKE_CXX_COMPILER_ID STREQUAL "LCC")
         set(_boost_COMPILER_VERSION "${_boost_COMPILER_VERSION_MAJOR}")
       elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND _boost_COMPILER_VERSION_MAJOR VERSION_GREATER 3)
         set(_boost_COMPILER_VERSION "${_boost_COMPILER_VERSION_MAJOR}")
       endif()
     endif()
 
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "LCC")
       if(Boost_VERSION_STRING VERSION_LESS 1.34)
         set(_boost_COMPILER "-gcc") # no GCC version encoding prior to 1.34
       else()
@@ -1004,7 +1004,7 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
   # against the new release.
 
   # Handle Python version suffixes
-  if(component MATCHES "^(python|mpi_python|numpy)([0-9][0-9]?|[0-9]\\.[0-9])\$")
+  if(component MATCHES "^(python|mpi_python|numpy)([0-9][0-9]?|[0-9]\\.[0-9]+)\$")
     set(component "${CMAKE_MATCH_1}")
     set(component_python_version "${CMAKE_MATCH_2}")
   endif()
@@ -1335,7 +1335,7 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
       set(_Boost_TIMER_DEPENDENCIES chrono)
       set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono date_time atomic)
       set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
-    else()
+    elseif(Boost_VERSION_STRING VERSION_LESS 1.77.0)
       set(_Boost_CONTRACT_DEPENDENCIES thread chrono date_time)
       set(_Boost_COROUTINE_DEPENDENCIES context)
       set(_Boost_FIBER_DEPENDENCIES context)
@@ -1350,7 +1350,51 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
       set(_Boost_TIMER_DEPENDENCIES chrono)
       set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono date_time atomic)
       set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
-      if(Boost_VERSION_STRING VERSION_GREATER_EQUAL 1.77.0 AND NOT Boost_NO_WARN_NEW_VERSIONS)
+    elseif(Boost_VERSION_STRING VERSION_LESS 1.78.0)
+      set(_Boost_CONTRACT_DEPENDENCIES thread chrono)
+      set(_Boost_COROUTINE_DEPENDENCIES context)
+      set(_Boost_FIBER_DEPENDENCIES context)
+      set(_Boost_IOSTREAMS_DEPENDENCIES regex)
+      set(_Boost_JSON_DEPENDENCIES container)
+      set(_Boost_LOG_DEPENDENCIES date_time log_setup filesystem thread regex chrono atomic)
+      set(_Boost_MATH_DEPENDENCIES math_c99 math_c99f math_c99l math_tr1 math_tr1f math_tr1l)
+      set(_Boost_MPI_DEPENDENCIES serialization)
+      set(_Boost_MPI_PYTHON_DEPENDENCIES python${component_python_version} mpi serialization)
+      set(_Boost_NUMPY_DEPENDENCIES python${component_python_version})
+      set(_Boost_THREAD_DEPENDENCIES chrono atomic)
+      set(_Boost_TIMER_DEPENDENCIES chrono)
+      set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono atomic)
+      set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
+    elseif(Boost_VERSION_STRING VERSION_LESS 1.83.0)
+      set(_Boost_CONTRACT_DEPENDENCIES thread chrono)
+      set(_Boost_COROUTINE_DEPENDENCIES context)
+      set(_Boost_FIBER_DEPENDENCIES context)
+      set(_Boost_IOSTREAMS_DEPENDENCIES regex)
+      set(_Boost_JSON_DEPENDENCIES container)
+      set(_Boost_LOG_DEPENDENCIES log_setup filesystem thread regex chrono atomic)
+      set(_Boost_MATH_DEPENDENCIES math_c99 math_c99f math_c99l math_tr1 math_tr1f math_tr1l)
+      set(_Boost_MPI_DEPENDENCIES serialization)
+      set(_Boost_MPI_PYTHON_DEPENDENCIES python${component_python_version} mpi serialization)
+      set(_Boost_NUMPY_DEPENDENCIES python${component_python_version})
+      set(_Boost_THREAD_DEPENDENCIES chrono atomic)
+      set(_Boost_TIMER_DEPENDENCIES chrono)
+      set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono atomic)
+      set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
+    else()
+      set(_Boost_CONTRACT_DEPENDENCIES thread chrono)
+      set(_Boost_COROUTINE_DEPENDENCIES context)
+      set(_Boost_FIBER_DEPENDENCIES context)
+      set(_Boost_IOSTREAMS_DEPENDENCIES regex)
+      set(_Boost_JSON_DEPENDENCIES container)
+      set(_Boost_LOG_DEPENDENCIES log_setup filesystem thread regex chrono atomic)
+      set(_Boost_MATH_DEPENDENCIES math_c99 math_c99f math_c99l math_tr1 math_tr1f math_tr1l)
+      set(_Boost_MPI_DEPENDENCIES serialization)
+      set(_Boost_MPI_PYTHON_DEPENDENCIES python${component_python_version} mpi serialization)
+      set(_Boost_NUMPY_DEPENDENCIES python${component_python_version})
+      set(_Boost_THREAD_DEPENDENCIES chrono atomic)
+      set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono atomic)
+      set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
+      if(Boost_VERSION_STRING VERSION_GREATER_EQUAL 1.84.0 AND NOT Boost_NO_WARN_NEW_VERSIONS)
         message(WARNING "New Boost version may have incorrect or missing dependencies and imported targets")
       endif()
     endif()
@@ -1378,7 +1422,7 @@ endfunction()
 #
 function(_Boost_COMPONENT_HEADERS component _hdrs)
   # Handle Python version suffixes
-  if(component MATCHES "^(python|mpi_python|numpy)([0-9][0-9]?|[0-9]\\.[0-9])\$")
+  if(component MATCHES "^(python|mpi_python|numpy)([0-9]+|[0-9]\\.[0-9]+)\$")
     set(component "${CMAKE_MATCH_1}")
     set(component_python_version "${CMAKE_MATCH_2}")
   endif()
@@ -1405,6 +1449,7 @@ function(_Boost_COMPONENT_HEADERS component _hdrs)
   set(_Boost_LOCALE_HEADERS              "boost/locale.hpp")
   set(_Boost_LOG_HEADERS                 "boost/log/core.hpp")
   set(_Boost_LOG_SETUP_HEADERS           "boost/log/detail/setup_config.hpp")
+  set(_Boost_JSON_HEADERS                "boost/json.hpp")
   set(_Boost_MATH_HEADERS                "boost/math_fwd.hpp")
   set(_Boost_MATH_C99_HEADERS            "boost/math/tr1.hpp")
   set(_Boost_MATH_C99F_HEADERS           "boost/math/tr1.hpp")
@@ -1414,6 +1459,7 @@ function(_Boost_COMPONENT_HEADERS component _hdrs)
   set(_Boost_MATH_TR1L_HEADERS           "boost/math/tr1.hpp")
   set(_Boost_MPI_HEADERS                 "boost/mpi.hpp")
   set(_Boost_MPI_PYTHON_HEADERS          "boost/mpi/python/config.hpp")
+  set(_Boost_MYSQL_HEADERS               "boost/mysql.hpp")
   set(_Boost_NUMPY_HEADERS               "boost/python/numpy.hpp")
   set(_Boost_NOWIDE_HEADERS              "boost/nowide/cstdlib.hpp")
   set(_Boost_PRG_EXEC_MONITOR_HEADERS    "boost/test/prg_exec_monitor.hpp")
@@ -1435,6 +1481,7 @@ function(_Boost_COMPONENT_HEADERS component _hdrs)
   set(_Boost_TIMER_HEADERS               "boost/timer.hpp")
   set(_Boost_TYPE_ERASURE_HEADERS        "boost/type_erasure/config.hpp")
   set(_Boost_UNIT_TEST_FRAMEWORK_HEADERS "boost/test/framework.hpp")
+  set(_Boost_URL_HEADERS                 "boost/url.hpp")
   set(_Boost_WAVE_HEADERS                "boost/wave.hpp")
   set(_Boost_WSERIALIZATION_HEADERS      "boost/archive/text_wiarchive.hpp")
   set(_Boost_BZIP2_HEADERS               "boost/iostreams/filter/bzip2.hpp")
@@ -1622,7 +1669,8 @@ else()
   # _Boost_COMPONENT_HEADERS.  See the instructions at the top of
   # _Boost_COMPONENT_DEPENDENCIES.
   set(_Boost_KNOWN_VERSIONS ${Boost_ADDITIONAL_VERSIONS}
-    "1.76.0" "1.76" "1.75.0" "1.75" "1.74.0" "1.74"
+    "1.83.0" "1.83" "1.82.0" "1.82" "1.81.0" "1.81" "1.80.0" "1.80" "1.79.0" "1.79"
+    "1.78.0" "1.78" "1.77.0" "1.77" "1.76.0" "1.76" "1.75.0" "1.75" "1.74.0" "1.74"
     "1.73.0" "1.73" "1.72.0" "1.72" "1.71.0" "1.71" "1.70.0" "1.70" "1.69.0" "1.69"
     "1.68.0" "1.68" "1.67.0" "1.67" "1.66.0" "1.66" "1.65.1" "1.65.0" "1.65"
     "1.64.0" "1.64" "1.63.0" "1.63" "1.62.0" "1.62" "1.61.0" "1.61" "1.60.0" "1.60"
@@ -2134,7 +2182,7 @@ foreach(COMPONENT ${Boost_FIND_COMPONENTS})
   if(${COMPONENT} MATCHES "^(python|mpi_python|numpy)([0-9])\$")
     set(COMPONENT_UNVERSIONED "${CMAKE_MATCH_1}")
     set(COMPONENT_PYTHON_VERSION_MAJOR "${CMAKE_MATCH_2}")
-  elseif(${COMPONENT} MATCHES "^(python|mpi_python|numpy)([0-9])\\.?([0-9])\$")
+  elseif(${COMPONENT} MATCHES "^(python|mpi_python|numpy)([0-9])\\.?([0-9]+)\$")
     set(COMPONENT_UNVERSIONED "${CMAKE_MATCH_1}")
     set(COMPONENT_PYTHON_VERSION_MAJOR "${CMAKE_MATCH_2}")
     set(COMPONENT_PYTHON_VERSION_MINOR "${CMAKE_MATCH_3}")

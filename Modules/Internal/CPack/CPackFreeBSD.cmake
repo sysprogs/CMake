@@ -34,7 +34,7 @@ function(_cpack_freebsd_fallback_var OUTPUT_VAR_NAME)
     endif()
   endforeach()
   if(NOT VALUE)
-    message(WARNING "Variable ${OUTPUT_VAR_NAME} could not be given a fallback value from any variable ${FALLBACK_VAR_NAMES}.")
+    message(WARNING "Variable ${OUTPUT_VAR_NAME} could not be given a fallback value from (any of) ${FALLBACK_VAR_NAMES}.")
   endif()
 endfunction()
 
@@ -66,7 +66,7 @@ _cpack_freebsd_fallback_var("CPACK_FREEBSD_PACKAGE_DESCRIPTION"
     )
 
 # There's really only one homepage for a project, so
-# re-use the Debian setting if it's there.
+# reuse the Debian setting if it's there.
 _cpack_freebsd_fallback_var("CPACK_FREEBSD_PACKAGE_WWW"
     "CPACK_PACKAGE_HOMEPAGE_URL"
     "CPACK_DEBIAN_PACKAGE_HOMEPAGE"

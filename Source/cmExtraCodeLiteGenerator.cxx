@@ -33,7 +33,7 @@ cmExtraCodeLiteGenerator::GetFactory()
 {
   static cmExternalMakefileProjectGeneratorSimpleFactory<
     cmExtraCodeLiteGenerator>
-    factory("CodeLite", "Generates CodeLite project files.");
+    factory("CodeLite", "Generates CodeLite project files (deprecated).");
 
   if (factory.GetSupportedGlobalGenerators().empty()) {
 #if defined(_WIN32)
@@ -59,7 +59,7 @@ void cmExtraCodeLiteGenerator::Generate()
     this->GlobalGenerator->GetProjectMap();
 
   // loop projects and locate the root project.
-  // and extract the information for creating the worspace
+  // and extract the information for creating the workspace
   // root makefile
   for (auto const& it : projectMap) {
     cmLocalGenerator* lg = it.second[0];
@@ -208,7 +208,7 @@ std::string cmExtraCodeLiteGenerator::CollectSourceFiles(
     case cmStateEnums::MODULE_LIBRARY: {
       projectType = "Dynamic Library";
     } break;
-    default: // intended fallthrough
+    default:
       break;
   }
 
@@ -233,8 +233,8 @@ std::string cmExtraCodeLiteGenerator::CollectSourceFiles(
           otherFiles.insert(fullPath);
         }
       }
-    }
-    default: // intended fallthrough
+    } break;
+    default:
       break;
   }
   return projectType;
@@ -556,7 +556,8 @@ void cmExtraCodeLiteGenerator::CreateNewProjectFile(
     case cmStateEnums::SHARED_LIBRARY:
     case cmStateEnums::MODULE_LIBRARY:
       visualname = "lib" + targetName;
-    default: // intended fallthrough
+      break;
+    default:
       break;
   }
   xml.Attribute("Name", visualname);

@@ -7,7 +7,7 @@
         GIT_CLONE_PATH: "$CI_BUILDS_DIR/cmake ci ext/$CI_CONCURRENT_ID"
         # TODO: Factor this out so that each job selects the Xcode version to
         # use so that different versions can be tested in a single pipeline.
-        DEVELOPER_DIR: "/Applications/Xcode-12.4.app/Contents/Developer"
+        DEVELOPER_DIR: "/Applications/Xcode-15.1.app/Contents/Developer"
         # Avoid conflicting with other projects running on the same machine.
         SCCACHE_SERVER_PORT: 4227
 
@@ -38,6 +38,21 @@
         CMAKE_CONFIGURATION: macos_arm64_ninja
         CTEST_NO_WARNINGS_ALLOWED: 1
 
+.macos_arm64_ninja_symlinked:
+    extends: .macos_build
+
+    variables:
+        CMAKE_CONFIGURATION: macos_arm64_ninja_symlinked
+        CTEST_NO_WARNINGS_ALLOWED: 1
+        CMAKE_CI_IN_SYMLINK_TREE: 1
+        CMAKE_CI_BUILD_DIR: "real_work/work/build"
+
+.macos_arm64_pch:
+    extends: .macos_arm64_ninja
+
+    variables:
+        CMAKE_CONFIGURATION: macos_arm64_pch
+
 .macos_x86_64_makefiles:
     extends: .macos_build
 
@@ -52,7 +67,7 @@
     variables:
         CMAKE_CONFIGURATION: macos_package
         CTEST_NO_WARNINGS_ALLOWED: 1
-        CMake_SKIP_INSTALL: 1
+        CMAKE_CI_NO_INSTALL: 1
 
 .macos10.10_package:
     extends: .macos_build
@@ -60,7 +75,7 @@
     variables:
         CMAKE_CONFIGURATION: macos10.10_package
         CTEST_NO_WARNINGS_ALLOWED: 1
-        CMake_SKIP_INSTALL: 1
+        CMAKE_CI_NO_INSTALL: 1
 
 ### External testing
 
@@ -80,60 +95,95 @@
         CMAKE_GENERATOR: Xcode
         CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
 
+.macos_arm64_xcode_symlinked:
+    extends: .macos
+
+    variables:
+        CMAKE_CONFIGURATION: macos_arm64_xcode_symlinked
+        CMAKE_GENERATOR: Xcode
+        CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
+        CMAKE_CI_IN_SYMLINK_TREE: 1
+        CMAKE_CI_BUILD_DIR: "real_work/work/build"
+
+.macos_arm64_xcode_ub:
+    extends: .macos
+
+    variables:
+        CMAKE_CONFIGURATION: macos_arm64_xcode_ub
+        CMAKE_GENERATOR: Xcode
+        CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
+
+.macos_arm64_ninja_multi:
+    extends: .macos
+
+    variables:
+        CMAKE_CONFIGURATION: macos_arm64_ninja_multi
+        CMAKE_GENERATOR: "Ninja Multi-Config"
+        CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
+
+.macos_x86_64_ninja_ub:
+    extends: .macos
+
+    variables:
+        CMAKE_CONFIGURATION: macos_x86_64_ninja_ub
+        CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
+
 ## Tags
 
-.macos_x86_64_builder_tags:
+.macos_x86_64_tags:
     tags:
         - cmake # Since this is a bare runner, pin to a project.
-        - macos
+        - macos-x86_64
         - shell
-        - xcode-12.4
+        - xcode-15.1
         - nonconcurrent
 
-.macos_x86_64_builder_tags_package:
+.macos_x86_64_tags_ext:
     tags:
         - cmake # Since this is a bare runner, pin to a project.
-        - macos
+        - macos-x86_64
         - shell
-        - xcode-12.4
+        - xcode-15.1
+        - concurrent
+
+.macos_arm64_tags:
+    tags:
+        - cmake # Since this is a bare runner, pin to a project.
+        - macos-arm64
+        - shell
+        - xcode-15.1
+        - nonconcurrent
+
+.macos_arm64_tags_ext:
+    tags:
+        - cmake # Since this is a bare runner, pin to a project.
+        - macos-arm64
+        - shell
+        - xcode-15.1
+        - concurrent
+
+.macos_arm64_tags_package:
+    tags:
+        - cmake # Since this is a bare runner, pin to a project.
+        - macos-arm64
+        - shell
+        - xcode-15.1
         - nonconcurrent
         - finder
-
-.macos_x86_64_builder_ext_tags:
-    tags:
-        - cmake # Since this is a bare runner, pin to a project.
-        - macos
-        - shell
-        - xcode-12.4
-        - concurrent
-
-.macos_arm64_builder_tags:
-    tags:
-        - cmake # Since this is a bare runner, pin to a project.
-        - macos-arm64
-        - shell
-        - xcode-12.4
-        - nonconcurrent
-
-.macos_arm64_builder_ext_tags:
-    tags:
-        - cmake # Since this is a bare runner, pin to a project.
-        - macos-arm64
-        - shell
-        - xcode-12.4
-        - concurrent
 
 ## macOS-specific scripts
 
 .before_script_macos: &before_script_macos
+    - source .gitlab/ci/env.sh
     - .gitlab/ci/cmake.sh
+    - export PATH=$PWD/.gitlab/cmake/bin:$PATH
     - .gitlab/ci/ninja.sh
-    - export PATH=$PWD/.gitlab:$PWD/.gitlab/cmake/bin:$PATH
+    - export PATH=$PWD/.gitlab:$PATH
     - cmake --version
     - ninja --version
     # Download Qt
     - cmake -P .gitlab/ci/download_qt.cmake
-    - export CMAKE_PREFIX_PATH=$PWD/.gitlab/qt
+    - export CMAKE_PREFIX_PATH=$PWD/.gitlab/qt${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}
 
 .cmake_build_macos:
     stage: build
@@ -144,22 +194,11 @@
         # Allow the server to already be running.
         - "sccache --start-server || :"
         - sccache --show-stats
+        - .gitlab/ci/pre_build.sh
         - ctest -VV -S .gitlab/ci/ctest_configure.cmake
         - ctest -VV -S .gitlab/ci/ctest_build.cmake
+        - .gitlab/ci/post_build.sh
         - sccache --show-stats
-
-    interruptible: true
-
-.cmake_build_macos_package:
-    stage: build
-
-    script:
-        - *before_script_macos
-        - ctest -VV -S .gitlab/ci/ctest_configure.cmake
-        - ctest -VV -S .gitlab/ci/ctest_build.cmake
-        - cd build
-        - cpack -G TGZ
-        - cpack -G DragNDrop
 
     interruptible: true
 
@@ -181,7 +220,7 @@
         # Allow the server to already be running.
         - "sccache --start-server || :"
         - sccache --show-stats
-        - "$LAUNCHER build/install/CMake.app/Contents/bin/ctest --output-on-failure -V -S .gitlab/ci/ctest_test_external.cmake"
+        - "$LAUNCHER build/install/CMake.app/Contents/bin/ctest --output-on-failure -V -S .gitlab/ci/ctest_standalone.cmake"
         - sccache --show-stats
 
     interruptible: true

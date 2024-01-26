@@ -25,17 +25,20 @@ prepending, independent of the default.
 
 If the ``SYSTEM`` option is given, the compiler will be told the
 directories are meant as system include directories on some platforms.
-Signalling this setting might achieve effects such as the compiler
+Signaling this setting might achieve effects such as the compiler
 skipping warnings, or these fixed-install system files not being
 considered in dependency calculations - see compiler docs.
 
-Arguments to ``include_directories`` may use "generator expressions" with
-the syntax "$<...>".  See the :manual:`cmake-generator-expressions(7)`
-manual for available expressions.  See the :manual:`cmake-buildsystem(7)`
-manual for more on defining buildsystem properties.
+.. |command_name| replace:: ``include_directories``
+.. include:: GENEX_NOTE.txt
 
 .. note::
 
   Prefer the :command:`target_include_directories` command to add include
   directories to individual targets and optionally propagate/export them
   to dependents.
+
+See Also
+^^^^^^^^
+
+* :command:`target_include_directories`

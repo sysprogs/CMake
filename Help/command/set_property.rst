@@ -9,10 +9,11 @@ Set a named property in a given scope.
                 DIRECTORY [<dir>]           |
                 TARGET    [<target1> ...]   |
                 SOURCE    [<src1> ...]
-                          [DIRECTORY <dirs> ...] |
-                          [TARGET_DIRECTORY <targets> ...]
+                          [DIRECTORY <dirs> ...]
+                          [TARGET_DIRECTORY <targets> ...] |
                 INSTALL   [<file1> ...]     |
-                TEST      [<test1> ...]     |
+                TEST      [<test1> ...]
+                          [DIRECTORY <dir>] |
                 CACHE     [<entry1> ...]    >
                [APPEND] [APPEND_STRING]
                PROPERTY <name> [<value1> ...])
@@ -37,6 +38,8 @@ It must be one of the following:
 ``TARGET``
   Scope may name zero or more existing targets.
   See also the :command:`set_target_properties` command.
+
+  :ref:`Alias Targets` do not support setting target properties.
 
 ``SOURCE``
   Scope may name zero or more source files.  By default, source file properties
@@ -82,11 +85,26 @@ It must be one of the following:
   to the installation prefix.
 
 ``TEST``
-  Scope may name zero or more existing tests.
-  See also the :command:`set_tests_properties` command.
+  Scope is limited to the directory the command is called in. It may name zero
+  or more existing tests. See also command :command:`set_tests_properties`.
+
+  Test property values may be specified using
+  :manual:`generator expressions <cmake-generator-expressions(7)>`
+  for tests created by the :command:`add_test(NAME)` signature.
+
+  .. versionadded:: 3.28
+
+    Visibility can be set in other directory scopes using the following sub-option:
+
+    ``DIRECTORY <dir>``
+      The test property will be set in the ``<dir>`` directory's scope. CMake must
+      already know about this directory, either by having added it through a call
+      to :command:`add_subdirectory` or it being the top level source directory.
+      Relative paths are treated as relative to the current source directory.
+      ``<dir>`` may reference a binary directory.
 
 ``CACHE``
-  Scope must name zero or more cache existing entries.
+  Scope must name zero or more existing cache entries.
 
 The required ``PROPERTY`` option is immediately followed by the name of
 the property to set.  Remaining arguments are used to compose the
@@ -103,10 +121,15 @@ finding the initial value to append to.  If the property is not already
 directly set in the nominated scope, the command will behave as though
 ``APPEND`` or ``APPEND_STRING`` had not been given.
 
-See the :manual:`cmake-properties(7)` manual for a list of properties
-in each scope.
-
 .. note::
 
   The :prop_sf:`GENERATED` source file property may be globally visible.
   See its documentation for details.
+
+See Also
+^^^^^^^^
+
+* :command:`define_property`
+* :command:`get_property`
+* The :manual:`cmake-properties(7)` manual for a list of properties
+  in each scope.

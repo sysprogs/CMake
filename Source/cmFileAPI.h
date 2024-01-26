@@ -24,6 +24,9 @@ public:
   /** Read fileapi queries from disk.  */
   void ReadQueries();
 
+  /** Get the list of configureLog object kind versions requested.  */
+  std::vector<unsigned long> GetConfigureLogVersions();
+
   /** Write fileapi replies to disk.  */
   void WriteReplies();
 
@@ -38,6 +41,20 @@ public:
   /** Report file-api capabilities for cmake -E capabilities.  */
   static Json::Value ReportCapabilities();
 
+  // Keep in sync with ObjectKindName.
+  enum class ObjectKind
+  {
+    CodeModel,
+    ConfigureLog,
+    Cache,
+    CMakeFiles,
+    Toolchains,
+    InternalTest
+  };
+
+  bool AddProjectQuery(ObjectKind kind, unsigned majorVersion,
+                       unsigned minorVersion);
+
 private:
   cmake* CMakeInstance;
 
@@ -50,16 +67,6 @@ private:
   static std::vector<std::string> LoadDir(std::string const& dir);
   void RemoveOldReplyFiles();
 
-  // Keep in sync with ObjectKindName.
-  enum class ObjectKind
-  {
-    CodeModel,
-    Cache,
-    CMakeFiles,
-    Toolchains,
-    InternalTest
-  };
-
   /** Identify one object kind and major version.  */
   struct Object
   {
@@ -71,6 +78,14 @@ private:
         return l.Kind < r.Kind;
       }
       return l.Version < r.Version;
+    }
+    friend bool operator==(Object const& l, Object const& r)
+    {
+      return l.Kind == r.Kind && l.Version == r.Version;
+    }
+    friend bool operator!=(Object const& l, Object const& r)
+    {
+      return !(l == r);
     }
   };
 
@@ -192,6 +207,10 @@ private:
   void BuildClientRequestCodeModel(
     ClientRequest& r, std::vector<RequestVersion> const& versions);
   Json::Value BuildCodeModel(Object const& object);
+
+  void BuildClientRequestConfigureLog(
+    ClientRequest& r, std::vector<RequestVersion> const& versions);
+  Json::Value BuildConfigureLog(Object const& object);
 
   void BuildClientRequestCache(ClientRequest& r,
                                std::vector<RequestVersion> const& versions);

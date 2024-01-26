@@ -15,23 +15,10 @@
 #include <cm/string_view>
 
 #include "cmRange.h"
+#include "cmValue.h"
 
 /** String range type.  */
 using cmStringRange = cmRange<std::vector<std::string>::const_iterator>;
-
-/** Check for non-empty string.  */
-inline bool cmNonempty(const char* str)
-{
-  return str && *str;
-}
-inline bool cmNonempty(cm::string_view str)
-{
-  return !str.empty();
-}
-inline bool cmNonempty(std::string const* str)
-{
-  return str && !str->empty();
-}
 
 /** Returns length of a literal string.  */
 template <size_t N>
@@ -101,50 +88,9 @@ std::string cmJoin(cmStringRange const& rng, cm::string_view separator,
 /** Extract tokens that are separated by any of the characters in @a sep.  */
 std::vector<std::string> cmTokenize(cm::string_view str, cm::string_view sep);
 
-/**
- * Expand the ; separated string @a arg into multiple arguments.
- * All found arguments are appended to @a argsOut.
- */
-void cmExpandList(cm::string_view arg, std::vector<std::string>& argsOut,
-                  bool emptyArgs = false);
-
-/**
- * Expand out any arguments in the string range [@a first, @a last) that have
- * ; separated strings into multiple arguments.  All found arguments are
- * appended to @a argsOut.
- */
-template <class InputIt>
-void cmExpandLists(InputIt first, InputIt last,
-                   std::vector<std::string>& argsOut)
-{
-  for (; first != last; ++first) {
-    cmExpandList(*first, argsOut);
-  }
-}
-
-/**
- * Same as cmExpandList but a new vector is created containing
- * the expanded arguments from the string @a arg.
- */
-std::vector<std::string> cmExpandedList(cm::string_view arg,
-                                        bool emptyArgs = false);
-
-/**
- * Same as cmExpandList but a new vector is created containing the expanded
- * versions of all arguments in the string range [@a first, @a last).
- */
-template <class InputIt>
-std::vector<std::string> cmExpandedLists(InputIt first, InputIt last)
-{
-  std::vector<std::string> argsOut;
-  for (; first != last; ++first) {
-    cmExpandList(*first, argsOut);
-  }
-  return argsOut;
-}
-
 /** Concatenate string pieces into a single string.  */
-std::string cmCatViews(std::initializer_list<cm::string_view> views);
+std::string cmCatViews(
+  std::initializer_list<std::pair<cm::string_view, std::string*>> views);
 
 /** Utility class for cmStrCat.  */
 class cmAlphaNum
@@ -156,6 +102,10 @@ public:
   }
   cmAlphaNum(std::string const& str)
     : View_(str)
+  {
+  }
+  cmAlphaNum(std::string&& str)
+    : RValueString_(&str)
   {
   }
   cmAlphaNum(const char* str)
@@ -175,21 +125,39 @@ public:
   cmAlphaNum(unsigned long long int val);
   cmAlphaNum(float val);
   cmAlphaNum(double val);
+  cmAlphaNum(cmValue value)
+    : View_(*value)
+  {
+  }
 
-  cm::string_view View() const { return this->View_; }
+  cm::string_view View() const
+  {
+    if (this->RValueString_) {
+      return *this->RValueString_;
+    }
+    return this->View_;
+  }
+
+  std::string* RValueString() const { return this->RValueString_; }
 
 private:
+  std::string* RValueString_ = nullptr;
   cm::string_view View_;
   char Digits_[32];
 };
 
 /** Concatenate string pieces and numbers into a single string.  */
-template <typename... AV>
-inline std::string cmStrCat(cmAlphaNum const& a, cmAlphaNum const& b,
-                            AV const&... args)
+template <typename A, typename B, typename... AV>
+inline std::string cmStrCat(A&& a, B&& b, AV&&... args)
 {
-  return cmCatViews(
-    { a.View(), b.View(), static_cast<cmAlphaNum const&>(args).View()... });
+  static auto const makePair =
+    [](const cmAlphaNum& arg) -> std::pair<cm::string_view, std::string*> {
+    return { arg.View(), arg.RValueString() };
+  };
+
+  return cmCatViews({ makePair(std::forward<A>(a)),
+                      makePair(std::forward<B>(b)),
+                      makePair(std::forward<AV>(args))... });
 }
 
 /** Joins wrapped elements of a range with separator into a single string.  */
@@ -200,8 +168,13 @@ std::string cmWrap(cm::string_view prefix, Range const& rng,
   if (rng.empty()) {
     return std::string();
   }
-  return cmCatViews(
-    { prefix, cmJoin(rng, cmCatViews({ suffix, sep, prefix })), suffix });
+  return cmCatViews({ { prefix, nullptr },
+                      { cmJoin(rng,
+                               cmCatViews({ { suffix, nullptr },
+                                            { sep, nullptr },
+                                            { prefix, nullptr } })),
+                        nullptr },
+                      { suffix, nullptr } });
 }
 
 /** Joins wrapped elements of a range with separator into a single string.  */
@@ -211,53 +184,6 @@ std::string cmWrap(char prefix, Range const& rng, char suffix,
 {
   return cmWrap(cm::string_view(&prefix, 1), rng, cm::string_view(&suffix, 1),
                 sep);
-}
-
-/**
- * Does a string indicates that CMake/CPack/CTest internally
- * forced this value. This is not the same as On, but this
- * may be considered as "internally switched on".
- */
-bool cmIsInternallyOn(cm::string_view val);
-inline bool cmIsInternallyOn(const char* val)
-{
-  if (!val) {
-    return false;
-  }
-  return cmIsInternallyOn(cm::string_view(val));
-}
-
-/** Return true if value is NOTFOUND or ends in -NOTFOUND.  */
-bool cmIsNOTFOUND(cm::string_view val);
-
-/**
- * Does a string indicate a true or ON value? This is not the same as ifdef.
- */
-bool cmIsOn(cm::string_view val);
-inline bool cmIsOn(const char* val)
-{
-  return val && cmIsOn(cm::string_view(val));
-}
-inline bool cmIsOn(std::string const* val)
-{
-  return val && cmIsOn(*val);
-}
-
-/**
- * Does a string indicate a false or off value ? Note that this is
- * not the same as !IsOn(...) because there are a number of
- * ambiguous values such as "/usr/local/bin" a path will result in
- * IsON and IsOff both returning false. Note that the special path
- * NOTFOUND, *-NOTFOUND or IGNORE will cause IsOff to return true.
- */
-bool cmIsOff(cm::string_view val);
-inline bool cmIsOff(const char* val)
-{
-  return !val || cmIsOff(cm::string_view(val));
-}
-inline bool cmIsOff(std::string const* val)
-{
-  return !val || cmIsOff(*val);
 }
 
 /** Returns true if string @a str starts with the character @a prefix.  */
@@ -270,6 +196,16 @@ inline bool cmHasPrefix(cm::string_view str, char prefix)
 inline bool cmHasPrefix(cm::string_view str, cm::string_view prefix)
 {
   return str.compare(0, prefix.size(), prefix) == 0;
+}
+
+/** Returns true if string @a str starts with string @a prefix.  */
+inline bool cmHasPrefix(cm::string_view str, cmValue prefix)
+{
+  if (!prefix) {
+    return false;
+  }
+
+  return str.compare(0, prefix->size(), *prefix) == 0;
 }
 
 /** Returns true if string @a str starts with string @a prefix.  */
@@ -290,6 +226,17 @@ inline bool cmHasSuffix(cm::string_view str, cm::string_view suffix)
 {
   return str.size() >= suffix.size() &&
     str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+/** Returns true if string @a str ends with string @a suffix.  */
+inline bool cmHasSuffix(cm::string_view str, cmValue suffix)
+{
+  if (!suffix) {
+    return false;
+  }
+
+  return str.size() >= suffix->size() &&
+    str.compare(str.size() - suffix->size(), suffix->size(), *suffix) == 0;
 }
 
 /** Returns true if string @a str ends with string @a suffix.  */
@@ -323,3 +270,13 @@ bool cmStrToLong(std::string const& str, long* value);
  * integer */
 bool cmStrToULong(const char* str, unsigned long* value);
 bool cmStrToULong(std::string const& str, unsigned long* value);
+
+/** Converts a string to long long. Expects that the whole string
+ * is an integer */
+bool cmStrToLongLong(const char* str, long long* value);
+bool cmStrToLongLong(std::string const& str, long long* value);
+
+/** Converts a string to unsigned long long. Expects that the whole string
+ * is an integer */
+bool cmStrToULongLong(const char* str, unsigned long long* value);
+bool cmStrToULongLong(std::string const& str, unsigned long long* value);

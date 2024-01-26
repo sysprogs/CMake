@@ -2,7 +2,7 @@ project(libuv C)
 
 # Disable warnings to avoid changing 3rd party code.
 if(CMAKE_C_COMPILER_ID MATCHES
-    "^(GNU|Clang|AppleClang|XLClang|XL|VisualAge|SunPro|HP|Intel|IntelLLVM)$")
+    "^(GNU|LCC|Clang|AppleClang|IBMClang|XLClang|XL|VisualAge|SunPro|HP|Intel|IntelLLVM|NVHPC)$")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
 elseif(CMAKE_C_COMPILER_ID STREQUAL "PathScale")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -woffall")
@@ -27,6 +27,8 @@ set(uv_sources
   src/queue.h
   src/strscpy.c
   src/strscpy.h
+  src/strtok.c
+  src/strtok.h
   src/threadpool.c
   src/timer.c
   src/uv-common.c
@@ -156,7 +158,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OS400")
     )
 endif()
 
-if(CMAKE_SYSTEM_NAME MATCHES "CYGWIN")
+if(CMAKE_SYSTEM_NAME MATCHES "CYGWIN" OR CMAKE_SYSTEM_NAME MATCHES "MSYS")
   list(APPEND uv_libraries
     )
   list(APPEND uv_headers
@@ -202,6 +204,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
   list(APPEND uv_defines _GNU_SOURCE)
   list(APPEND uv_sources
+    src/unix/epoll.c
     src/unix/linux-core.c
     src/unix/linux-inotify.c
     src/unix/linux-syscalls.c
@@ -291,27 +294,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
     )
   list(APPEND uv_defines
     __EXTENSIONS__
+    _XOPEN_SOURCE=600
     )
+  if(NOT CMAKE_C_STANDARD OR CMAKE_C_STANDARD EQUAL 90)
+    set(CMAKE_C_STANDARD 11)
+  endif()
   if(CMAKE_SYSTEM_VERSION STREQUAL "5.10")
-    set(CMAKE_C_STANDARD 90)
-    if(CMAKE_VERSION VERSION_LESS 3.8.20170504 AND CMAKE_C_COMPILER_ID STREQUAL "SunPro" AND NOT CMAKE_C_COMPILER_VERSION VERSION_LESS 5.14)
-      # The running version of CMake does not know how to add this flag.
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c90")
-    endif()
-    list(APPEND uv_defines
-      _XOPEN_SOURCE=500
-      )
-  else()
-    if(NOT CMAKE_C_STANDARD OR CMAKE_C_STANDARD EQUAL 90)
-      set(CMAKE_C_STANDARD 11)
-    endif()
-    if(CMAKE_VERSION VERSION_LESS 3.8.20170505 AND CMAKE_C_COMPILER_ID STREQUAL "SunPro" AND CMAKE_C_COMPILER_VERSION VERSION_LESS 5.14)
-      # The running version of CMake does not know how to add this flag.
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -xc99")
-    endif()
-    list(APPEND uv_defines
-      _XOPEN_SOURCE=600
-      )
+    list(APPEND uv_defines SUNOS_NO_IFADDRS)
   endif()
   list(APPEND uv_sources
     src/unix/no-proctitle.c
@@ -361,5 +350,9 @@ include_directories(
 add_library(cmlibuv STATIC ${uv_sources})
 target_link_libraries(cmlibuv ${uv_libraries})
 set_property(TARGET cmlibuv PROPERTY COMPILE_DEFINITIONS ${uv_defines})
+
+if(WIN32 AND CMake_BUILD_PCH)
+  target_precompile_headers(cmlibuv PRIVATE "include/uv.h" "src/win/internal.h")
+endif()
 
 install(FILES LICENSE DESTINATION ${CMAKE_DOC_DIR}/cmlibuv)

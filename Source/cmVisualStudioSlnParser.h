@@ -5,12 +5,11 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <bitset>
+#include <cstddef>
 #include <iosfwd>
 #include <string>
 
 #include <cm/string_view>
-
-#include <stddef.h>
 
 class cmSlnData;
 
@@ -74,8 +73,8 @@ protected:
 
   struct ResultData
   {
-    ParseResult Result;
-    size_t ResultLine;
+    ParseResult Result = ResultOK;
+    size_t ResultLine = 0;
     bool HadBOM;
 
     ResultData();

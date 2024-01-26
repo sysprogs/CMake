@@ -15,7 +15,8 @@ form.  The format of the JSON file looks like:
     {
       "directory": "/home/user/development/project",
       "command": "/usr/bin/c++ ... -c ../foo/foo.cc",
-      "file": "../foo/foo.cc"
+      "file": "../foo/foo.cc",
+      "output": "../foo.dir/foo.cc.o"
     },
 
     ...
@@ -23,7 +24,8 @@ form.  The format of the JSON file looks like:
     {
       "directory": "/home/user/development/project",
       "command": "/usr/bin/c++ ... -c ../foo/bar.cc",
-      "file": "../foo/bar.cc"
+      "file": "../foo/bar.cc",
+      "output": "../foo.dir/bar.cc.o"
     }
   ]
 
@@ -33,7 +35,7 @@ property for all targets.
 
 .. note::
   This option is implemented only by :ref:`Makefile Generators`
-  and the :generator:`Ninja`.  It is ignored on other generators.
+  and :ref:`Ninja Generators`.  It is ignored on other generators.
 
   This option currently does not work well in combination with
   the :prop_tgt:`UNITY_BUILD` target property or the

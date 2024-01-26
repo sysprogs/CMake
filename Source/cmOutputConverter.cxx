@@ -8,47 +8,205 @@
 #include <set>
 #include <vector>
 
+#ifdef _WIN32
+#  include <unordered_map>
+#  include <utility>
+#endif
+
+#include "cmList.h"
 #include "cmState.h"
-#include "cmStringAlgorithms.h"
+#include "cmStateDirectory.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
+
+namespace {
+bool PathEqOrSubDir(std::string const& a, std::string const& b)
+{
+  return (cmSystemTools::ComparePath(a, b) ||
+          cmSystemTools::IsSubDirectory(a, b));
+}
+}
 
 cmOutputConverter::cmOutputConverter(cmStateSnapshot const& snapshot)
   : StateSnapshot(snapshot)
-  , LinkScriptShell(false)
 {
   assert(this->StateSnapshot.IsValid());
+  this->ComputeRelativePathTopSource();
+  this->ComputeRelativePathTopBinary();
+  this->ComputeRelativePathTopRelation();
+}
+
+void cmOutputConverter::ComputeRelativePathTopSource()
+{
+  // Walk up the buildsystem directory tree to find the highest source
+  // directory that contains the current source directory.
+  cmStateSnapshot snapshot = this->StateSnapshot;
+  for (cmStateSnapshot parent = snapshot.GetBuildsystemDirectoryParent();
+       parent.IsValid(); parent = parent.GetBuildsystemDirectoryParent()) {
+    if (cmSystemTools::IsSubDirectory(
+          snapshot.GetDirectory().GetCurrentSource(),
+          parent.GetDirectory().GetCurrentSource())) {
+      snapshot = parent;
+    }
+  }
+  this->RelativePathTopSource = snapshot.GetDirectory().GetCurrentSource();
+}
+
+void cmOutputConverter::ComputeRelativePathTopBinary()
+{
+  // Walk up the buildsystem directory tree to find the highest binary
+  // directory that contains the current binary directory.
+  cmStateSnapshot snapshot = this->StateSnapshot;
+  for (cmStateSnapshot parent = snapshot.GetBuildsystemDirectoryParent();
+       parent.IsValid(); parent = parent.GetBuildsystemDirectoryParent()) {
+    if (cmSystemTools::IsSubDirectory(
+          snapshot.GetDirectory().GetCurrentBinary(),
+          parent.GetDirectory().GetCurrentBinary())) {
+      snapshot = parent;
+    }
+  }
+
+  this->RelativePathTopBinary = snapshot.GetDirectory().GetCurrentBinary();
+}
+
+void cmOutputConverter::ComputeRelativePathTopRelation()
+{
+  if (cmSystemTools::ComparePath(this->RelativePathTopSource,
+                                 this->RelativePathTopBinary)) {
+    this->RelativePathTopRelation = TopRelation::InSource;
+  } else if (cmSystemTools::IsSubDirectory(this->RelativePathTopBinary,
+                                           this->RelativePathTopSource)) {
+    this->RelativePathTopRelation = TopRelation::BinInSrc;
+  } else if (cmSystemTools::IsSubDirectory(this->RelativePathTopSource,
+                                           this->RelativePathTopBinary)) {
+    this->RelativePathTopRelation = TopRelation::SrcInBin;
+  } else {
+    this->RelativePathTopRelation = TopRelation::Separate;
+  }
+}
+
+std::string const& cmOutputConverter::GetRelativePathTopSource() const
+{
+  return this->RelativePathTopSource;
+}
+
+std::string const& cmOutputConverter::GetRelativePathTopBinary() const
+{
+  return this->RelativePathTopBinary;
+}
+
+void cmOutputConverter::SetRelativePathTop(std::string const& topSource,
+                                           std::string const& topBinary)
+{
+  this->RelativePathTopSource = topSource;
+  this->RelativePathTopBinary = topBinary;
+  this->ComputeRelativePathTopRelation();
+}
+
+std::string cmOutputConverter::MaybeRelativeTo(
+  std::string const& local_path, std::string const& remote_path) const
+{
+  bool localInBinary = PathEqOrSubDir(local_path, this->RelativePathTopBinary);
+  bool remoteInBinary =
+    PathEqOrSubDir(remote_path, this->RelativePathTopBinary);
+
+  bool localInSource = PathEqOrSubDir(local_path, this->RelativePathTopSource);
+  bool remoteInSource =
+    PathEqOrSubDir(remote_path, this->RelativePathTopSource);
+
+  switch (this->RelativePathTopRelation) {
+    case TopRelation::Separate:
+      // Checks are independent.
+      break;
+    case TopRelation::BinInSrc:
+      localInSource = localInSource && !localInBinary;
+      remoteInSource = remoteInSource && !remoteInBinary;
+      break;
+    case TopRelation::SrcInBin:
+      localInBinary = localInBinary && !localInSource;
+      remoteInBinary = remoteInBinary && !remoteInSource;
+      break;
+    case TopRelation::InSource:
+      // Checks are identical.
+      break;
+  };
+
+  bool const bothInBinary = localInBinary && remoteInBinary;
+  bool const bothInSource = localInSource && remoteInSource;
+
+  if (bothInBinary || bothInSource) {
+    return cmSystemTools::ForceToRelativePath(local_path, remote_path);
+  }
+  return remote_path;
+}
+
+std::string cmOutputConverter::MaybeRelativeToTopBinDir(
+  std::string const& path) const
+{
+  return this->MaybeRelativeTo(this->GetState()->GetBinaryDirectory(), path);
+}
+
+std::string cmOutputConverter::MaybeRelativeToCurBinDir(
+  std::string const& path) const
+{
+  return this->MaybeRelativeTo(
+    this->StateSnapshot.GetDirectory().GetCurrentBinary(), path);
 }
 
 std::string cmOutputConverter::ConvertToOutputForExisting(
-  const std::string& remote, OutputFormat format) const
+  const std::string& remote, OutputFormat format, bool useWatcomQuote) const
 {
+#ifdef _WIN32
+  // Cache the Short Paths since we only convert the same few paths anyway and
+  // calling `GetShortPathNameW` is really expensive.
+  static std::unordered_map<std::string, std::string> shortPathCache{};
+
   // If this is a windows shell, the result has a space, and the path
   // already exists, we can use a short-path to reference it without a
   // space.
   if (this->GetState()->UseWindowsShell() &&
       remote.find_first_of(" #") != std::string::npos &&
       cmSystemTools::FileExists(remote)) {
-    std::string tmp;
-    if (cmSystemTools::GetShortPath(remote, tmp)) {
-      return this->ConvertToOutputFormat(tmp, format);
-    }
+
+    std::string shortPath = [&]() {
+      auto cachedShortPathIt = shortPathCache.find(remote);
+
+      if (cachedShortPathIt != shortPathCache.end()) {
+        return cachedShortPathIt->second;
+      }
+
+      std::string tmp{};
+      cmsys::Status status = cmSystemTools::GetShortPath(remote, tmp);
+      if (!status) {
+        // Fallback for cases when Windows refuses to resolve the short path,
+        // like for C:\Program Files\WindowsApps\...
+        tmp = remote;
+      }
+      shortPathCache[remote] = tmp;
+      return tmp;
+    }();
+
+    return this->ConvertToOutputFormat(shortPath, format, useWatcomQuote);
   }
+#endif
 
   // Otherwise, perform standard conversion.
-  return this->ConvertToOutputFormat(remote, format);
+  return this->ConvertToOutputFormat(remote, format, useWatcomQuote);
 }
 
 std::string cmOutputConverter::ConvertToOutputFormat(cm::string_view source,
-                                                     OutputFormat output) const
+                                                     OutputFormat format,
+                                                     bool useWatcomQuote) const
 {
   std::string result(source);
   // Convert it to an output path.
-  if (output == SHELL || output == WATCOMQUOTE || output == NINJAMULTI) {
+  if (format == SHELL || format == NINJAMULTI) {
     result = this->ConvertDirectorySeparatorsForShell(source);
-    result = this->EscapeForShell(result, true, false, output == WATCOMQUOTE,
-                                  output == NINJAMULTI);
-  } else if (output == RESPONSE) {
-    result = this->EscapeForShell(result, false, false, false);
+    result = this->EscapeForShell(result, true, false, useWatcomQuote,
+                                  format == NINJAMULTI);
+  } else if (format == RESPONSE) {
+    result =
+      this->EscapeForShell(result, false, false, useWatcomQuote, false, true);
   }
   return result;
 }
@@ -80,15 +238,12 @@ static bool cmOutputConverterIsShellOperator(cm::string_view str)
   return (shellOperators.count(str) != 0);
 }
 
-std::string cmOutputConverter::EscapeForShell(
-  cm::string_view str, bool makeVars, bool forEcho, bool useWatcomQuote,
-  bool unescapeNinjaConfiguration) const
+std::string cmOutputConverter::EscapeForShell(cm::string_view str,
+                                              bool makeVars, bool forEcho,
+                                              bool useWatcomQuote,
+                                              bool unescapeNinjaConfiguration,
+                                              bool forResponse) const
 {
-  // Do not escape shell operators.
-  if (cmOutputConverterIsShellOperator(str)) {
-    return std::string(str);
-  }
-
   // Compute the flags for the target shell environment.
   int flags = 0;
   if (this->GetState()->UseWindowsVSIDE()) {
@@ -108,6 +263,9 @@ std::string cmOutputConverter::EscapeForShell(
   if (useWatcomQuote) {
     flags |= Shell_Flag_WatcomQuote;
   }
+  if (forResponse) {
+    flags |= Shell_Flag_IsResponse;
+  }
   if (this->GetState()->UseWatcomWMake()) {
     flags |= Shell_Flag_WatcomWMake;
   }
@@ -121,13 +279,24 @@ std::string cmOutputConverter::EscapeForShell(
     flags |= Shell_Flag_IsUnix;
   }
 
+  return cmOutputConverter::EscapeForShell(str, flags);
+}
+
+std::string cmOutputConverter::EscapeForShell(cm::string_view str, int flags)
+{
+  // Do not escape shell operators.
+  if (cmOutputConverterIsShellOperator(str)) {
+    return std::string(str);
+  }
+
   return Shell_GetArgument(str, flags);
 }
 
-std::string cmOutputConverter::EscapeForCMake(cm::string_view str)
+std::string cmOutputConverter::EscapeForCMake(cm::string_view str,
+                                              WrapQuotes wrapQuotes)
 {
   // Always double-quote the argument to take care of most escapes.
-  std::string result = "\"";
+  std::string result = (wrapQuotes == WrapQuotes::Wrap) ? "\"" : "";
   for (const char c : str) {
     if (c == '"') {
       // Escape the double quote to avoid ending the argument.
@@ -143,7 +312,9 @@ std::string cmOutputConverter::EscapeForCMake(cm::string_view str)
       result += c;
     }
   }
-  result += "\"";
+  if (wrapQuotes == WrapQuotes::Wrap) {
+    result += "\"";
+  }
   return result;
 }
 
@@ -158,7 +329,7 @@ cmOutputConverter::FortranFormat cmOutputConverter::GetFortranFormat(
 {
   FortranFormat format = FortranFormatNone;
   if (!value.empty()) {
-    for (std::string const& fi : cmExpandedList(value)) {
+    for (std::string const& fi : cmList(value)) {
       if (fi == "FIXED") {
         format = FortranFormatFixed;
       }
@@ -262,6 +433,13 @@ bool cmOutputConverter::Shell_CharNeedsQuotes(char c, int flags)
     return true;
   }
 
+  /* Quote hyphens in response files */
+  if (flags & Shell_Flag_IsResponse) {
+    if (c == '-') {
+      return true;
+    }
+  }
+
   if (flags & Shell_Flag_IsUnix) {
     /* On UNIX several special characters need quotes to preserve them.  */
     if (Shell_CharNeedsQuotesOnUnix(c)) {
@@ -357,6 +535,13 @@ bool cmOutputConverter::Shell_ArgumentNeedsQuotes(cm::string_view in,
   if (flags & Shell_Flag_IsUnix && in.size() == 1) {
     char c = in[0];
     if ((c == '?') || (c == '&') || (c == '^') || (c == '|') || (c == '#')) {
+      return true;
+    }
+  }
+
+  /* UNC paths in MinGW Makefiles need quotes.  */
+  if ((flags & Shell_Flag_MinGWMake) && (flags & Shell_Flag_Make)) {
+    if (in.size() > 1 && in[0] == '\\' && in[1] == '\\') {
       return true;
     }
   }

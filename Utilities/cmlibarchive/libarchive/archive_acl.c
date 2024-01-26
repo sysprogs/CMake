@@ -37,6 +37,10 @@ __FBSDID("$FreeBSD$");
 #include <wchar.h>
 #endif
 
+#ifdef __clang_analyzer__
+#include <assert.h>
+#endif
+
 #include "archive_acl_private.h"
 #include "archive_entry.h"
 #include "archive_private.h"
@@ -595,7 +599,7 @@ archive_acl_text_len(struct archive_acl *acl, int want_type, int flags,
 				else
 					length += sizeof(uid_t) * 3 + 1;
 			} else {
-				r = archive_mstring_get_mbs_l(&ap->name, &name,
+				r = archive_mstring_get_mbs_l(a, &ap->name, &name,
 				    &len, sc);
 				if (r != 0)
 					return (0);
@@ -968,7 +972,7 @@ archive_acl_to_text_l(struct archive_acl *acl, ssize_t *text_len, int flags,
 		else
 			prefix = NULL;
 		r = archive_mstring_get_mbs_l(
-		    &ap->name, &name, &len, sc);
+		    NULL, &ap->name, &name, &len, sc);
 		if (r != 0) {
 			free(s);
 			return (NULL);
@@ -1209,6 +1213,9 @@ archive_acl_from_text_w(struct archive_acl *acl, const wchar_t *text,
 			 * to "user::rwx", etc. valid only for first field
 			 */
 			s = field[0].start;
+			#ifdef __clang_analyzer__
+			assert(s);
+			#endif
 			len = field[0].end - field[0].start;
 			if (*s == L'd' && (len == 1 || (len >= 7
 			    && wmemcmp((s + 1), L"efault", 6) == 0))) {
@@ -1402,14 +1409,14 @@ isint_w(const wchar_t *start, const wchar_t *end, int *result)
 	if (start >= end)
 		return (0);
 	while (start < end) {
-		if (*start < '0' || *start > '9')
+		if (*start < L'0' || *start > L'9')
 			return (0);
 		if (n > (INT_MAX / 10) ||
-		    (n == INT_MAX / 10 && (*start - '0') > INT_MAX % 10)) {
+		    (n == INT_MAX / 10 && (*start - L'0') > INT_MAX % 10)) {
 			n = INT_MAX;
 		} else {
 			n *= 10;
-			n += *start - '0';
+			n += *start - L'0';
 		}
 		start++;
 	}
@@ -1692,6 +1699,9 @@ archive_acl_from_text_l(struct archive_acl *acl, const char *text,
 			 * to "user::rwx", etc. valid only for first field
 			 */
 			s = field[0].start;
+			#ifdef __clang_analyzer__
+			assert(s);
+			#endif
 			len = field[0].end - field[0].start;
 			if (*s == 'd' && (len == 1 || (len >= 7
 			    && memcmp((s + 1), "efault", 6) == 0))) {

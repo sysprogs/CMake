@@ -5,10 +5,12 @@
     "projectName": "codemodel-v2",
     "type": "STATIC_LIBRARY",
     "isGeneratorProvided": null,
+    "fileSets": null,
     "sources": [
         {
             "path": "^empty\\.c$",
             "isGenerated": null,
+            "fileSetName": null,
             "sourceGroupName": "Source Files",
             "compileGroupLanguage": "C",
             "backtrace": [
@@ -54,6 +56,7 @@
                 "^empty\\.c$"
             ],
             "includes": null,
+            "frameworks": null,
             "defines": null,
             "compileCommandFragments": null
         }
@@ -85,10 +88,10 @@
         }
     ],
     "folder": null,
-    "nameOnDisk": "^(lib)?c_lib\\.(a|lib)$",
+    "nameOnDisk": "^(lib)?c_lib\\.(a|lib|l)$",
     "artifacts": [
         {
-            "path": "^((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?c_lib\\.(a|lib)$",
+            "path": "^((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?c_lib\\.(a|lib|l)$",
             "_dllExtra": false
         }
     ],

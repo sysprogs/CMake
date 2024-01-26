@@ -1,8 +1,6 @@
 # CrayLinuxEnvironment: loaded by users cross-compiling on a Cray front-end
 # node by specifying "-DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment" to cmake
 
-set(UNIX 1)
-
 if(DEFINED ENV{CRAYOS_VERSION})
   set(CMAKE_SYSTEM_VERSION "$ENV{CRAYOS_VERSION}")
 elseif(DEFINED ENV{XTOS_VERSION})
@@ -68,6 +66,7 @@ if (NOT CMAKE_FIND_NO_INSTALL_PREFIX)
     )
   endif()
 endif()
+_cmake_record_install_prefix()
 
 list(APPEND CMAKE_SYSTEM_INCLUDE_PATH
   $ENV{SYSROOT_DIR}/usr/include/X11

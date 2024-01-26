@@ -2,11 +2,14 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
+#include "cmConfigure.h" // IWYU pragma: keep
+
 #include <algorithm>
-#include <cstddef>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cm/optional>
@@ -14,302 +17,377 @@
 
 #include <cm3p/json/value.h>
 
-template <typename T, typename E>
-using cmJSONHelper = std::function<E(T& out, const Json::Value* value)>;
+#include "cmJSONState.h"
+#include "cmStringAlgorithms.h"
 
-template <typename T, typename E>
-class cmJSONObjectHelper
+template <typename T>
+using cmJSONHelper =
+  std::function<bool(T& out, const Json::Value* value, cmJSONState* state)>;
+
+using ErrorGenerator = std::function<void(const Json::Value*, cmJSONState*)>;
+
+namespace JsonErrors {
+enum ObjectError
 {
-public:
-  cmJSONObjectHelper(E&& success, E&& fail, bool allowExtra = true);
-
-  template <typename U, typename M, typename F>
-  cmJSONObjectHelper& Bind(const cm::string_view& name, M U::*member, F func,
-                           bool required = true);
-  template <typename M, typename F>
-  cmJSONObjectHelper& Bind(const cm::string_view& name, std::nullptr_t, F func,
-                           bool required = true);
-  template <typename F>
-  cmJSONObjectHelper& Bind(const cm::string_view& name, F func,
-                           bool required = true);
-
-  E operator()(T& out, const Json::Value* value) const;
-
-private:
-  // Not a true cmJSONHelper, it just happens to match the signature
-  using MemberFunction = std::function<E(T& out, const Json::Value* value)>;
-  struct Member
-  {
-    cm::string_view Name;
-    MemberFunction Function;
-    bool Required;
-  };
-  std::vector<Member> Members;
-  bool AnyRequired = false;
-  E Success;
-  E Fail;
-  bool AllowExtra;
-
-  cmJSONObjectHelper& BindPrivate(const cm::string_view& name,
-                                  MemberFunction&& func, bool required);
+  RequiredMissing,
+  InvalidObject,
+  ExtraField,
+  MissingRequired
 };
+using ErrorGenerator = std::function<void(const Json::Value*, cmJSONState*)>;
+using ObjectErrorGenerator =
+  std::function<ErrorGenerator(ObjectError, const Json::Value::Members&)>;
+ErrorGenerator EXPECTED_TYPE(const std::string& type);
 
-template <typename T, typename E>
-cmJSONObjectHelper<T, E>::cmJSONObjectHelper(E&& success, E&& fail,
-                                             bool allowExtra)
-  : Success(std::move(success))
-  , Fail(std::move(fail))
-  , AllowExtra(allowExtra)
-{
+void INVALID_STRING(const Json::Value* value, cmJSONState* state);
+
+void INVALID_BOOL(const Json::Value* value, cmJSONState* state);
+
+void INVALID_INT(const Json::Value* value, cmJSONState* state);
+
+void INVALID_UINT(const Json::Value* value, cmJSONState* state);
+
+ObjectErrorGenerator INVALID_NAMED_OBJECT(
+  const std::function<std::string(const Json::Value*, cmJSONState*)>&
+    nameGenerator);
+
+ErrorGenerator INVALID_OBJECT(ObjectError errorType,
+                              const Json::Value::Members& extraFields);
+
+ErrorGenerator INVALID_NAMED_OBJECT_KEY(
+  ObjectError errorType, const Json::Value::Members& extraFields);
 }
 
-template <typename T, typename E>
-template <typename U, typename M, typename F>
-cmJSONObjectHelper<T, E>& cmJSONObjectHelper<T, E>::Bind(
-  const cm::string_view& name, M U::*member, F func, bool required)
+struct cmJSONHelperBuilder
 {
-  return this->BindPrivate(
-    name,
-    [func, member](T& out, const Json::Value* value) -> E {
-      return func(out.*member, value);
-    },
-    required);
-}
 
-template <typename T, typename E>
-template <typename M, typename F>
-cmJSONObjectHelper<T, E>& cmJSONObjectHelper<T, E>::Bind(
-  const cm::string_view& name, std::nullptr_t, F func, bool required)
-{
-  return this->BindPrivate(name,
-                           [func](T& /*out*/, const Json::Value* value) -> E {
-                             M dummy;
-                             return func(dummy, value);
-                           },
-                           required);
-}
-
-template <typename T, typename E>
-template <typename F>
-cmJSONObjectHelper<T, E>& cmJSONObjectHelper<T, E>::Bind(
-  const cm::string_view& name, F func, bool required)
-{
-  return this->BindPrivate(name, MemberFunction(func), required);
-}
-
-template <typename T, typename E>
-cmJSONObjectHelper<T, E>& cmJSONObjectHelper<T, E>::BindPrivate(
-  const cm::string_view& name, MemberFunction&& func, bool required)
-{
-  Member m;
-  m.Name = name;
-  m.Function = std::move(func);
-  m.Required = required;
-  this->Members.push_back(std::move(m));
-  if (required) {
-    this->AnyRequired = true;
-  }
-  return *this;
-}
-
-template <typename T, typename E>
-E cmJSONObjectHelper<T, E>::operator()(T& out, const Json::Value* value) const
-{
-  if (!value && this->AnyRequired) {
-    return this->Fail;
-  }
-  if (value && !value->isObject()) {
-    return this->Fail;
-  }
-  Json::Value::Members extraFields;
-  if (value) {
-    extraFields = value->getMemberNames();
-  }
-
-  for (auto const& m : this->Members) {
-    std::string name(m.Name.data(), m.Name.size());
-    if (value && value->isMember(name)) {
-      E result = m.Function(out, &(*value)[name]);
-      if (result != this->Success) {
-        return result;
-      }
-      extraFields.erase(
-        std::find(extraFields.begin(), extraFields.end(), name));
-    } else if (!m.Required) {
-      E result = m.Function(out, nullptr);
-      if (result != this->Success) {
-        return result;
-      }
-    } else {
-      return this->Fail;
+  template <typename T>
+  class Object
+  {
+  public:
+    Object(JsonErrors::ObjectErrorGenerator error = JsonErrors::INVALID_OBJECT,
+           bool allowExtra = true)
+      : Error(std::move(error))
+      , AllowExtra(allowExtra)
+    {
     }
-  }
 
-  return this->AllowExtra || extraFields.empty() ? this->Success : this->Fail;
-}
+    template <typename U, typename M, typename F>
+    Object& Bind(const cm::string_view& name, M U::*member, F func,
+                 bool required = true)
+    {
+      return this->BindPrivate(
+        name,
+        [func, member](T& out, const Json::Value* value, cmJSONState* state)
+          -> bool { return func(out.*member, value, state); },
+        required);
+    }
+    template <typename M, typename F>
+    Object& Bind(const cm::string_view& name, std::nullptr_t, F func,
+                 bool required = true)
+    {
+      return this->BindPrivate(
+        name,
+        [func](T& /*out*/, const Json::Value* value,
+               cmJSONState* state) -> bool {
+          M dummy;
+          return func(dummy, value, state);
+        },
+        required);
+    }
+    template <typename F>
+    Object& Bind(const cm::string_view& name, F func, bool required = true)
+    {
+      return this->BindPrivate(name, MemberFunction(func), required);
+    }
 
-template <typename E>
-cmJSONHelper<std::string, E> cmJSONStringHelper(E success, E fail,
-                                                const std::string& defval = "")
-{
-  return
-    [success, fail, defval](std::string& out, const Json::Value* value) -> E {
+    bool operator()(T& out, const Json::Value* value, cmJSONState* state) const
+    {
+      Json::Value::Members extraFields;
+      bool success = true;
+      if (!value && this->AnyRequired) {
+        Error(JsonErrors::ObjectError::RequiredMissing, extraFields)(value,
+                                                                     state);
+        return false;
+      }
+      if (value && !value->isObject()) {
+        Error(JsonErrors::ObjectError::InvalidObject, extraFields)(value,
+                                                                   state);
+        return false;
+      }
+      if (value) {
+        extraFields = value->getMemberNames();
+      }
+
+      for (auto const& m : this->Members) {
+        std::string name(m.Name.data(), m.Name.size());
+        state->push_stack(name, value);
+        if (value && value->isMember(name)) {
+          if (!m.Function(out, &(*value)[name], state)) {
+            success = false;
+          }
+          extraFields.erase(
+            std::find(extraFields.begin(), extraFields.end(), name));
+        } else if (!m.Required) {
+          if (!m.Function(out, nullptr, state)) {
+            success = false;
+          }
+        } else {
+          Error(JsonErrors::ObjectError::MissingRequired, extraFields)(value,
+                                                                       state);
+          success = false;
+        }
+        state->pop_stack();
+      }
+
+      if (!this->AllowExtra && !extraFields.empty()) {
+        Error(JsonErrors::ObjectError::ExtraField, extraFields)(value, state);
+        success = false;
+      }
+      return success;
+    }
+
+  private:
+    // Not a true cmJSONHelper, it just happens to match the signature
+    using MemberFunction = std::function<bool(T& out, const Json::Value* value,
+                                              cmJSONState* state)>;
+    struct Member
+    {
+      cm::string_view Name;
+      MemberFunction Function;
+      bool Required;
+    };
+    std::vector<Member> Members;
+    bool AnyRequired = false;
+    JsonErrors::ObjectErrorGenerator Error;
+    bool AllowExtra;
+
+    Object& BindPrivate(const cm::string_view& name, MemberFunction&& func,
+                        bool required)
+    {
+      Member m;
+      m.Name = name;
+      m.Function = std::move(func);
+      m.Required = required;
+      this->Members.push_back(std::move(m));
+      if (required) {
+        this->AnyRequired = true;
+      }
+      return *this;
+    }
+  };
+
+  static cmJSONHelper<std::string> String(
+    const JsonErrors::ErrorGenerator& error = JsonErrors::INVALID_STRING,
+    const std::string& defval = "")
+  {
+    return [error, defval](std::string& out, const Json::Value* value,
+                           cmJSONState* state) -> bool {
       if (!value) {
         out = defval;
-        return success;
+        return true;
       }
       if (!value->isString()) {
-        return fail;
+        error(value, state);
+        ;
+        return false;
       }
       out = value->asString();
-      return success;
+      return true;
     };
-}
-
-template <typename E>
-cmJSONHelper<int, E> cmJSONIntHelper(E success, E fail, int defval = 0)
-{
-  return [success, fail, defval](int& out, const Json::Value* value) -> E {
-    if (!value) {
-      out = defval;
-      return success;
-    }
-    if (!value->isInt()) {
-      return fail;
-    }
-    out = value->asInt();
-    return success;
   };
-}
 
-template <typename E>
-cmJSONHelper<unsigned int, E> cmJSONUIntHelper(E success, E fail,
-                                               unsigned int defval = 0)
-{
-  return
-    [success, fail, defval](unsigned int& out, const Json::Value* value) -> E {
+  static cmJSONHelper<std::string> String(const std::string& defval)
+  {
+    return String(JsonErrors::INVALID_STRING, defval);
+  };
+
+  static cmJSONHelper<int> Int(
+    const JsonErrors::ErrorGenerator& error = JsonErrors::INVALID_INT,
+    int defval = 0)
+  {
+    return [error, defval](int& out, const Json::Value* value,
+                           cmJSONState* state) -> bool {
       if (!value) {
         out = defval;
-        return success;
+        return true;
+      }
+      if (!value->isInt()) {
+        error(value, state);
+        ;
+        return false;
+      }
+      out = value->asInt();
+      return true;
+    };
+  }
+
+  static cmJSONHelper<int> Int(int defval)
+  {
+    return Int(JsonErrors::INVALID_INT, defval);
+  };
+
+  static cmJSONHelper<unsigned int> UInt(
+    const JsonErrors::ErrorGenerator& error = JsonErrors::INVALID_UINT,
+    unsigned int defval = 0)
+  {
+    return [error, defval](unsigned int& out, const Json::Value* value,
+                           cmJSONState* state) -> bool {
+      if (!value) {
+        out = defval;
+        return true;
       }
       if (!value->isUInt()) {
-        return fail;
+        error(value, state);
+        ;
+        return false;
       }
       out = value->asUInt();
+      return true;
+    };
+  }
+
+  static cmJSONHelper<unsigned int> UInt(unsigned int defval)
+  {
+    return UInt(JsonErrors::INVALID_UINT, defval);
+  }
+
+  static cmJSONHelper<bool> Bool(
+    const JsonErrors::ErrorGenerator& error = JsonErrors::INVALID_BOOL,
+    bool defval = false)
+  {
+    return [error, defval](bool& out, const Json::Value* value,
+                           cmJSONState* state) -> bool {
+      if (!value) {
+        out = defval;
+        return true;
+      }
+      if (!value->isBool()) {
+        error(value, state);
+        ;
+        return false;
+      }
+      out = value->asBool();
+      return true;
+    };
+  }
+
+  static cmJSONHelper<bool> Bool(bool defval)
+  {
+    return Bool(JsonErrors::INVALID_BOOL, defval);
+  }
+
+  template <typename T, typename F, typename Filter>
+  static cmJSONHelper<std::vector<T>> VectorFilter(
+    const JsonErrors::ErrorGenerator& error, F func, Filter filter)
+  {
+    return [error, func, filter](std::vector<T>& out, const Json::Value* value,
+                                 cmJSONState* state) -> bool {
+      bool success = true;
+      if (!value) {
+        out.clear();
+        return true;
+      }
+      if (!value->isArray()) {
+        error(value, state);
+        return false;
+      }
+      out.clear();
+      int index = 0;
+      for (auto const& item : *value) {
+        state->push_stack(cmStrCat("$vector_item_", index++), &item);
+        T t;
+        if (!func(t, &item, state)) {
+          success = false;
+        }
+        if (!filter(t)) {
+          state->pop_stack();
+          continue;
+        }
+        out.push_back(std::move(t));
+        state->pop_stack();
+      }
       return success;
     };
-}
+  }
 
-template <typename E>
-cmJSONHelper<bool, E> cmJSONBoolHelper(E success, E fail, bool defval = false)
-{
-  return [success, fail, defval](bool& out, const Json::Value* value) -> E {
-    if (!value) {
-      out = defval;
-      return success;
-    }
-    if (!value->isBool()) {
-      return fail;
-    }
-    out = value->asBool();
-    return success;
-  };
-}
+  template <typename T, typename F>
+  static cmJSONHelper<std::vector<T>> Vector(JsonErrors::ErrorGenerator error,
+                                             F func)
+  {
+    return VectorFilter<T, F>(std::move(error), func,
+                              [](const T&) { return true; });
+  }
 
-template <typename T, typename E, typename F, typename Filter>
-cmJSONHelper<std::vector<T>, E> cmJSONVectorFilterHelper(E success, E fail,
-                                                         F func, Filter filter)
-{
-  return [success, fail, func, filter](std::vector<T>& out,
-                                       const Json::Value* value) -> E {
-    if (!value) {
+  template <typename T, typename F, typename Filter>
+  static cmJSONHelper<std::map<std::string, T>> MapFilter(
+    const JsonErrors::ErrorGenerator& error, F func, Filter filter)
+  {
+    return [error, func, filter](std::map<std::string, T>& out,
+                                 const Json::Value* value,
+                                 cmJSONState* state) -> bool {
+      bool success = true;
+      if (!value) {
+        out.clear();
+        return true;
+      }
+      if (!value->isObject()) {
+        error(value, state);
+        ;
+        return false;
+      }
       out.clear();
+      for (auto const& key : value->getMemberNames()) {
+        state->push_stack(cmStrCat(key, ""), &(*value)[key]);
+        if (!filter(key)) {
+          state->pop_stack();
+          continue;
+        }
+        T t;
+        if (!func(t, &(*value)[key], state)) {
+          success = false;
+        }
+        out[key] = std::move(t);
+        state->pop_stack();
+      }
       return success;
-    }
-    if (!value->isArray()) {
-      return fail;
-    }
-    out.clear();
-    for (auto const& item : *value) {
-      T t;
-      E result = func(t, &item);
-      if (result != success) {
-        return result;
+    };
+  }
+
+  template <typename T, typename F>
+  static cmJSONHelper<std::map<std::string, T>> Map(
+    const JsonErrors::ErrorGenerator& error, F func)
+  {
+    return MapFilter<T, F>(error, func,
+                           [](const std::string&) { return true; });
+  }
+
+  template <typename T, typename F>
+  static cmJSONHelper<cm::optional<T>> Optional(F func)
+  {
+    return [func](cm::optional<T>& out, const Json::Value* value,
+                  cmJSONState* state) -> bool {
+      if (!value) {
+        out.reset();
+        return true;
       }
-      if (!filter(t)) {
-        continue;
+      out.emplace();
+      return func(*out, value, state);
+    };
+  }
+
+  template <typename T, typename F>
+  static cmJSONHelper<T> Required(const JsonErrors::ErrorGenerator& error,
+                                  F func)
+  {
+    return [error, func](T& out, const Json::Value* value,
+                         cmJSONState* state) -> bool {
+      if (!value) {
+        error(value, state);
+        ;
+        return false;
       }
-      out.push_back(t);
-    }
-    return success;
-  };
-}
-
-template <typename T, typename E, typename F>
-cmJSONHelper<std::vector<T>, E> cmJSONVectorHelper(E success, E fail, F func)
-{
-  return cmJSONVectorFilterHelper<T, E, F>(success, fail, func,
-                                           [](const T&) { return true; });
-}
-
-template <typename T, typename E, typename F, typename Filter>
-cmJSONHelper<std::map<std::string, T>, E> cmJSONMapFilterHelper(E success,
-                                                                E fail, F func,
-                                                                Filter filter)
-{
-  return [success, fail, func, filter](std::map<std::string, T>& out,
-                                       const Json::Value* value) -> E {
-    if (!value) {
-      out.clear();
-      return success;
-    }
-    if (!value->isObject()) {
-      return fail;
-    }
-    out.clear();
-    for (auto const& key : value->getMemberNames()) {
-      if (!filter(key)) {
-        continue;
-      }
-      T t;
-      E result = func(t, &(*value)[key]);
-      if (result != success) {
-        return result;
-      }
-      out[key] = std::move(t);
-    }
-    return success;
-  };
-}
-
-template <typename T, typename E, typename F>
-cmJSONHelper<std::map<std::string, T>, E> cmJSONMapHelper(E success, E fail,
-                                                          F func)
-{
-  return cmJSONMapFilterHelper<T, E, F>(
-    success, fail, func, [](const std::string&) { return true; });
-}
-
-template <typename T, typename E, typename F>
-cmJSONHelper<cm::optional<T>, E> cmJSONOptionalHelper(E success, F func)
-{
-  return [success, func](cm::optional<T>& out, const Json::Value* value) -> E {
-    if (!value) {
-      out.reset();
-      return success;
-    }
-    out.emplace();
-    return func(*out, value);
-  };
-}
-
-template <typename T, typename E, typename F>
-cmJSONHelper<T, E> cmJSONRequiredHelper(E fail, F func)
-{
-  return [fail, func](T& out, const Json::Value* value) -> E {
-    if (!value) {
-      return fail;
-    }
-    return func(out, value);
-  };
-}
+      return func(out, value, state);
+    };
+  }
+};

@@ -57,10 +57,10 @@ bool HandleExprCommand(std::vector<std::string> const& args,
 
   if (argumentIndex < args.size()) {
     const std::string messageHint = "sub-command EXPR ";
-    const std::string option = args[argumentIndex++];
+    std::string const& option = args[argumentIndex++];
     if (option == "OUTPUT_FORMAT") {
       if (argumentIndex < args.size()) {
-        const std::string argument = args[argumentIndex++];
+        std::string const& argument = args[argumentIndex++];
         if (argument == "DECIMAL") {
           outputFormat = NumericFormat::DECIMAL;
         } else if (argument == "HEXADECIMAL") {
@@ -107,7 +107,7 @@ bool HandleExprCommand(std::vector<std::string> const& args,
       fmt = "%" KWIML_INT_PRId64;
       break;
   }
-  sprintf(buffer, fmt, helper.GetResult());
+  snprintf(buffer, sizeof(buffer), fmt, helper.GetResult());
 
   std::string const& w = helper.GetWarning();
   if (!w.empty()) {

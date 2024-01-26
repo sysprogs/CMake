@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "cmArgumentParser.h"
+#include "cmArgumentParserTypes.h"
 
 class cmInstallCommandArguments : public cmArgumentParser<void>
 {
@@ -34,6 +35,8 @@ public:
   bool HasNamelinkComponent() const;
   const std::string& GetType() const;
 
+  const std::string& GetDefaultComponent() const;
+
   static bool CheckPermissions(const std::string& onePerm, std::string& perm);
 
 private:
@@ -42,8 +45,8 @@ private:
   std::string NamelinkComponent;
   bool ExcludeFromAll = false;
   std::string Rename;
-  std::vector<std::string> Permissions;
-  std::vector<std::string> Configurations;
+  ArgumentParser::MaybeEmpty<std::vector<std::string>> Permissions;
+  ArgumentParser::MaybeEmpty<std::vector<std::string>> Configurations;
   bool Optional = false;
   bool NamelinkOnly = false;
   bool NamelinkSkip = false;
@@ -70,4 +73,18 @@ public:
 
 private:
   std::vector<std::string> IncludeDirs;
+};
+
+class cmInstallCommandFileSetArguments : public cmInstallCommandArguments
+{
+public:
+  cmInstallCommandFileSetArguments(std::string defaultComponent);
+
+  void Parse(std::vector<std::string> args,
+             std::vector<std::string>* unconsumedArgs);
+
+  const std::string& GetFileSet() const { return this->FileSet; }
+
+private:
+  std::string FileSet;
 };

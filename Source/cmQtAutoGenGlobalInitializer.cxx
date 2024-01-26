@@ -7,15 +7,13 @@
 
 #include <cm/memory>
 
-#include "cmCustomCommandLines.h"
+#include "cmCustomCommand.h"
 #include "cmDuration.h"
 #include "cmGeneratorTarget.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmPolicies.h"
 #include "cmProcessOutput.h"
-#include "cmProperty.h"
 #include "cmQtAutoGen.h"
 #include "cmQtAutoGenInitializer.h"
 #include "cmState.h"
@@ -23,6 +21,7 @@
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 
 cmQtAutoGenGlobalInitializer::Keywords::Keywords()
   : AUTOMOC("AUTOMOC")
@@ -119,7 +118,8 @@ cmQtAutoGenGlobalInitializer::cmQtAutoGenGlobalInitializer(
           target->GetSafeProperty(this->kw().AUTORCC_EXECUTABLE);
 
         // We support Qt4, Qt5 and Qt6
-        auto qtVersion = cmQtAutoGenInitializer::GetQtVersion(target.get());
+        auto qtVersion =
+          cmQtAutoGenInitializer::GetQtVersion(target.get(), mocExec);
         bool const validQt = (qtVersion.first.Major == 4) ||
           (qtVersion.first.Major == 5) || (qtVersion.first.Major == 6);
 
@@ -170,22 +170,20 @@ void cmQtAutoGenGlobalInitializer::GetOrCreateGlobalTarget(
     cmMakefile* makefile = localGen->GetMakefile();
 
     // Create utility target
-    std::vector<std::string> no_byproducts;
-    std::vector<std::string> no_depends;
-    cmCustomCommandLines no_commands;
-    const cmPolicies::PolicyStatus cmp0116_new = cmPolicies::NEW;
-    cmTarget* target = localGen->AddUtilityCommand(
-      name, true, makefile->GetHomeOutputDirectory().c_str(), no_byproducts,
-      no_depends, no_commands, cmp0116_new, false, comment.c_str());
+    auto cc = cm::make_unique<cmCustomCommand>();
+    cc->SetWorkingDirectory(makefile->GetHomeOutputDirectory().c_str());
+    cc->SetEscapeOldStyle(false);
+    cc->SetComment(comment.c_str());
+    cmTarget* target = localGen->AddUtilityCommand(name, true, std::move(cc));
     localGen->AddGeneratorTarget(
       cm::make_unique<cmGeneratorTarget>(target, localGen));
 
     // Set FOLDER property in the target
     {
-      cmProp folder =
+      cmValue folder =
         makefile->GetState()->GetGlobalProperty("AUTOGEN_TARGETS_FOLDER");
-      if (folder != nullptr) {
-        target->SetProperty("FOLDER", *folder);
+      if (folder) {
+        target->SetProperty("FOLDER", folder);
       }
     }
   }
@@ -264,11 +262,6 @@ cmQtAutoGenGlobalInitializer::GetCompilerFeatures(
   this->CompilerFeatures_.emplace(executable, res);
 
   return res;
-}
-
-bool cmQtAutoGenGlobalInitializer::generate()
-{
-  return (this->InitializeCustomTargets() && this->SetupCustomTargets());
 }
 
 bool cmQtAutoGenGlobalInitializer::InitializeCustomTargets()

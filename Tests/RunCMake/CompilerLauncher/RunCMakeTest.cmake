@@ -1,7 +1,7 @@
 include(RunCMake)
 
 function(run_compiler_launcher lang)
-  # Use a single build tree for tests without cleaning.
+  # Preserve build tree so we can reuse it for the ${lang}-Build subtest below
   set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/${lang}-build)
   set(RunCMake_TEST_NO_CLEAN 1)
   file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
@@ -17,7 +17,8 @@ endfunction()
 
 function(run_compiler_launcher_env lang)
   string(REGEX REPLACE "-.*" "" core_lang "${lang}")
-  set(ENV{CMAKE_${core_lang}_COMPILER_LAUNCHER} "${CMAKE_COMMAND};-E;env;USED_LAUNCHER=1")
+  # Use the noop genexp $<PATH:...> genexp to validate genexp support.
+  set(ENV{CMAKE_${core_lang}_COMPILER_LAUNCHER} "$<PATH:CMAKE_PATH,${CMAKE_COMMAND}>;-E;env;USED_LAUNCHER=1;TARGET_NAME=$<TARGET_PROPERTY:NAME>;LANGUAGE=$<COMPILE_LANGUAGE>")
   run_compiler_launcher(${lang})
   unset(ENV{CMAKE_${core_lang}_COMPILER_LAUNCHER})
 endfunction()
@@ -28,6 +29,9 @@ if(CMake_TEST_CUDA)
 endif()
 if(CMake_TEST_Fortran)
   list(APPEND langs Fortran)
+endif()
+if(CMake_TEST_HIP)
+  list(APPEND langs HIP)
 endif()
 if(CMake_TEST_ISPC)
   list(APPEND langs ISPC)

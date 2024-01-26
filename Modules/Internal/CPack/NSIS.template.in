@@ -48,7 +48,7 @@
 
 ;--- Component support macros: ---
 ; The code for the add/remove functionality is from:
-;   http://nsis.sourceforge.net/Add/Remove_Functionality
+;   https://nsis.sourceforge.io/Add/Remove_Functionality
 ; It has been modified slightly and extended to provide
 ; inter-component dependencies.
 Var AR_SecFlags
@@ -383,7 +383,7 @@ Function un.RemoveFromPath
 FunctionEnd
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Uninstall sutff
+; Uninstall stuff
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ###########################################
@@ -487,15 +487,15 @@ Done:
 	Exch $R1
 FunctionEnd
 
-Function ConditionalAddToRegisty
+Function ConditionalAddToRegistry
   Pop $0
   Pop $1
-  StrCmp "$0" "" ConditionalAddToRegisty_EmptyString
+  StrCmp "$0" "" ConditionalAddToRegistry_EmptyString
     WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\@CPACK_PACKAGE_INSTALL_REGISTRY_KEY@" \
     "$1" "$0"
     ;MessageBox MB_OK "Set Registry: '$1' to '$0'"
     DetailPrint "Set install registry entry: '$1' to '$0'"
-  ConditionalAddToRegisty_EmptyString:
+  ConditionalAddToRegistry_EmptyString:
 FunctionEnd
 
 ;--------------------------------
@@ -531,7 +531,6 @@ FunctionEnd
 @CPACK_NSIS_INSTALLER_ICON_CODE@
 @CPACK_NSIS_INSTALLER_MUI_WELCOMEFINISH_CODE@
 @CPACK_NSIS_INSTALLER_MUI_UNWELCOMEFINISH_CODE@
-@CPACK_NSIS_INSTALLER_MUI_COMPONENTS_DESC@
 @CPACK_NSIS_INSTALLER_MUI_FINISHPAGE_RUN_CODE@
 
 ;--------------------------------
@@ -540,7 +539,7 @@ FunctionEnd
   @CPACK_NSIS_INSTALLER_WELCOME_TITLE_3LINES_CODE@
   !insertmacro MUI_PAGE_WELCOME
 
-  !insertmacro MUI_PAGE_LICENSE "@CPACK_RESOURCE_FILE_LICENSE@"
+  @CPACK_NSIS_LICENSE_PAGE@
   Page custom InstallOptionsPage
   !insertmacro MUI_PAGE_DIRECTORY
 
@@ -564,21 +563,27 @@ FunctionEnd
 ;Languages
 
   !insertmacro MUI_LANGUAGE "English" ;first language is the default language
+  !insertmacro MUI_LANGUAGE "Afrikaans"
   !insertmacro MUI_LANGUAGE "Albanian"
   !insertmacro MUI_LANGUAGE "Arabic"
+  !insertmacro MUI_LANGUAGE "Asturian"
   !insertmacro MUI_LANGUAGE "Basque"
   !insertmacro MUI_LANGUAGE "Belarusian"
   !insertmacro MUI_LANGUAGE "Bosnian"
   !insertmacro MUI_LANGUAGE "Breton"
   !insertmacro MUI_LANGUAGE "Bulgarian"
+  !insertmacro MUI_LANGUAGE "Catalan"
+  !insertmacro MUI_LANGUAGE "Corsican"
   !insertmacro MUI_LANGUAGE "Croatian"
   !insertmacro MUI_LANGUAGE "Czech"
   !insertmacro MUI_LANGUAGE "Danish"
   !insertmacro MUI_LANGUAGE "Dutch"
+  !insertmacro MUI_LANGUAGE "Esperanto"
   !insertmacro MUI_LANGUAGE "Estonian"
   !insertmacro MUI_LANGUAGE "Farsi"
   !insertmacro MUI_LANGUAGE "Finnish"
   !insertmacro MUI_LANGUAGE "French"
+  !insertmacro MUI_LANGUAGE "Galician"
   !insertmacro MUI_LANGUAGE "German"
   !insertmacro MUI_LANGUAGE "Greek"
   !insertmacro MUI_LANGUAGE "Hebrew"
@@ -597,22 +602,29 @@ FunctionEnd
   !insertmacro MUI_LANGUAGE "Malay"
   !insertmacro MUI_LANGUAGE "Mongolian"
   !insertmacro MUI_LANGUAGE "Norwegian"
+  !insertmacro MUI_LANGUAGE "NorwegianNynorsk"
+  !insertmacro MUI_LANGUAGE "Pashto"
   !insertmacro MUI_LANGUAGE "Polish"
   !insertmacro MUI_LANGUAGE "Portuguese"
   !insertmacro MUI_LANGUAGE "PortugueseBR"
   !insertmacro MUI_LANGUAGE "Romanian"
   !insertmacro MUI_LANGUAGE "Russian"
+  !insertmacro MUI_LANGUAGE "ScotsGaelic"
   !insertmacro MUI_LANGUAGE "Serbian"
   !insertmacro MUI_LANGUAGE "SerbianLatin"
   !insertmacro MUI_LANGUAGE "SimpChinese"
   !insertmacro MUI_LANGUAGE "Slovak"
   !insertmacro MUI_LANGUAGE "Slovenian"
   !insertmacro MUI_LANGUAGE "Spanish"
+  !insertmacro MUI_LANGUAGE "SpanishInternational"
   !insertmacro MUI_LANGUAGE "Swedish"
+  !insertmacro MUI_LANGUAGE "Tatar"
   !insertmacro MUI_LANGUAGE "Thai"
   !insertmacro MUI_LANGUAGE "TradChinese"
   !insertmacro MUI_LANGUAGE "Turkish"
   !insertmacro MUI_LANGUAGE "Ukrainian"
+  !insertmacro MUI_LANGUAGE "Uzbek"
+  !insertmacro MUI_LANGUAGE "Vietnamese"
   !insertmacro MUI_LANGUAGE "Welsh"
 
 ;--------------------------------
@@ -635,7 +647,7 @@ FunctionEnd
 ;--------------------------------
 ; Component sections
 @CPACK_NSIS_COMPONENT_SECTIONS@
-
+@CPACK_NSIS_INSTALLER_MUI_COMPONENTS_DESC@
 ;--------------------------------
 ;Installer Sections
 
@@ -653,44 +665,44 @@ Section "-Core installation"
   WriteUninstaller "$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe"
   Push "DisplayName"
   Push "@CPACK_NSIS_DISPLAY_NAME@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "DisplayVersion"
   Push "@CPACK_PACKAGE_VERSION@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "Publisher"
   Push "@CPACK_PACKAGE_VENDOR@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "UninstallString"
-  Push "$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe"
-  Call ConditionalAddToRegisty
+  Push "$\"$INSTDIR\@CPACK_NSIS_UNINSTALL_NAME@.exe$\""
+  Call ConditionalAddToRegistry
   Push "NoRepair"
   Push "1"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
 
   !ifdef CPACK_NSIS_ADD_REMOVE
   ;Create add/remove functionality
   Push "ModifyPath"
   Push "$INSTDIR\AddRemove.exe"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   !else
   Push "NoModify"
   Push "1"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   !endif
 
   ; Optional registration
   Push "DisplayIcon"
   Push "$INSTDIR\@CPACK_NSIS_INSTALLED_ICON_NAME@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "HelpLink"
   Push "@CPACK_NSIS_HELP_LINK@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "URLInfoAbout"
   Push "@CPACK_NSIS_URL_INFO_ABOUT@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "Contact"
   Push "@CPACK_NSIS_CONTACT@"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   !insertmacro MUI_INSTALLOPTIONS_READ $INSTALL_DESKTOP "NSIS.InstallOptions.ini" "Field 5" "State"
   !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
 
@@ -708,19 +720,19 @@ Section "-Core installation"
   ; Write special uninstall registry entries
   Push "StartMenu"
   Push "$STARTMENU_FOLDER"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "DoNotAddToPath"
   Push "$DO_NOT_ADD_TO_PATH"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "AddToPathAllUsers"
   Push "$ADD_TO_PATH_ALL_USERS"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "AddToPathCurrentUser"
   Push "$ADD_TO_PATH_CURRENT_USER"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
   Push "InstallToDesktop"
   Push "$INSTALL_DESKTOP"
-  Call ConditionalAddToRegisty
+  Call ConditionalAddToRegistry
 
   !insertmacro MUI_STARTMENU_WRITE_END
 
@@ -868,7 +880,7 @@ Section "Uninstall"
     StrCmp "$MUI_TEMP" "$SMPROGRAMS" startMenuDeleteLoopDone startMenuDeleteLoop
   startMenuDeleteLoopDone:
 
-  ; If the user changed the shortcut, then untinstall may not work. This should
+  ; If the user changed the shortcut, then uninstall may not work. This should
   ; try to fix it.
   StrCpy $MUI_TEMP "$START_MENU"
   Delete "$SMPROGRAMS\$MUI_TEMP\Uninstall.lnk"
@@ -919,8 +931,19 @@ Function .onInit
 ;Run the uninstaller
 uninst:
   ClearErrors
-  StrLen $2 "\Uninstall.exe"
-  StrCpy $3 $0 -$2 # remove "\Uninstall.exe" from UninstallString to get path
+  # $0 should _always_ be quoted, however older versions of CMake did not
+  # do this.  We'll conditionally remove the begin/end quotes.
+  # Remove first char if quote
+  StrCpy $2 $0 1 0      # copy first char
+  StrCmp $2 "$\"" 0 +2  # if char is quote
+  StrCpy $0 $0 "" 1     # remove first char
+  # Remove last char if quote
+  StrCpy $2 $0 1 -1     # copy last char
+  StrCmp $2 "$\"" 0 +2  # if char is quote
+  StrCpy $0 $0 -1       # remove last char
+
+  StrLen $2 "\@CPACK_NSIS_UNINSTALL_NAME@.exe"
+  StrCpy $3 $0 -$2 # remove "\@CPACK_NSIS_UNINSTALL_NAME@.exe" from UninstallString to get path
   ExecWait '"$0" /S _?=$3' ;Do not copy the uninstaller to a temp file
 
   IfErrors uninst_failed inst
@@ -958,7 +981,7 @@ inst:
     ;MessageBox MB_OK 'User "$0" is in the Admin group'
     StrCpy $SV_ALLUSERS "AllUsers"
     Goto done
-  StrCmp $1 "Power" 0 +4
+  StrCmp $1 "Power" 0 +3
     SetShellVarContext all
     ;MessageBox MB_OK 'User "$0" is in the Power Users group'
     StrCpy $SV_ALLUSERS "AllUsers"

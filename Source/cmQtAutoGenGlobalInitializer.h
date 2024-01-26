@@ -49,15 +49,13 @@ public:
     std::vector<std::unique_ptr<cmLocalGenerator>> const& localGenerators);
   ~cmQtAutoGenGlobalInitializer();
 
-  Keywords const& kw() const { return this->Keywords_; };
-
-  bool generate();
-
-private:
-  friend class cmQtAutoGenInitializer;
+  Keywords const& kw() const { return this->Keywords_; }
 
   bool InitializeCustomTargets();
   bool SetupCustomTargets();
+
+private:
+  friend class cmQtAutoGenInitializer;
 
   void GetOrCreateGlobalTarget(cmLocalGenerator* localGen,
                                std::string const& name,

@@ -25,20 +25,13 @@ macro(CHECK_CXX_ACCEPTS_FLAG FLAGS  VARIABLE)
   if(NOT DEFINED ${VARIABLE})
     message(CHECK_START "Checking to see if CXX compiler accepts flag ${FLAGS}")
     try_compile(${VARIABLE}
-      ${CMAKE_BINARY_DIR}
-      ${CMAKE_ROOT}/Modules/DummyCXXFile.cxx
+      SOURCES ${CMAKE_ROOT}/Modules/DummyCXXFile.cxx
       CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${FLAGS}
-      OUTPUT_VARIABLE OUTPUT)
+      )
     if(${VARIABLE})
       message(CHECK_PASS "yes")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Determining if the CXX compiler accepts the flag ${FLAGS} passed with "
-        "the following output:\n${OUTPUT}\n\n")
     else()
       message(CHECK_FAIL "no")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Determining if the CXX compiler accepts the flag ${FLAGS} failed with "
-        "the following output:\n${OUTPUT}\n\n")
     endif()
   endif()
 endmacro()

@@ -5,9 +5,9 @@
 #include "cmExecutionStatus.h"
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
-#include "cmProperty.h"
 #include "cmStateTypes.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 #include "cmake.h"
 
 cmTargetPropCommandBase::cmTargetPropCommandBase(cmExecutionStatus& status)
@@ -23,7 +23,7 @@ void cmTargetPropCommandBase::SetError(std::string const& e)
 
 bool cmTargetPropCommandBase::HandleArguments(
   std::vector<std::string> const& args, const std::string& prop,
-  ArgumentFlags flags)
+  unsigned int flags)
 {
   if (args.size() < 2) {
     this->SetError("called with incorrect number of arguments");
@@ -155,10 +155,10 @@ bool cmTargetPropCommandBase::ProcessContentArgs(
       return false;
     }
   }
-  return this->PopulateTargetProperies(scope, content, prepend, system);
+  return this->PopulateTargetProperties(scope, content, prepend, system);
 }
 
-bool cmTargetPropCommandBase::PopulateTargetProperies(
+bool cmTargetPropCommandBase::PopulateTargetProperties(
   const std::string& scope, const std::vector<std::string>& content,
   bool prepend, bool system)
 {
@@ -181,7 +181,7 @@ void cmTargetPropCommandBase::HandleInterfaceContent(
 {
   if (prepend) {
     const std::string propName = std::string("INTERFACE_") + this->Property;
-    cmProp propValue = tgt->GetProperty(propName);
+    cmValue propValue = tgt->GetProperty(propName);
     const std::string totalContent =
       this->Join(content) + (propValue ? (";" + *propValue) : std::string());
     tgt->SetProperty(propName, totalContent);

@@ -8,18 +8,17 @@
 
 #include <cm/memory>
 #include <cm/vector>
-#include <cmext/algorithm>
 #include <cmext/string_view>
 
 #include "cmCTest.h"
 #include "cmCTestSubmitHandler.h"
 #include "cmCommand.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmProperty.h"
 #include "cmRange.h"
-#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 class cmExecutionStatus;
 
@@ -36,8 +35,8 @@ std::unique_ptr<cmCommand> cmCTestSubmitCommand::Clone()
 
 cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
 {
-  const std::string* submitURL = !this->SubmitURL.empty()
-    ? &this->SubmitURL
+  cmValue submitURL = !this->SubmitURL.empty()
+    ? cmValue(this->SubmitURL)
     : this->Makefile->GetDefinition("CTEST_SUBMIT_URL");
 
   if (submitURL) {
@@ -58,18 +57,21 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
 
   this->CTest->SetCTestConfigurationFromCMakeVariable(
     this->Makefile, "CurlOptions", "CTEST_CURL_OPTIONS", this->Quiet);
+  this->CTest->SetCTestConfigurationFromCMakeVariable(
+    this->Makefile, "SubmitInactivityTimeout",
+    "CTEST_SUBMIT_INACTIVITY_TIMEOUT", this->Quiet);
 
-  cmProp notesFilesVariable =
+  cmValue notesFilesVariable =
     this->Makefile->GetDefinition("CTEST_NOTES_FILES");
   if (notesFilesVariable) {
-    std::vector<std::string> notesFiles = cmExpandedList(*notesFilesVariable);
+    cmList notesFiles{ *notesFilesVariable };
     this->CTest->GenerateNotesFile(notesFiles);
   }
 
-  cmProp extraFilesVariable =
+  cmValue extraFilesVariable =
     this->Makefile->GetDefinition("CTEST_EXTRA_SUBMIT_FILES");
   if (extraFilesVariable) {
-    std::vector<std::string> extraFiles = cmExpandedList(*extraFilesVariable);
+    cmList extraFiles{ *extraFilesVariable };
     if (!this->CTest->SubmitExtraFiles(extraFiles)) {
       this->SetError("problem submitting extra files.");
       return nullptr;
@@ -84,7 +86,7 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
   // If FILES are given, but not PARTS, only the FILES are submitted
   // and *no* PARTS are submitted.
   //  (This is why we select the empty "noParts" set in the
-  //   FilesMentioned block below...)
+  //   if(this->Files) block below...)
   //
   // If PARTS are given, only the selected PARTS are submitted.
   //
@@ -93,7 +95,7 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
 
   // If given explicit FILES to submit, pass them to the handler.
   //
-  if (this->FilesMentioned) {
+  if (this->Files) {
     // Intentionally select *no* PARTS. (Pass an empty set.) If PARTS
     // were also explicitly mentioned, they will be selected below...
     // But FILES with no PARTS mentioned should just submit the FILES
@@ -101,14 +103,14 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
     //
     handler->SelectParts(std::set<cmCTest::Part>());
     handler->SelectFiles(
-      std::set<std::string>(this->Files.begin(), this->Files.end()));
+      std::set<std::string>(this->Files->begin(), this->Files->end()));
   }
 
   // If a PARTS option was given, select only the named parts for submission.
   //
-  if (this->PartsMentioned) {
+  if (this->Parts) {
     auto parts =
-      cmMakeRange(this->Parts).transform([this](std::string const& arg) {
+      cmMakeRange(*(this->Parts)).transform([this](std::string const& arg) {
         return this->CTest->GetPartFromName(arg);
       });
     handler->SelectParts(std::set<cmCTest::Part>(parts.begin(), parts.end()));
@@ -119,15 +121,15 @@ cmCTestGenericHandler* cmCTestSubmitCommand::InitializeHandler()
     handler->SetHttpHeaders(this->HttpHeaders);
   }
 
-  handler->SetOption("RetryDelay", this->RetryDelay.c_str());
-  handler->SetOption("RetryCount", this->RetryCount.c_str());
+  handler->SetOption("RetryDelay", this->RetryDelay);
+  handler->SetOption("RetryCount", this->RetryCount);
   handler->SetOption("InternalTest", this->InternalTest ? "ON" : "OFF");
 
   handler->SetQuiet(this->Quiet);
 
   if (this->CDashUpload) {
-    handler->SetOption("CDashUploadFile", this->CDashUploadFile.c_str());
-    handler->SetOption("CDashUploadType", this->CDashUploadType.c_str());
+    handler->SetOption("CDashUploadFile", this->CDashUploadFile);
+    handler->SetOption("CDashUploadType", this->CDashUploadType);
   }
   return handler;
 }
@@ -169,33 +171,31 @@ void cmCTestSubmitCommand::BindArguments()
   this->cmCTestHandlerCommand::BindArguments();
 }
 
-void cmCTestSubmitCommand::CheckArguments(
-  std::vector<std::string> const& keywords)
+void cmCTestSubmitCommand::CheckArguments()
 {
-  this->PartsMentioned =
-    !this->Parts.empty() || cm::contains(keywords, "PARTS");
-  this->FilesMentioned =
-    !this->Files.empty() || cm::contains(keywords, "FILES");
+  if (this->Parts) {
+    cm::erase_if(*(this->Parts), [this](std::string const& arg) -> bool {
+      cmCTest::Part p = this->CTest->GetPartFromName(arg);
+      if (p == cmCTest::PartCount) {
+        std::ostringstream e;
+        e << "Part name \"" << arg << "\" is invalid.";
+        this->Makefile->IssueMessage(MessageType::FATAL_ERROR, e.str());
+        return true;
+      }
+      return false;
+    });
+  }
 
-  cm::erase_if(this->Parts, [this](std::string const& arg) -> bool {
-    cmCTest::Part p = this->CTest->GetPartFromName(arg);
-    if (p == cmCTest::PartCount) {
-      std::ostringstream e;
-      e << "Part name \"" << arg << "\" is invalid.";
-      this->Makefile->IssueMessage(MessageType::FATAL_ERROR, e.str());
-      return true;
-    }
-    return false;
-  });
-
-  cm::erase_if(this->Files, [this](std::string const& arg) -> bool {
-    if (!cmSystemTools::FileExists(arg)) {
-      std::ostringstream e;
-      e << "File \"" << arg << "\" does not exist. Cannot submit "
-        << "a non-existent file.";
-      this->Makefile->IssueMessage(MessageType::FATAL_ERROR, e.str());
-      return true;
-    }
-    return false;
-  });
+  if (this->Files) {
+    cm::erase_if(*(this->Files), [this](std::string const& arg) -> bool {
+      if (!cmSystemTools::FileExists(arg)) {
+        std::ostringstream e;
+        e << "File \"" << arg << "\" does not exist. Cannot submit "
+          << "a non-existent file.";
+        this->Makefile->IssueMessage(MessageType::FATAL_ERROR, e.str());
+        return true;
+      }
+      return false;
+    });
+  }
 }

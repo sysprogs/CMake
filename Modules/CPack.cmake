@@ -53,9 +53,9 @@ Here's how it works:
 
 * :manual:`cpack <cpack(1)>` runs
 * it includes ``CPackConfig.cmake``
-* it iterates over the generators given by the ``-G`` command line option,
-  or if no such option was specified, over the list of generators given by
-  the :variable:`CPACK_GENERATOR` variable set in the ``CPackConfig.cmake``
+* it iterates over the generators given by the :option:`-G <cpack -G>` command
+  line option, or if no such option was specified, over the list of generators
+  given by the :variable:`CPACK_GENERATOR` variable set in the ``CPackConfig.cmake``
   input file.
 * foreach generator, it then
 
@@ -217,7 +217,8 @@ installers.  The most commonly-used variables are:
   to the user by the produced installer (often with an explicit "Accept"
   button, for graphical installers) prior to installation.  This license
   file is NOT added to the installed files but is used by some CPack generators
-  like NSIS.  If you want to install a license file (may be the same as this
+  like NSIS.  If you want to use UTF-8 characters, the file needs to be encoded
+  in UTF-8 BOM.  If you want to install a license file (may be the same as this
   one) along with your project, you must add an appropriate CMake
   :command:`install` command in your ``CMakeLists.txt``.
 
@@ -246,9 +247,9 @@ installers.  The most commonly-used variables are:
   List of CPack generators to use.  If not specified, CPack will create a
   set of options following the naming pattern
   :variable:`CPACK_BINARY_<GENNAME>` (e.g. ``CPACK_BINARY_NSIS``) allowing
-  the user to enable/disable individual generators.  If the ``-G`` option is
-  given on the :manual:`cpack <cpack(1)>` command line, it will override this
-  variable and any ``CPACK_BINARY_<GENNAME>`` options.
+  the user to enable/disable individual generators.  If the :option:`-G <cpack -G>`
+  option is given on the :manual:`cpack <cpack(1)>` command line, it will override
+  this variable and any ``CPACK_BINARY_<GENNAME>`` options.
 
 .. variable:: CPACK_OUTPUT_CONFIG_FILE
 
@@ -261,8 +262,8 @@ installers.  The most commonly-used variables are:
   Lists each of the executables and associated text label to be used to
   create Start Menu shortcuts.  For example, setting this to the list
   ``ccmake;CMake`` will create a shortcut named "CMake" that will execute the
-  installed executable ``ccmake``.  Not all CPack generators use it (at least
-  NSIS, WIX and OSXX11 do).
+  installed executable :program:`ccmake`. Not all CPack generators use it (at least
+  NSIS, Inno Setup and WIX do).
 
 .. variable:: CPACK_STRIP_FILES
 
@@ -291,18 +292,38 @@ installers.  The most commonly-used variables are:
 
   Some compression methods used by CPack generators such as Debian or Archive
   may take advantage of multiple CPU cores to speed up compression.
-  ``CPACK_THREADS`` can be set to positive integer to specify how many threads
-  will be used for compression. If it is set to 0, CPack will set it so that
-  all available CPU cores are used.
+  ``CPACK_THREADS`` can be set to specify how many threads will be
+  used for compression.
+
+  A positive integer can be used to specify an exact desired thread count.
+
+  When given a negative integer CPack will use the absolute value
+  as the upper limit but may choose a lower value based on
+  the available hardware concurrency.
+
+  Given 0 CPack will try to use all available CPU cores.
+
   By default ``CPACK_THREADS`` is set to ``1``.
 
-  Currently only ``xz`` compression *may* take advantage of multiple cores. Other
-  compression methods ignore this value and use only one thread.
+  The following compression methods may take advantage of multiple cores:
 
-  .. note::
+  ``xz``
+    Supported if CMake is built with a ``liblzma`` that supports
+    parallel compression.
 
-     Official CMake binaries available on ``cmake.org`` ship with a ``liblzma``
-     that does not support parallel compression.
+    .. versionadded:: 3.21
+
+      Official CMake binaries available on ``cmake.org`` now ship
+      with a ``liblzma`` that supports parallel compression.
+      Older versions did not.
+
+  ``zstd``
+    .. versionadded:: 3.24
+
+    Supported if CMake is built with libarchive 3.6 or higher.
+    Official CMake binaries available on ``cmake.org`` support it.
+
+  Other compression methods ignore this value and use only one thread.
 
 Variables for Source Package Generators
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -449,7 +470,35 @@ The following variables are for advanced uses of CPack:
   generates (when :variable:`CPACK_GENERATOR` is not set) a set of CMake
   options (see CMake :command:`option` command) which may then be used to
   select the CPack generator(s) to be used when building the ``package``
-  target or when running :manual:`cpack <cpack(1)>` without the ``-G`` option.
+  target or when running :manual:`cpack <cpack(1)>` without the
+  :option:`-G <cpack -G>` option.
+
+.. variable:: CPACK_READELF_EXECUTABLE
+
+  .. versionadded:: 3.25
+
+  Specify the ``readelf`` executable path used by CPack.
+  The default value will be ``CMAKE_READELF`` when set.  Otherwise,
+  the default value will be empty and CPack will use :command:`find_program`
+  to determine the ``readelf`` path when needed.
+
+.. variable:: CPACK_OBJCOPY_EXECUTABLE
+
+  .. versionadded:: 3.25
+
+  Specify the ``objcopy`` executable path used by CPack.
+  The default value will be ``CMAKE_OBJCOPY`` when set.  Otherwise,
+  the default value will be empty and CPack will use :command:`find_program`
+  to determine the ``objcopy`` path when needed.
+
+.. variable:: CPACK_OBJDUMP_EXECUTABLE
+
+  .. versionadded:: 3.25
+
+  Specify the ``objdump`` executable path used by CPack.
+  The default value will be ``CMAKE_OBJDUMP`` when set.  Otherwise,
+  the default value will be empty and CPack will use :command:`find_program`
+  to determine the ``objdump`` path when needed.
 
 #]=======================================================================]
 
@@ -570,6 +619,16 @@ _cpack_set_default(CPACK_RESOURCE_FILE_WELCOME
 
 _cpack_set_default(CPACK_MODULE_PATH "${CMAKE_MODULE_PATH}")
 
+if(CMAKE_READELF)
+  _cpack_set_default(CPACK_READELF_EXECUTABLE "${CMAKE_READELF}")
+endif()
+if(CMAKE_OBJCOPY)
+  _cpack_set_default(CPACK_OBJCOPY_EXECUTABLE "${CMAKE_OBJCOPY}")
+endif()
+if(CMAKE_OBJDUMP)
+  _cpack_set_default(CPACK_OBJDUMP_EXECUTABLE "${CMAKE_OBJDUMP}")
+endif()
+
 # Set default directory creation permissions mode
 if(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS)
   _cpack_set_default(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
@@ -649,14 +708,10 @@ if(NOT CPACK_GENERATOR)
       if(APPLE)
         option(CPACK_BINARY_BUNDLE       "Enable to build OSX bundles"      OFF)
         option(CPACK_BINARY_DRAGNDROP    "Enable to build OSX Drag And Drop package" OFF)
-        option(CPACK_BINARY_OSXX11       "Enable to build OSX X11 packages (deprecated)" OFF)
-        option(CPACK_BINARY_PACKAGEMAKER "Enable to build PackageMaker packages (deprecated)" OFF)
         option(CPACK_BINARY_PRODUCTBUILD "Enable to build productbuild packages" OFF)
         mark_as_advanced(
           CPACK_BINARY_BUNDLE
           CPACK_BINARY_DRAGNDROP
-          CPACK_BINARY_OSXX11
-          CPACK_BINARY_PACKAGEMAKER
           CPACK_BINARY_PRODUCTBUILD
           )
       else()
@@ -683,14 +738,16 @@ if(NOT CPACK_GENERATOR)
         )
     endif()
   else()
-    option(CPACK_BINARY_7Z    "Enable to build 7-Zip packages" OFF)
-    option(CPACK_BINARY_NSIS  "Enable to build NSIS packages" ON)
-    option(CPACK_BINARY_NUGET "Enable to build NuGet packages" OFF)
-    option(CPACK_BINARY_WIX   "Enable to build WiX packages" OFF)
-    option(CPACK_BINARY_ZIP   "Enable to build ZIP packages" OFF)
+    option(CPACK_BINARY_7Z        "Enable to build 7-Zip packages" OFF)
+    option(CPACK_BINARY_NSIS      "Enable to build NSIS packages" ON)
+    option(CPACK_BINARY_INNOSETUP "Enable to build Inno Setup packages" OFF)
+    option(CPACK_BINARY_NUGET     "Enable to build NuGet packages" OFF)
+    option(CPACK_BINARY_WIX       "Enable to build WiX packages" OFF)
+    option(CPACK_BINARY_ZIP       "Enable to build ZIP packages" OFF)
     mark_as_advanced(
       CPACK_BINARY_7Z
       CPACK_BINARY_NSIS
+      CPACK_BINARY_INNOSETUP
       CPACK_BINARY_NUGET
       CPACK_BINARY_WIX
       CPACK_BINARY_ZIP
@@ -707,9 +764,8 @@ if(NOT CPACK_GENERATOR)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_FREEBSD      FREEBSD)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_IFW          IFW)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_NSIS         NSIS)
+  cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_INNOSETUP    INNOSETUP)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_NUGET        NuGet)
-  cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_OSXX11       OSXX11)
-  cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_PACKAGEMAKER PackageMaker)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_PRODUCTBUILD productbuild)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_RPM          RPM)
   cpack_optional_append(CPACK_GENERATOR  CPACK_BINARY_STGZ         STGZ)
@@ -798,6 +854,30 @@ _cpack_set_default(CPACK_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
 _cpack_set_default(CPACK_NSIS_INSTALLER_ICON_CODE "")
 _cpack_set_default(CPACK_NSIS_INSTALLER_MUI_ICON_CODE "")
+
+# DragNDrop specific variables
+if(NOT DEFINED CPACK_DMG_SLA_USE_RESOURCE_FILE_LICENSE
+    AND CPACK_RESOURCE_FILE_LICENSE AND NOT CPACK_RESOURCE_FILE_LICENSE STREQUAL "${CMAKE_ROOT}/Templates/CPack.GenericLicense.txt")
+  cmake_policy(GET CMP0133 _CPack_CMP0133)
+  if(NOT "x${_CPack_CMP0133}x" STREQUAL "xNEWx")
+    if(NOT "x${_CPack_CMP0133}x" STREQUAL "xOLDx" AND CMAKE_POLICY_WARNING_CMP0133)
+      cmake_policy(GET_WARNING CMP0133 _CMP0133_warning)
+      message(AUTHOR_WARNING
+        "${_CMP0133_warning}\n"
+        "For compatibility, CMake will enable the SLA in the CPack DragNDrop Generator."
+        )
+    endif()
+    _cpack_set_default(CPACK_DMG_SLA_USE_RESOURCE_FILE_LICENSE ON)
+  endif()
+  unset(_CPack_CMP0133)
+endif()
+
+# Inno Setup specific variables
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  _cpack_set_default(CPACK_INNOSETUP_ARCHITECTURE "x86")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  _cpack_set_default(CPACK_INNOSETUP_ARCHITECTURE "x64")
+endif()
 
 # WiX specific variables
 _cpack_set_default(CPACK_WIX_SIZEOF_VOID_P "${CMAKE_SIZEOF_VOID_P}")

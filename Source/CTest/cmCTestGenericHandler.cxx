@@ -21,51 +21,93 @@ cmCTestGenericHandler::cmCTestGenericHandler()
 
 cmCTestGenericHandler::~cmCTestGenericHandler() = default;
 
-void cmCTestGenericHandler::SetOption(const std::string& op, const char* value)
+namespace {
+/* Modify the given `map`, setting key `op` to `value` if `value`
+ * is non-null, otherwise removing key `op` (if it exists).
+ */
+void SetMapValue(cmCTestGenericHandler::t_StringToString& map,
+                 const std::string& op, const std::string& value)
+{
+  map[op] = value;
+}
+void SetMapValue(cmCTestGenericHandler::t_StringToString& map,
+                 const std::string& op, cmValue value)
 {
   if (!value) {
-    auto remit = this->Options.find(op);
-    if (remit != this->Options.end()) {
-      this->Options.erase(remit);
-    }
+    map.erase(op);
     return;
   }
 
-  this->Options[op] = value;
+  map[op] = *value;
+}
+}
+
+void cmCTestGenericHandler::SetOption(const std::string& op,
+                                      const std::string& value)
+{
+  SetMapValue(this->Options, op, value);
+}
+void cmCTestGenericHandler::SetOption(const std::string& op, cmValue value)
+{
+  SetMapValue(this->Options, op, value);
 }
 
 void cmCTestGenericHandler::SetPersistentOption(const std::string& op,
-                                                const char* value)
+                                                const std::string& value)
 {
   this->SetOption(op, value);
-  if (!value) {
-    auto remit = this->PersistentOptions.find(op);
-    if (remit != this->PersistentOptions.end()) {
-      this->PersistentOptions.erase(remit);
-    }
-    return;
-  }
+  SetMapValue(this->PersistentOptions, op, value);
+}
+void cmCTestGenericHandler::SetPersistentOption(const std::string& op,
+                                                cmValue value)
+{
+  this->SetOption(op, value);
+  SetMapValue(this->PersistentOptions, op, value);
+}
 
-  this->PersistentOptions[op] = value;
+void cmCTestGenericHandler::AddMultiOption(const std::string& op,
+                                           const std::string& value)
+{
+  if (!value.empty()) {
+    this->MultiOptions[op].emplace_back(value);
+  }
+}
+
+void cmCTestGenericHandler::AddPersistentMultiOption(const std::string& op,
+                                                     const std::string& value)
+{
+  if (!value.empty()) {
+    this->MultiOptions[op].emplace_back(value);
+    this->PersistentMultiOptions[op].emplace_back(value);
+  }
 }
 
 void cmCTestGenericHandler::Initialize()
 {
   this->AppendXML = false;
   this->TestLoad = 0;
-  this->Options.clear();
-  for (auto const& po : this->PersistentOptions) {
-    this->Options[po.first] = po.second;
-  }
+  this->Options = this->PersistentOptions;
+  this->MultiOptions = this->PersistentMultiOptions;
 }
 
-const char* cmCTestGenericHandler::GetOption(const std::string& op)
+cmValue cmCTestGenericHandler::GetOption(const std::string& op)
 {
   auto remit = this->Options.find(op);
   if (remit == this->Options.end()) {
     return nullptr;
   }
-  return remit->second.c_str();
+  return cmValue(remit->second);
+}
+
+std::vector<std::string> cmCTestGenericHandler::GetMultiOption(
+  const std::string& optionName) const
+{
+  // Avoid inserting a key, which MultiOptions[op] would do.
+  auto remit = this->MultiOptions.find(optionName);
+  if (remit == this->MultiOptions.end()) {
+    return {};
+  }
+  return remit->second;
 }
 
 bool cmCTestGenericHandler::StartResultingXML(cmCTest::Part part,
@@ -75,7 +117,7 @@ bool cmCTestGenericHandler::StartResultingXML(cmCTest::Part part,
   if (!name) {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
                "Cannot create resulting XML file without providing the name"
-                 << std::endl;);
+                 << std::endl);
     return false;
   }
   std::ostringstream ostr;
@@ -91,7 +133,7 @@ bool cmCTestGenericHandler::StartResultingXML(cmCTest::Part part,
                "maybe you forgot to call ctest_start() before calling "
                "ctest_configure()."
                  << std::endl);
-    cmSystemTools::SetFatalErrorOccured();
+    cmSystemTools::SetFatalErrorOccurred();
     return false;
   }
   if (!this->CTest->OpenOutputFile(this->CTest->GetCurrentTag(), ostr.str(),
@@ -111,7 +153,7 @@ bool cmCTestGenericHandler::StartLogFile(const char* name,
   if (!name) {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
                "Cannot create log file without providing the name"
-                 << std::endl;);
+                 << std::endl);
     return false;
   }
   std::ostringstream ostr;

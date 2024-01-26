@@ -2,6 +2,7 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCTestRunTest.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef> // IWYU pragma: keep
 #include <cstdint>
@@ -13,12 +14,14 @@
 #include <utility>
 
 #include <cm/memory>
+#include <cm/optional>
 
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmCTest.h"
 #include "cmCTestMemCheckHandler.h"
 #include "cmCTestMultiProcessHandler.h"
+#include "cmDuration.h"
 #include "cmProcess.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
@@ -29,17 +32,44 @@ cmCTestRunTest::cmCTestRunTest(cmCTestMultiProcessHandler& multiHandler)
 {
   this->CTest = multiHandler.CTest;
   this->TestHandler = multiHandler.TestHandler;
-  this->TestResult.ExecutionTime = cmDuration::zero();
-  this->TestResult.ReturnValue = 0;
-  this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
-  this->TestResult.TestCount = 0;
-  this->TestResult.Properties = nullptr;
 }
 
 void cmCTestRunTest::CheckOutput(std::string const& line)
 {
   cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
              this->GetIndex() << ": " << line << std::endl);
+
+  // Check for special CTest XML tags in this line of output.
+  // If any are found, this line is excluded from ProcessOutput.
+  if (!line.empty() && line.find("<CTest") != std::string::npos) {
+    bool ctest_tag_found = false;
+    if (this->TestHandler->CustomCompletionStatusRegex.find(line)) {
+      ctest_tag_found = true;
+      this->TestResult.CustomCompletionStatus =
+        this->TestHandler->CustomCompletionStatusRegex.match(1);
+      cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+                 this->GetIndex() << ": "
+                                  << "Test Details changed to '"
+                                  << this->TestResult.CustomCompletionStatus
+                                  << "'" << std::endl);
+    } else if (this->TestHandler->CustomLabelRegex.find(line)) {
+      ctest_tag_found = true;
+      auto label = this->TestHandler->CustomLabelRegex.match(1);
+      auto& labels = this->TestProperties->Labels;
+      if (std::find(labels.begin(), labels.end(), label) == labels.end()) {
+        labels.push_back(label);
+        std::sort(labels.begin(), labels.end());
+        cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+                   this->GetIndex()
+                     << ": "
+                     << "Test Label added: '" << label << "'" << std::endl);
+      }
+    }
+    if (ctest_tag_found) {
+      return;
+    }
+  }
+
   this->ProcessOutput += line;
   this->ProcessOutput += "\n";
 
@@ -65,16 +95,15 @@ void cmCTestRunTest::CheckOutput(std::string const& line)
   }
 }
 
-bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
+cmCTestRunTest::EndTestResult cmCTestRunTest::EndTest(size_t completed,
+                                                      size_t total,
+                                                      bool started)
 {
   this->WriteLogOutputTop(completed, total);
   std::string reason;
   bool passed = true;
   cmProcess::State res =
     started ? this->TestProcess->GetProcessStatus() : cmProcess::State::Error;
-  if (res != cmProcess::State::Expired) {
-    this->TimeoutIsForStopTime = false;
-  }
   std::int64_t retVal = this->TestProcess->GetExitValue();
   bool forceFail = false;
   bool forceSkip = false;
@@ -123,6 +152,18 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
       }
     }
   }
+  std::string resourceSpecParseError;
+  if (!this->TestProperties->GeneratedResourceSpecFile.empty()) {
+    this->MultiTestHandler.ResourceSpecFile =
+      this->TestProperties->GeneratedResourceSpecFile;
+    if (!this->MultiTestHandler.InitResourceAllocator(
+          resourceSpecParseError)) {
+      reason = "Invalid resource spec file";
+      forceFail = true;
+    } else {
+      this->MultiTestHandler.CheckResourcesAvailable();
+    }
+  }
   std::ostringstream outputStream;
   if (res == cmProcess::State::Exited) {
     bool success = !forceFail &&
@@ -152,6 +193,11 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     }
   } else if (res == cmProcess::State::Expired) {
     outputStream << "***Timeout ";
+    if (this->TestProperties->TimeoutSignal &&
+        this->TestProcess->GetTerminationStyle() ==
+          cmProcess::Termination::Custom) {
+      outputStream << "(" << this->TestProperties->TimeoutSignal->Name << ") ";
+    }
     this->TestResult.Status = cmCTestTestHandler::TIMEOUT;
     outputTestErrorsToConsole =
       this->CTest->GetOutputTestOutputOnTestFailure();
@@ -192,7 +238,8 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
 
   passed = this->TestResult.Status == cmCTestTestHandler::COMPLETED;
   char buf[1024];
-  sprintf(buf, "%6.2f sec", this->TestProcess->GetTotalTime().count());
+  snprintf(buf, sizeof(buf), "%6.2f sec",
+           this->TestProcess->GetTotalTime().count());
   outputStream << buf << "\n";
 
   bool passedOrSkipped = passed || skipped;
@@ -225,11 +272,21 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     cmCTestLog(this->CTest, HANDLER_OUTPUT, this->ProcessOutput << std::endl);
   }
 
+  if (!resourceSpecParseError.empty()) {
+    cmCTestLog(this->CTest, ERROR_MESSAGE,
+               resourceSpecParseError << std::endl);
+  } else if (!this->TestProperties->GeneratedResourceSpecFile.empty()) {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               "Using generated resource spec file "
+                 << this->TestProperties->GeneratedResourceSpecFile
+                 << std::endl);
+  }
+
   if (this->TestHandler->LogFile) {
     *this->TestHandler->LogFile << "Test time = " << buf << std::endl;
   }
 
-  this->DartProcessing();
+  this->ParseOutputForMeasurements();
 
   // if this is doing MemCheck then all the output needs to be put into
   // Output since that is what is parsed by cmCTestMemCheckHandler
@@ -239,7 +296,8 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
       static_cast<size_t>(
         this->TestResult.Status == cmCTestTestHandler::COMPLETED
           ? this->TestHandler->CustomMaximumPassedTestOutputSize
-          : this->TestHandler->CustomMaximumFailedTestOutputSize));
+          : this->TestHandler->CustomMaximumFailedTestOutputSize),
+      this->TestHandler->TestOutputTruncation);
   }
   this->TestResult.Reason = reason;
   if (this->TestHandler->LogFile) {
@@ -257,9 +315,10 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
     ttime -= minutes;
     auto seconds = std::chrono::duration_cast<std::chrono::seconds>(ttime);
     char buffer[100];
-    sprintf(buffer, "%02d:%02d:%02d", static_cast<unsigned>(hours.count()),
-            static_cast<unsigned>(minutes.count()),
-            static_cast<unsigned>(seconds.count()));
+    snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d",
+             static_cast<unsigned>(hours.count()),
+             static_cast<unsigned>(minutes.count()),
+             static_cast<unsigned>(seconds.count()));
     *this->TestHandler->LogFile
       << "----------------------------------------------------------"
       << std::endl;
@@ -311,8 +370,15 @@ bool cmCTestRunTest::EndTest(size_t completed, size_t total, bool started)
   if (!this->NeedsToRepeat()) {
     this->TestHandler->TestResults.push_back(this->TestResult);
   }
+  cmCTestRunTest::EndTestResult testResult;
+  testResult.Passed = passed || skipped;
+  if (res == cmProcess::State::Expired &&
+      this->TestProcess->GetTimeoutReason() ==
+        cmProcess::TimeoutReason::StopTime) {
+    testResult.StopTimePassed = true;
+  }
   this->TestProcess.reset();
-  return passed || skipped;
+  return testResult;
 }
 
 bool cmCTestRunTest::StartAgain(std::unique_ptr<cmCTestRunTest> runner,
@@ -328,7 +394,8 @@ bool cmCTestRunTest::StartAgain(std::unique_ptr<cmCTestRunTest> runner,
   // change to tests directory
   cmWorkingDirectory workdir(testRun->TestProperties->Directory);
   if (workdir.Failed()) {
-    testRun->StartFailure("Failed to change working directory to " +
+    testRun->StartFailure(testRun->TotalNumberOfTests,
+                          "Failed to change working directory to " +
                             testRun->TestProperties->Directory + " : " +
                             std::strerror(workdir.GetLastResult()),
                           "Failed to change working directory");
@@ -393,25 +460,25 @@ void cmCTestRunTest::MemCheckPostProcess()
 }
 
 void cmCTestRunTest::StartFailure(std::unique_ptr<cmCTestRunTest> runner,
-                                  std::string const& output,
+                                  size_t total, std::string const& output,
                                   std::string const& detail)
 {
   auto* testRun = runner.get();
 
   testRun->TestProcess = cm::make_unique<cmProcess>(std::move(runner));
-  testRun->StartFailure(output, detail);
+  testRun->StartFailure(total, output, detail);
 
   testRun->FinalizeTest(false);
 }
 
-void cmCTestRunTest::StartFailure(std::string const& output,
+void cmCTestRunTest::StartFailure(size_t total, std::string const& output,
                                   std::string const& detail)
 {
   // Still need to log the Start message so the test summary records our
   // attempt to start this test
   if (!this->CTest->GetTestProgressOutput()) {
     cmCTestLog(this->CTest, HANDLER_OUTPUT,
-               std::setw(2 * getNumWidth(this->TotalNumberOfTests) + 8)
+               std::setw(2 * getNumWidth(total) + 8)
                  << "Start "
                  << std::setw(getNumWidth(this->TestHandler->GetMaxIndex()))
                  << this->TestProperties->Index << ": "
@@ -501,6 +568,19 @@ bool cmCTestRunTest::StartTest(size_t completed, size_t total)
   this->TestResult.Name = this->TestProperties->Name;
   this->TestResult.Path = this->TestProperties->Directory;
 
+  // Reject invalid test properties.
+  if (this->TestProperties->Error) {
+    std::string const& msg = *this->TestProperties->Error;
+    *this->TestHandler->LogFile << msg << std::endl;
+    cmCTestLog(this->CTest, HANDLER_OUTPUT, msg << std::endl);
+    this->TestResult.CompletionStatus = "Invalid Test Properties";
+    this->TestResult.Status = cmCTestTestHandler::NOT_RUN;
+    this->TestResult.Output = msg;
+    this->TestResult.FullCommandLine.clear();
+    this->TestResult.Environment.clear();
+    return false;
+  }
+
   // Return immediately if test is disabled
   if (this->TestProperties->Disabled) {
     this->TestResult.CompletionStatus = "Disabled";
@@ -587,27 +667,7 @@ bool cmCTestRunTest::StartTest(size_t completed, size_t total)
   }
   this->StartTime = this->CTest->CurrentTime();
 
-  auto timeout = this->TestProperties->Timeout;
-
-  this->TimeoutIsForStopTime = false;
-  std::chrono::system_clock::time_point stop_time = this->CTest->GetStopTime();
-  if (stop_time != std::chrono::system_clock::time_point()) {
-    std::chrono::duration<double> stop_timeout =
-      (stop_time - std::chrono::system_clock::now()) % std::chrono::hours(24);
-
-    if (stop_timeout <= std::chrono::duration<double>::zero()) {
-      stop_timeout = std::chrono::duration<double>::zero();
-    }
-    if (timeout == std::chrono::duration<double>::zero() ||
-        stop_timeout < timeout) {
-      this->TimeoutIsForStopTime = true;
-      timeout = stop_timeout;
-    }
-  }
-
-  return this->ForkProcess(timeout, this->TestProperties->ExplicitTimeout,
-                           &this->TestProperties->Environment,
-                           &this->TestProperties->Affinity);
+  return this->ForkProcess();
 }
 
 void cmCTestRunTest::ComputeArguments()
@@ -654,6 +714,14 @@ void cmCTestRunTest::ComputeArguments()
                << " command: " << testCommand << std::endl);
 
   // Print any test-specific env vars in verbose mode
+  if (!this->TestProperties->Directory.empty()) {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               this->Index << ": "
+                           << "Working Directory: "
+                           << this->TestProperties->Directory << std::endl);
+  }
+
+  // Print any test-specific env vars in verbose mode
   if (!this->TestProperties->Environment.empty()) {
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                this->Index << ": "
@@ -663,74 +731,143 @@ void cmCTestRunTest::ComputeArguments()
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                this->Index << ":  " << env << std::endl);
   }
+  if (!this->TestProperties->EnvironmentModification.empty()) {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               this->Index << ": "
+                           << "Environment variable modifications: "
+                           << std::endl);
+  }
+  for (std::string const& envmod :
+       this->TestProperties->EnvironmentModification) {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               this->Index << ":  " << envmod << std::endl);
+  }
 }
 
-void cmCTestRunTest::DartProcessing()
+void cmCTestRunTest::ParseOutputForMeasurements()
 {
   if (!this->ProcessOutput.empty() &&
-      this->ProcessOutput.find("<DartMeasurement") != std::string::npos) {
-    if (this->TestHandler->DartStuff.find(this->ProcessOutput)) {
-      this->TestResult.DartString = this->TestHandler->DartStuff.match(1);
+      (this->ProcessOutput.find("<DartMeasurement") != std::string::npos ||
+       this->ProcessOutput.find("<CTestMeasurement") != std::string::npos)) {
+    if (this->TestHandler->AllTestMeasurementsRegex.find(
+          this->ProcessOutput)) {
+      this->TestResult.TestMeasurementsOutput =
+        this->TestHandler->AllTestMeasurementsRegex.match(1);
       // keep searching and replacing until none are left
-      while (this->TestHandler->DartStuff1.find(this->ProcessOutput)) {
+      while (this->TestHandler->SingleTestMeasurementRegex.find(
+        this->ProcessOutput)) {
         // replace the exact match for the string
         cmSystemTools::ReplaceString(
-          this->ProcessOutput, this->TestHandler->DartStuff1.match(1).c_str(),
-          "");
+          this->ProcessOutput,
+          this->TestHandler->SingleTestMeasurementRegex.match(1).c_str(), "");
       }
     }
   }
 }
 
-bool cmCTestRunTest::ForkProcess(cmDuration testTimeOut, bool explicitTimeout,
-                                 std::vector<std::string>* environment,
-                                 std::vector<size_t>* affinity)
+bool cmCTestRunTest::ForkProcess()
 {
   this->TestProcess->SetId(this->Index);
   this->TestProcess->SetWorkingDirectory(this->TestProperties->Directory);
   this->TestProcess->SetCommand(this->ActualCommand);
   this->TestProcess->SetCommandArguments(this->Arguments);
 
-  // determine how much time we have
-  cmDuration timeout = this->CTest->GetRemainingTimeAllowed();
-  if (timeout != cmCTest::MaxDuration()) {
-    timeout -= std::chrono::minutes(2);
-  }
-  if (this->CTest->GetTimeOut() > cmDuration::zero() &&
-      this->CTest->GetTimeOut() < timeout) {
-    timeout = this->CTest->GetTimeOut();
-  }
-  if (testTimeOut > cmDuration::zero() &&
-      testTimeOut < this->CTest->GetRemainingTimeAllowed()) {
-    timeout = testTimeOut;
-  }
-  // always have at least 1 second if we got to here
-  if (timeout <= cmDuration::zero()) {
-    timeout = std::chrono::seconds(1);
-  }
-  // handle timeout explicitly set to 0
-  if (testTimeOut == cmDuration::zero() && explicitTimeout) {
-    timeout = cmDuration::zero();
-  }
-  cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
-                     this->Index << ": "
-                                 << "Test timeout computed to be: "
-                                 << cmDurationTo<unsigned int>(timeout)
-                                 << "\n",
-                     this->TestHandler->GetQuiet());
+  cm::optional<cmDuration> timeout;
 
-  this->TestProcess->SetTimeout(timeout);
+  // Check TIMEOUT test property.
+  if (this->TestProperties->Timeout &&
+      *this->TestProperties->Timeout >= cmDuration::zero()) {
+    timeout = this->TestProperties->Timeout;
+  }
 
-#ifndef CMAKE_BOOTSTRAP
-  cmSystemTools::SaveRestoreEnvironment sre;
-#endif
-
-  std::ostringstream envMeasurement;
-  if (environment && !environment->empty()) {
-    cmSystemTools::AppendEnv(*environment);
-    for (auto const& var : *environment) {
-      envMeasurement << var << std::endl;
+  // An explicit TIMEOUT=0 test property means "no timeout".
+  if (timeout) {
+    if (*timeout == std::chrono::duration<double>::zero()) {
+      timeout = cm::nullopt;
     }
+  } else {
+    // Check --timeout.
+    if (this->CTest->GetGlobalTimeout() > cmDuration::zero()) {
+      timeout = this->CTest->GetGlobalTimeout();
+    }
+
+    if (!timeout) {
+      // Check CTEST_TEST_TIMEOUT.
+      cmDuration ctestTestTimeout = this->CTest->GetTimeOut();
+      if (ctestTestTimeout > cmDuration::zero()) {
+        timeout = ctestTestTimeout;
+      }
+    }
+  }
+
+  // Check CTEST_TIME_LIMIT.
+  cmDuration timeRemaining = this->CTest->GetRemainingTimeAllowed();
+  if (timeRemaining != cmCTest::MaxDuration()) {
+    // This two minute buffer is historical.
+    timeRemaining -= std::chrono::minutes(2);
+  }
+
+  // Check --stop-time.
+  std::chrono::system_clock::time_point stop_time = this->CTest->GetStopTime();
+  if (stop_time != std::chrono::system_clock::time_point()) {
+    cmDuration timeUntilStop =
+      (stop_time - std::chrono::system_clock::now()) % std::chrono::hours(24);
+    if (timeUntilStop < timeRemaining) {
+      timeRemaining = timeUntilStop;
+    }
+  }
+
+  // Enforce remaining time even over explicit TIMEOUT=0.
+  if (timeRemaining <= cmDuration::zero()) {
+    timeRemaining = cmDuration::zero();
+  }
+  if (!timeout || timeRemaining < *timeout) {
+    timeout = timeRemaining;
+    this->TestProcess->SetTimeoutReason(cmProcess::TimeoutReason::StopTime);
+  }
+
+  if (timeout) {
+    cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+                       this->Index << ": "
+                                   << "Test timeout computed to be: "
+                                   << cmDurationTo<unsigned int>(*timeout)
+                                   << "\n",
+                       this->TestHandler->GetQuiet());
+
+    this->TestProcess->SetTimeout(*timeout);
+  } else {
+    cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+                       this->Index
+                         << ": "
+                         << "Test timeout suppressed by TIMEOUT property.\n",
+                       this->TestHandler->GetQuiet());
+  }
+
+  cmSystemTools::SaveRestoreEnvironment sre;
+  std::ostringstream envMeasurement;
+
+  // We split processing ENVIRONMENT and ENVIRONMENT_MODIFICATION into two
+  // phases to ensure that MYVAR=reset: in the latter phase resets to the
+  // former phase's settings, rather than to the original environment.
+  if (!this->TestProperties->Environment.empty()) {
+    cmSystemTools::EnvDiff diff;
+    diff.AppendEnv(this->TestProperties->Environment);
+    diff.ApplyToCurrentEnv(&envMeasurement);
+  }
+
+  if (!this->TestProperties->EnvironmentModification.empty()) {
+    cmSystemTools::EnvDiff diff;
+    bool env_ok = true;
+
+    for (auto const& envmod : this->TestProperties->EnvironmentModification) {
+      env_ok &= diff.ParseOperation(envmod);
+    }
+
+    if (!env_ok) {
+      return false;
+    }
+
+    diff.ApplyToCurrentEnv(&envMeasurement);
   }
 
   if (this->UseAllocatedResources) {
@@ -751,7 +888,7 @@ bool cmCTestRunTest::ForkProcess(cmDuration testTimeOut, bool explicitTimeout,
                                      1);
 
   return this->TestProcess->StartProcess(this->MultiTestHandler.Loop,
-                                         affinity);
+                                         &this->TestProperties->Affinity);
 }
 
 void cmCTestRunTest::SetupResourcesEnvironment(std::vector<std::string>* log)

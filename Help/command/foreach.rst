@@ -14,8 +14,11 @@ semicolon or whitespace.
 All commands between ``foreach`` and the matching ``endforeach`` are recorded
 without being invoked.  Once the ``endforeach`` is evaluated, the recorded
 list of commands is invoked once for each item in ``<items>``.
-At the beginning of each iteration the variable ``loop_var`` will be set
+At the beginning of each iteration the variable ``<loop_var>`` will be set
 to the value of the current item.
+
+The scope of ``<loop_var>`` is restricted to the loop scope. See policy
+:policy:`CMP0124` for details.
 
 The commands :command:`break` and :command:`continue` provide means to
 escape from the normal control flow.
@@ -71,8 +74,7 @@ processed:
       message(STATUS "X=${X}")
   endforeach()
 
-yields
-::
+yields::
 
   -- X=0
   -- X=1
@@ -116,8 +118,7 @@ iteration variables as follows:
       message(STATUS "en=${en}, ba=${ba}")
   endforeach()
 
-yields
-::
+yields::
 
   -- num_0=one, num_1=satu
   -- num_0=two, num_1=dua
@@ -127,3 +128,11 @@ yields
   -- en=two, ba=dua
   -- en=three, ba=tiga
   -- en=four, ba=
+
+See Also
+^^^^^^^^
+
+* :command:`break`
+* :command:`continue`
+* :command:`endforeach`
+* :command:`while`

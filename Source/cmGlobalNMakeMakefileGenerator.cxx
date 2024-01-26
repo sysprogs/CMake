@@ -2,10 +2,20 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmGlobalNMakeMakefileGenerator.h"
 
-#include "cmDocumentationEntry.h"
-#include "cmLocalUnixMakefileGenerator3.h"
+#include <ostream>
+
+#include <cmext/algorithm>
+#include <cmext/string_view>
+
+#include "cmsys/RegularExpression.hxx"
+
+#include "cmDuration.h"
+#include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
+#include "cmMessageType.h"
 #include "cmState.h"
+#include "cmStringAlgorithms.h"
+#include "cmSystemTools.h"
 #include "cmake.h"
 
 cmGlobalNMakeMakefileGenerator::cmGlobalNMakeMakefileGenerator(cmake* cm)
@@ -34,17 +44,52 @@ void cmGlobalNMakeMakefileGenerator::EnableLanguage(
   this->cmGlobalUnixMakefileGenerator3::EnableLanguage(l, mf, optional);
 }
 
-void cmGlobalNMakeMakefileGenerator::GetDocumentation(
-  cmDocumentationEntry& entry)
+bool cmGlobalNMakeMakefileGenerator::FindMakeProgram(cmMakefile* mf)
 {
-  entry.Name = cmGlobalNMakeMakefileGenerator::GetActualName();
-  entry.Brief = "Generates NMake makefiles.";
+  if (!this->cmGlobalGenerator::FindMakeProgram(mf)) {
+    return false;
+  }
+  if (cmValue nmakeCommand = mf->GetDefinition("CMAKE_MAKE_PROGRAM")) {
+    std::vector<std::string> command{ *nmakeCommand, "-?" };
+    std::string out;
+    std::string err;
+    if (!cmSystemTools::RunSingleCommand(command, &out, &err, nullptr, nullptr,
+                                         cmSystemTools::OUTPUT_NONE,
+                                         cmDuration(30))) {
+      mf->IssueMessage(MessageType::FATAL_ERROR,
+                       cmStrCat("Running\n '", cmJoin(command, "' '"),
+                                "'\n"
+                                "failed with:\n ",
+                                err));
+      cmSystemTools::SetFatalErrorOccurred();
+      return false;
+    }
+    cmsys::RegularExpression regex(
+      "Program Maintenance Utility Version ([1-9][0-9.]+)");
+    if (regex.find(err)) {
+      this->NMakeVersion = regex.match(1);
+      this->CheckNMakeFeatures();
+    }
+  }
+  return true;
+}
+
+void cmGlobalNMakeMakefileGenerator::CheckNMakeFeatures()
+{
+  this->NMakeSupportsUTF8 = !cmSystemTools::VersionCompare(
+    cmSystemTools::OP_LESS, this->NMakeVersion, "9");
+}
+
+cmDocumentationEntry cmGlobalNMakeMakefileGenerator::GetDocumentation()
+{
+  return { cmGlobalNMakeMakefileGenerator::GetActualName(),
+           "Generates NMake makefiles." };
 }
 
 void cmGlobalNMakeMakefileGenerator::PrintCompilerAdvice(
-  std::ostream& os, std::string const& lang, const char* envVar) const
+  std::ostream& os, std::string const& lang, cmValue envVar) const
 {
-  if (lang == "CXX" || lang == "C") {
+  if (lang == "CXX"_s || lang == "C"_s) {
     /* clang-format off */
     os <<
       "To use the NMake generator with Visual C++, cmake must be run from a "
@@ -60,7 +105,8 @@ std::vector<cmGlobalGenerator::GeneratedMakeCommand>
 cmGlobalNMakeMakefileGenerator::GenerateBuildCommand(
   const std::string& makeProgram, const std::string& projectName,
   const std::string& projectDir, std::vector<std::string> const& targetNames,
-  const std::string& config, bool fast, int /*jobs*/, bool verbose,
+  const std::string& config, int /*jobs*/, bool verbose,
+  const cmBuildOptions& buildOptions,
   std::vector<std::string> const& makeOptions)
 {
   std::vector<std::string> nmakeMakeOptions;
@@ -71,8 +117,8 @@ cmGlobalNMakeMakefileGenerator::GenerateBuildCommand(
   cm::append(nmakeMakeOptions, makeOptions);
 
   return this->cmGlobalUnixMakefileGenerator3::GenerateBuildCommand(
-    makeProgram, projectName, projectDir, targetNames, config, fast,
-    cmake::NO_BUILD_PARALLEL_LEVEL, verbose, nmakeMakeOptions);
+    makeProgram, projectName, projectDir, targetNames, config,
+    cmake::NO_BUILD_PARALLEL_LEVEL, verbose, buildOptions, nmakeMakeOptions);
 }
 
 void cmGlobalNMakeMakefileGenerator::PrintBuildCommandAdvice(std::ostream& os,
@@ -81,12 +127,8 @@ void cmGlobalNMakeMakefileGenerator::PrintBuildCommandAdvice(std::ostream& os,
   if (jobs != cmake::NO_BUILD_PARALLEL_LEVEL) {
     // nmake does not support parallel build level
     // see https://msdn.microsoft.com/en-us/library/afyyse50.aspx
-
-    /* clang-format off */
-    os <<
-      "Warning: NMake does not support parallel builds. "
-      "Ignoring parallel build command line option.\n";
-    /* clang-format on */
+    os << "Warning: NMake does not support parallel builds. "
+          "Ignoring parallel build command line option.\n";
   }
 
   this->cmGlobalUnixMakefileGenerator3::PrintBuildCommandAdvice(

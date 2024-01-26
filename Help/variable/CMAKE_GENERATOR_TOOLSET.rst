@@ -5,7 +5,7 @@ Native build system toolset specification provided by user.
 
 Some CMake generators support a toolset specification to tell the
 native build system how to choose a compiler.  If the user specifies
-a toolset (e.g. via the :manual:`cmake(1)` ``-T`` option or via
+a toolset (e.g. via the :option:`cmake -T` option or via
 the :envvar:`CMAKE_GENERATOR_TOOLSET` environment variable) the value
 will be available in this variable.
 
@@ -63,3 +63,27 @@ Supported pairs are:
   Specify an alternative ``VCTargetsPath`` value for Visual Studio
   project files.  This allows use of VS platform extension configuration
   files (``.props`` and ``.targets``) that are not installed with VS.
+
+Visual Studio Toolset Customization
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**These are unstable interfaces with no compatibility guarantees**
+because they hook into undocumented internal CMake implementation details.
+Institutions may use these to internally maintain support for non-public
+Visual Studio platforms and toolsets, but must accept responsibility to
+make updates as changes are made to CMake.
+
+Additional ``key=value`` pairs are available:
+
+``customFlagTableDir=<path>``
+  .. versionadded:: 3.21
+
+  Specify the absolute path to a directory from which to load custom
+  flag tables stored as JSON documents with file names of the form
+  ``<platform>_<toolset>_<tool>.json`` or ``<platform>_<tool>.json``,
+  where ``<platform>`` is the :variable:`CMAKE_VS_PLATFORM_NAME`,
+  ``<toolset>`` is the :variable:`CMAKE_VS_PLATFORM_TOOLSET`,
+  and ``<tool>`` is the tool for which the flag table is meant.
+  **This naming pattern is an internal CMake implementation detail.**
+  The ``<tool>`` names are undocumented.  The format of the ``.json``
+  flag table files is undocumented.

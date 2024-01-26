@@ -31,7 +31,7 @@ once per architecture for each source file.  Unlike the other generators,
 it does not generate universal object file binaries.
 
 A further complication with the :generator:`Xcode` generator is that when
-targeting device platforms (iOS, tvOS or watchOS), the :generator:`Xcode`
+targeting device platforms (iOS, tvOS, visionOS or watchOS), the :generator:`Xcode`
 generator has the ability to use either the device or simulator SDK without
 needing CMake to be re-run.  The SDK can be selected at build time.
 But since some architectures can be supported by both the device and the
@@ -68,26 +68,24 @@ architecture:
   #   /path/to/somewhere/objects-iphonesimulator/x86_64/func.o
 
 In some cases, you may want to have configuration-specific object files
-as well.  The :variable:`CMAKE_CFG_INTDIR` variable can be a convenient
-way of capturing this in combination with the SDK:
+as well.  The ``$(CONFIGURATION)`` Xcode variable is often used for this and
+can be used in conjunction with the others mentioned above:
 
 .. code-block:: cmake
 
   add_library(someObjs OBJECT IMPORTED)
   set_property(TARGET someObjs PROPERTY IMPORTED_OBJECTS
-    "/path/to/somewhere/${CMAKE_CFG_INTDIR}/$(CURRENT_ARCH)/func.o"
+    "/path/to/somewhere/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/$(CURRENT_ARCH)/func.o"
   )
 
   # Example paths:
   #   /path/to/somewhere/Release-iphoneos/arm64/func.o
   #   /path/to/somewhere/Debug-iphonesimulator/x86_64/func.o
 
-When any Xcode variable or :variable:`CMAKE_CFG_INTDIR` is used, CMake is
-not able to fully evaluate the path(s) at configure time.  One consequence
-of this is that the configuration-specific
-:prop_tgt:`IMPORTED_OBJECTS_<CONFIG>` properties cannot be used, since
-CMake cannot determine whether an object file exists at a particular
-``<CONFIG>`` location.  The ``IMPORTED_OBJECTS`` property must be used for
-these situations and the configuration-specific aspects of the path must be
-handled by using :variable:`CMAKE_CFG_INTDIR` or with another Xcode variable
-``$(CONFIGURATION)``.
+When any Xcode variable is used, CMake is not able to fully evaluate the
+path(s) at configure time.  One consequence of this is that the
+configuration-specific :prop_tgt:`IMPORTED_OBJECTS_<CONFIG>` properties cannot
+be used, since CMake cannot determine whether an object file exists at a
+particular ``<CONFIG>`` location.  The ``IMPORTED_OBJECTS`` property must be
+used for these situations and the configuration-specific aspects of the path
+should be handled by the ``$(CONFIGURATION)`` Xcode variable.

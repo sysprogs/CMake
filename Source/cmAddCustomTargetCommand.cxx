@@ -4,17 +4,20 @@
 
 #include <utility>
 
+#include <cm/memory>
+
+#include "cmCustomCommand.h"
 #include "cmCustomCommandLines.h"
 #include "cmExecutionStatus.h"
 #include "cmGeneratorExpression.h"
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmPolicies.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 
 bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
                               cmExecutionStatus& status)
@@ -52,6 +55,7 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
   const char* comment = nullptr;
   std::vector<std::string> sources;
   std::string job_pool;
+  std::string job_server_aware;
 
   // Keep track of parser state.
   enum tdoing
@@ -63,6 +67,7 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
     doing_comment,
     doing_source,
     doing_job_pool,
+    doing_job_server_aware,
     doing_nothing
   };
   tdoing doing = doing_command;
@@ -100,6 +105,8 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
       doing = doing_comment;
     } else if (copy == "JOB_POOL") {
       doing = doing_job_pool;
+    } else if (copy == "JOB_SERVER_AWARE") {
+      doing = doing_job_server_aware;
     } else if (copy == "COMMAND") {
       doing = doing_command;
 
@@ -145,6 +152,9 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
           break;
         case doing_job_pool:
           job_pool = copy;
+          break;
+        case doing_job_server_aware:
+          job_server_aware = copy;
           break;
         default:
           status.SetError("Wrong syntax. Unknown type of argument.");
@@ -211,11 +221,19 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
   }
 
   // Add the utility target to the makefile.
-  bool escapeOldStyle = !verbatim;
-  cmTarget* target = mf.AddUtilityCommand(
-    targetName, excludeFromAll, working_directory.c_str(), byproducts, depends,
-    commandLines, mf.GetPolicyStatus(cmPolicies::CMP0116), escapeOldStyle,
-    comment, uses_terminal, command_expand_lists, job_pool);
+  auto cc = cm::make_unique<cmCustomCommand>();
+  cc->SetWorkingDirectory(working_directory.c_str());
+  cc->SetByproducts(byproducts);
+  cc->SetDepends(depends);
+  cc->SetCommandLines(commandLines);
+  cc->SetEscapeOldStyle(!verbatim);
+  cc->SetComment(comment);
+  cc->SetUsesTerminal(uses_terminal);
+  cc->SetCommandExpandLists(command_expand_lists);
+  cc->SetJobPool(job_pool);
+  cc->SetJobserverAware(cmIsOn(job_server_aware));
+  cmTarget* target =
+    mf.AddUtilityCommand(targetName, excludeFromAll, std::move(cc));
 
   // Add additional user-specified source files to the target.
   target->AddSources(sources);

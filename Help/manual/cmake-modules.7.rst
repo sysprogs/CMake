@@ -72,7 +72,6 @@ These modules are loaded using the :command:`include` command.
    /module/CTestCoverageCollectGCOV
    /module/CTestScriptMode
    /module/CTestUseLaunchers
-   /module/Dart
    /module/DeployQt4
    /module/ExternalData
    /module/ExternalProject
@@ -82,14 +81,12 @@ These modules are loaded using the :command:`include` command.
    /module/FindPackageMessage
    /module/FortranCInterface
    /module/GenerateExportHeader
-   /module/GetPrerequisites
    /module/GNUInstallDirs
    /module/GoogleTest
    /module/InstallRequiredSystemLibraries
    /module/ProcessorCount
    /module/SelectLibraryConfigurations
    /module/SquishTestScript
-   /module/TestBigEndian
    /module/TestForANSIForScope
    /module/TestForANSIStreamHeaders
    /module/TestForSSTREAM
@@ -127,7 +124,6 @@ They are normally called through the :command:`find_package` command.
    /module/FindCVS
    /module/FindCxxTest
    /module/FindCygwin
-   /module/FindDart
    /module/FindDCMTK
    /module/FindDevIL
    /module/FindDoxygen
@@ -161,7 +157,6 @@ They are normally called through the :command:`find_package` command.
    /module/FindICU
    /module/FindImageMagick
    /module/FindIntl
-   /module/FindITK
    /module/FindJasper
    /module/FindJava
    /module/FindJNI
@@ -185,6 +180,7 @@ They are normally called through the :command:`find_package` command.
    /module/FindMPEG
    /module/FindMPEG2
    /module/FindMPI
+   /module/FindMsys
    /module/FindODBC
    /module/FindOpenACC
    /module/FindOpenAL
@@ -192,6 +188,7 @@ They are normally called through the :command:`find_package` command.
    /module/FindOpenGL
    /module/FindOpenMP
    /module/FindOpenSceneGraph
+   /module/FindOpenSP
    /module/FindOpenSSL
    /module/FindOpenThreads
    /module/Findosg
@@ -235,6 +232,7 @@ They are normally called through the :command:`find_package` command.
    /module/FindRuby
    /module/FindSDL
    /module/FindSDL_image
+   /module/FindSDL_gfx
    /module/FindSDL_mixer
    /module/FindSDL_net
    /module/FindSDL_sound
@@ -249,8 +247,6 @@ They are normally called through the :command:`find_package` command.
    /module/FindTclStub
    /module/FindThreads
    /module/FindTIFF
-   /module/FindUnixCommands
-   /module/FindVTK
    /module/FindVulkan
    /module/FindWget
    /module/FindWish
@@ -276,8 +272,11 @@ Deprecated Utility Modules
    /module/CMakeExpandImportedTargets
    /module/CMakeForceCompiler
    /module/CMakeParseArguments
+   /module/Dart
    /module/Documentation
+   /module/GetPrerequisites
    /module/MacroAddFileDependencies
+   /module/TestBigEndian
    /module/TestCXXAcceptsFlag
    /module/UseJavaClassFilelist
    /module/UseJavaSymlinks
@@ -293,9 +292,13 @@ Deprecated Find Modules
    :maxdepth: 1
 
    /module/FindCUDA
+   /module/FindDart
+   /module/FindITK
    /module/FindPythonInterp
    /module/FindPythonLibs
    /module/FindQt
+   /module/FindUnixCommands
+   /module/FindVTK
    /module/FindwxWindows
 
 Legacy CPack Modules
@@ -316,7 +319,6 @@ used directly.
    /module/CPackFreeBSD
    /module/CPackNSIS
    /module/CPackNuGet
-   /module/CPackPackageMaker
    /module/CPackProductBuild
    /module/CPackRPM
    /module/CPackWIX

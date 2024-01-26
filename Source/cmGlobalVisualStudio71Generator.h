@@ -2,7 +2,20 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
+#include <iosfwd>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "cmGlobalVisualStudio7Generator.h"
+#include "cmValue.h"
+
+class cmGeneratorTarget;
+class cmLocalGenerator;
+class cmake;
+template <typename T>
+class BT;
 
 /** \class cmGlobalVisualStudio71Generator
  * \brief Write a Unix makefiles.
@@ -33,7 +46,7 @@ protected:
     const std::string& platformMapping = "") override;
   void WriteExternalProject(
     std::ostream& fout, const std::string& name, const std::string& path,
-    const char* typeGuid,
+    cmValue typeGuid,
     const std::set<BT<std::pair<std::string, bool>>>& depends) override;
 
   // Folders are not supported by VS 7.1.

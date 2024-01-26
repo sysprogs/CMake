@@ -1,5 +1,4 @@
 ^CMake Error at cmake_install\.cmake:[0-9]+ \(file\):
-  file Failed to run objdump on:
+  file Could not resolve runtime dependencies:
 
-    [^
-]*/Tests/RunCMake/file-GET_RUNTIME_DEPENDENCIES/linux-notfile-build/root-all/bin/\.\./lib/libtest\.so$
+    libtest\.so$

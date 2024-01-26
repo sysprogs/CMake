@@ -9,7 +9,7 @@
 
 project(CheckSymbolExists C)
 
-cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 set(CMAKE_REQUIRED_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -48,4 +48,15 @@ if (CMAKE_COMPILER_IS_GNUCC)
   if (CSE_RESULT_O3)
     message(SEND_ERROR "CheckSymbolExists reported a nonexistent symbol as existing with optimization -O3")
   endif ()
+
+  string(APPEND CMAKE_C_FLAGS " -pedantic-errors")
+  unset(CS_RESULT_PEDANTIC_ERRORS CACHE)
+  message(STATUS "Testing with -pedantic-errors")
+
+  check_symbol_exists(fopen "stdio.h" CSE_RESULT_PEDANTIC_ERRORS)
+
+  if(NOT CSE_RESULT_PEDANTIC_ERRORS)
+    message(SEND_ERROR "CheckSymbolExists reported an existing symbol as nonexisting with -pedantic-errors")
+  endif()
+
 endif ()

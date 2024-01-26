@@ -4,6 +4,7 @@ __compiler_intel_llvm(C)
 if("x${CMAKE_C_COMPILER_FRONTEND_VARIANT}" STREQUAL "xMSVC")
   set(CMAKE_C_COMPILE_OPTIONS_EXPLICIT_LANGUAGE -TC)
   set(CMAKE_C_CLANG_TIDY_DRIVER_MODE "cl")
+  set(CMAKE_C_INCLUDE_WHAT_YOU_USE_DRIVER_MODE "cl")
   if((NOT DEFINED CMAKE_DEPENDS_USE_COMPILER OR CMAKE_DEPENDS_USE_COMPILER)
       AND CMAKE_GENERATOR MATCHES "Makefiles|WMake"
       AND CMAKE_DEPFILE_FLAGS_C)
@@ -37,6 +38,12 @@ if(NOT "x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC")
 
   set(CMAKE_C11_STANDARD_COMPILE_OPTION "-std=c11")
   set(CMAKE_C11_EXTENSION_COMPILE_OPTION "-std=gnu11")
+
+  set(CMAKE_C17_STANDARD_COMPILE_OPTION "-std=c17")
+  set(CMAKE_C17_EXTENSION_COMPILE_OPTION "-std=gnu17")
+
+  set(CMAKE_C23_STANDARD_COMPILE_OPTION "-std=c2x")
+  set(CMAKE_C23_EXTENSION_COMPILE_OPTION "-std=gnu2x")
 else()
   # clang-cl doesn't have any of these
   set(CMAKE_C90_STANDARD_COMPILE_OPTION "")
@@ -47,12 +54,12 @@ else()
 
   set(CMAKE_C11_STANDARD_COMPILE_OPTION "")
   set(CMAKE_C11_EXTENSION_COMPILE_OPTION "")
+
+  set(CMAKE_C17_STANDARD_COMPILE_OPTION "")
+  set(CMAKE_C17_EXTENSION_COMPILE_OPTION "")
+
+  set(CMAKE_C23_STANDARD_COMPILE_OPTION "")
+  set(CMAKE_C23_EXTENSION_COMPILE_OPTION "")
 endif()
 
-if(NOT "x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC")
-  # FIXME: The compiler actually defaults to C17, but
-  # CMake does not yet model or detect that standard.
-  __compiler_check_default_language_standard(C 2020 11)
-else()
-  set(CMAKE_C_STANDARD_DEFAULT "")
-endif()
+__compiler_check_default_language_standard(C 2020 17)

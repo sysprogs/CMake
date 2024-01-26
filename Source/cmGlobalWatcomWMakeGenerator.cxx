@@ -4,7 +4,9 @@
 
 #include <ostream>
 
-#include "cmDocumentationEntry.h"
+#include <cm/string_view>
+#include <cmext/string_view>
+
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
 #include "cmState.h"
@@ -47,30 +49,30 @@ void cmGlobalWatcomWMakeGenerator::EnableLanguage(
 bool cmGlobalWatcomWMakeGenerator::SetSystemName(std::string const& s,
                                                  cmMakefile* mf)
 {
-  if (mf->GetSafeDefinition("CMAKE_SYSTEM_PROCESSOR") == "I86") {
+  if (mf->GetSafeDefinition("CMAKE_SYSTEM_PROCESSOR") == "I86"_s) {
     mf->AddDefinition("CMAKE_GENERATOR_CC", "wcl");
     mf->AddDefinition("CMAKE_GENERATOR_CXX", "wcl");
   }
   return this->cmGlobalUnixMakefileGenerator3::SetSystemName(s, mf);
 }
 
-void cmGlobalWatcomWMakeGenerator::GetDocumentation(
-  cmDocumentationEntry& entry)
+cmDocumentationEntry cmGlobalWatcomWMakeGenerator::GetDocumentation()
 {
-  entry.Name = cmGlobalWatcomWMakeGenerator::GetActualName();
-  entry.Brief = "Generates Watcom WMake makefiles.";
+  return { cmGlobalWatcomWMakeGenerator::GetActualName(),
+           "Generates Watcom WMake makefiles." };
 }
 
 std::vector<cmGlobalGenerator::GeneratedMakeCommand>
 cmGlobalWatcomWMakeGenerator::GenerateBuildCommand(
   const std::string& makeProgram, const std::string& projectName,
   const std::string& projectDir, std::vector<std::string> const& targetNames,
-  const std::string& config, bool fast, int /*jobs*/, bool verbose,
+  const std::string& config, int /*jobs*/, bool verbose,
+  const cmBuildOptions& buildOptions,
   std::vector<std::string> const& makeOptions)
 {
   return this->cmGlobalUnixMakefileGenerator3::GenerateBuildCommand(
-    makeProgram, projectName, projectDir, targetNames, config, fast,
-    cmake::NO_BUILD_PARALLEL_LEVEL, verbose, makeOptions);
+    makeProgram, projectName, projectDir, targetNames, config,
+    cmake::NO_BUILD_PARALLEL_LEVEL, verbose, buildOptions, makeOptions);
 }
 
 void cmGlobalWatcomWMakeGenerator::PrintBuildCommandAdvice(std::ostream& os,

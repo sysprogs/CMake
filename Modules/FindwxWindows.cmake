@@ -79,8 +79,7 @@ DEPRECATED
 
 
 
-AUTHOR Jan Woetzel <http://www.mip.informatik.uni-kiel.de/~jw>
-(07/2003-01/2006)
+AUTHOR Jan Woetzel (07/2003-01/2006)
 #]=======================================================================]
 
 # ------------------------------------------------------------------
@@ -614,7 +613,7 @@ else()
     option(WXWINDOWS_USE_SHARED_LIBS "Use shared versions (.so) of wxWindows libraries" ON)
     mark_as_advanced(WXWINDOWS_USE_SHARED_LIBS)
 
-    # JW removed option and force the develper th SET it.
+    # JW removed option and force the developer to SET it.
     # option(WXWINDOWS_USE_GL "use wxWindows with GL support (use additional
     # --gl-libs for wx-config)?" OFF)
 
@@ -636,20 +635,20 @@ else()
       # remember: always link shared to use systems GL etc. libs (no static
       # linking, just link *against* static .a libs)
       if(WXWINDOWS_USE_SHARED_LIBS)
-        set(WX_CONFIG_ARGS_LIBS "--libs")
+        set(WX_CONFIG_ARGS_LIBS --libs)
       else()
-        set(WX_CONFIG_ARGS_LIBS "--static --libs")
+        set(WX_CONFIG_ARGS_LIBS --static --libs)
       endif()
 
       # do we need additionial wx GL stuff like GLCanvas ?
       if(WXWINDOWS_USE_GL)
-        string(APPEND WX_CONFIG_ARGS_LIBS " --gl-libs" )
+        list(APPEND WX_CONFIG_ARGS_LIBS --gl-libs)
       endif()
       ##message("DBG: WX_CONFIG_ARGS_LIBS=${WX_CONFIG_ARGS_LIBS}===")
 
       # set CXXFLAGS to be fed into CMAKE_CXX_FLAGS by the user:
       if (HAVE_ISYSTEM) # does the compiler support -isystem ?
-              if (NOT APPLE) # -isystem seem sto be unsuppored on Mac
+              if (NOT APPLE) # -isystem seems to be unsupported on Mac
                 if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_COMPILER_IS_GNUCXX )
             if (CMAKE_CXX_COMPILER MATCHES g\\+\\+)
               set(CMAKE_WXWINDOWS_CXX_FLAGS "`${CMAKE_WXWINDOWS_WXCONFIG_EXECUTABLE} --cxxflags|sed -e s/-I/-isystem/g`")
@@ -663,14 +662,15 @@ else()
       ##CMAKE_WXWINDOWS_CXX_FLAGS=${CMAKE_WXWINDOWS_CXX_FLAGS}===")
 
       # keep the back-quoted string for clarity
-      set(WXWINDOWS_LIBRARIES "`${CMAKE_WXWINDOWS_WXCONFIG_EXECUTABLE} ${WX_CONFIG_ARGS_LIBS}`")
+      string(REPLACE ";" " " _wx_config_args_libs "${WX_CONFIG_ARGS_LIBS}")
+      set(WXWINDOWS_LIBRARIES "`${CMAKE_WXWINDOWS_WXCONFIG_EXECUTABLE} ${_wx_config_args_libs}`")
       ##message("DBG2: for linking:
       ##WXWINDOWS_LIBRARIES=${WXWINDOWS_LIBRARIES}===")
 
       # evaluate wx-config output to separate linker flags and linkdirs for
       # rpath:
-      exec_program(${CMAKE_WXWINDOWS_WXCONFIG_EXECUTABLE}
-        ARGS ${WX_CONFIG_ARGS_LIBS}
+      execute_process(COMMAND ${CMAKE_WXWINDOWS_WXCONFIG_EXECUTABLE}
+        ${WX_CONFIG_ARGS_LIBS}
         OUTPUT_VARIABLE WX_CONFIG_LIBS )
 
       ## extract linkdirs (-L) for rpath

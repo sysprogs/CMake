@@ -9,15 +9,19 @@
 #include <cstring>
 #include <iomanip>
 #include <iterator>
+#include <memory>
+#include <ratio>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 #include <cmext/algorithm>
 
 #include "cmsys/FStream.hxx"
 #include "cmsys/Glob.hxx"
-#include "cmsys/Process.h"
 #include "cmsys/RegularExpression.hxx"
+
+#include "cm_fileno.hxx"
 
 #include "cmCTest.h"
 #include "cmDuration.h"
@@ -31,91 +35,13 @@
 #include "cmParsePHPCoverage.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmUVProcessChain.h"
 #include "cmWorkingDirectory.h"
 #include "cmXMLWriter.h"
 
 class cmMakefile;
 
 #define SAFEDIV(x, y) (((y) != 0) ? ((x) / (y)) : (0))
-
-class cmCTestRunProcess
-{
-public:
-  cmCTestRunProcess()
-  {
-    this->Process = cmsysProcess_New();
-    this->PipeState = -1;
-    this->TimeOut = cmDuration(-1);
-  }
-  ~cmCTestRunProcess()
-  {
-    if (!(this->PipeState == -1) &&
-        !(this->PipeState == cmsysProcess_Pipe_None) &&
-        !(this->PipeState == cmsysProcess_Pipe_Timeout)) {
-      this->WaitForExit();
-    }
-    cmsysProcess_Delete(this->Process);
-  }
-  cmCTestRunProcess(const cmCTestRunProcess&) = delete;
-  cmCTestRunProcess& operator=(const cmCTestRunProcess&) = delete;
-  void SetCommand(const char* command)
-  {
-    this->CommandLineStrings.clear();
-    this->CommandLineStrings.emplace_back(command);
-  }
-  void AddArgument(const char* arg)
-  {
-    if (arg) {
-      this->CommandLineStrings.emplace_back(arg);
-    }
-  }
-  void SetWorkingDirectory(const char* dir) { this->WorkingDirectory = dir; }
-  void SetTimeout(cmDuration t) { this->TimeOut = t; }
-  bool StartProcess()
-  {
-    std::vector<const char*> args;
-    for (std::string const& cl : this->CommandLineStrings) {
-      args.push_back(cl.c_str());
-    }
-    args.push_back(nullptr); // null terminate
-    cmsysProcess_SetCommand(this->Process, args.data());
-    if (!this->WorkingDirectory.empty()) {
-      cmsysProcess_SetWorkingDirectory(this->Process,
-                                       this->WorkingDirectory.c_str());
-    }
-
-    cmsysProcess_SetOption(this->Process, cmsysProcess_Option_HideWindow, 1);
-    if (this->TimeOut >= cmDuration::zero()) {
-      cmsysProcess_SetTimeout(this->Process, this->TimeOut.count());
-    }
-    cmsysProcess_Execute(this->Process);
-    this->PipeState = cmsysProcess_GetState(this->Process);
-    // if the process is running or exited return true
-    return this->PipeState == cmsysProcess_State_Executing ||
-      this->PipeState == cmsysProcess_State_Exited;
-  }
-  void SetStdoutFile(const char* fname)
-  {
-    cmsysProcess_SetPipeFile(this->Process, cmsysProcess_Pipe_STDOUT, fname);
-  }
-  void SetStderrFile(const char* fname)
-  {
-    cmsysProcess_SetPipeFile(this->Process, cmsysProcess_Pipe_STDERR, fname);
-  }
-  int WaitForExit(double* timeout = nullptr)
-  {
-    this->PipeState = cmsysProcess_WaitForExit(this->Process, timeout);
-    return this->PipeState;
-  }
-  int GetProcessState() const { return this->PipeState; }
-
-private:
-  int PipeState;
-  cmsysProcess* Process;
-  std::vector<std::string> CommandLineStrings;
-  std::string WorkingDirectory;
-  cmDuration TimeOut;
-};
 
 cmCTestCoverageHandler::cmCTestCoverageHandler() = default;
 
@@ -148,7 +74,8 @@ bool cmCTestCoverageHandler::StartCoverageLogFile(
   cmGeneratedFileStream& covLogFile, int logFileCount)
 {
   char covLogFilename[1024];
-  sprintf(covLogFilename, "CoverageLog-%d", logFileCount);
+  snprintf(covLogFilename, sizeof(covLogFilename), "CoverageLog-%d",
+           logFileCount);
   cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                      "Open file: " << covLogFilename << std::endl,
                      this->Quiet);
@@ -165,7 +92,8 @@ void cmCTestCoverageHandler::EndCoverageLogFile(cmGeneratedFileStream& ostr,
                                                 int logFileCount)
 {
   char covLogFilename[1024];
-  sprintf(covLogFilename, "CoverageLog-%d.xml", logFileCount);
+  snprintf(covLogFilename, sizeof(covLogFilename), "CoverageLog-%d.xml",
+           logFileCount);
   cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                      "Close file: " << covLogFilename << std::endl,
                      this->Quiet);
@@ -289,6 +217,13 @@ int cmCTestCoverageHandler::ProcessHandler()
     this->CTest->GetCTestConfiguration("SourceDirectory");
   std::string binaryDir = this->CTest->GetCTestConfiguration("BuildDirectory");
 
+  if (binaryDir.empty()) {
+    cmCTestLog(this->CTest, ERROR_MESSAGE,
+               "Binary directory is not set.  "
+               "No coverage checking will be performed."
+                 << std::endl);
+    return 0;
+  }
   this->LoadLabels();
 
   cmGeneratedFileStream ofs;
@@ -685,7 +620,7 @@ void cmCTestCoverageHandler::PopulateCustomVectors(cmMakefile* mf)
 #  define fnc_prefix(s, t) cmHasPrefix(s, t)
 #endif
 
-bool IsFileInDir(const std::string& infile, const std::string& indir)
+static bool IsFileInDir(const std::string& infile, const std::string& indir)
 {
   std::string file = cmSystemTools::CollapseFullPath(infile);
   std::string dir = cmSystemTools::CollapseFullPath(indir);
@@ -1210,11 +1145,8 @@ int cmCTestCoverageHandler::HandleGCovCoverage(
           cmCTestLog(this->CTest, ERROR_MESSAGE,
                      "Cannot open file: " << gcovFile << std::endl);
         } else {
-          long cnt = -1;
           std::string nl;
           while (cmSystemTools::GetLineFromStream(ifile, nl)) {
-            cnt++;
-
             // Skip empty lines
             if (nl.empty()) {
               continue;
@@ -1520,7 +1452,6 @@ int cmCTestCoverageHandler::HandleLCovCoverage(
             cmCTestLog(this->CTest, ERROR_MESSAGE,
                        "Cannot open file: " << lcovFile << std::endl);
           } else {
-            long cnt = -1;
             std::string nl;
 
             // Skip the first line
@@ -1529,8 +1460,6 @@ int cmCTestCoverageHandler::HandleLCovCoverage(
                                "File is ready, start reading." << std::endl,
                                this->Quiet);
             while (cmSystemTools::GetLineFromStream(ifile, nl)) {
-              cnt++;
-
               // Skip empty lines
               if (nl.empty()) {
                 continue;
@@ -1935,34 +1864,35 @@ int cmCTestCoverageHandler::RunBullseyeCommand(
     cmCTestLog(this->CTest, ERROR_MESSAGE, "Cannot find :" << cmd << "\n");
     return 0;
   }
+  std::vector<std::string> args{ cmd };
   if (arg) {
     cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                        "Run : " << program << " " << arg << "\n", this->Quiet);
+    args.emplace_back(arg);
   } else {
     cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                        "Run : " << program << "\n", this->Quiet);
   }
   // create a process object and start it
-  cmCTestRunProcess runCoverageSrc;
-  runCoverageSrc.SetCommand(program.c_str());
-  runCoverageSrc.AddArgument(arg);
+  cmUVProcessChainBuilder builder;
   std::string stdoutFile =
     cmStrCat(cont->BinaryDir, "/Testing/Temporary/",
              this->GetCTestInstance()->GetCurrentTag(), '-', cmd);
   std::string stderrFile = stdoutFile;
   stdoutFile += ".stdout";
   stderrFile += ".stderr";
-  runCoverageSrc.SetStdoutFile(stdoutFile.c_str());
-  runCoverageSrc.SetStderrFile(stderrFile.c_str());
-  if (!runCoverageSrc.StartProcess()) {
-    cmCTestLog(this->CTest, ERROR_MESSAGE,
-               "Could not run : " << program << " " << arg << "\n"
-                                  << "kwsys process state : "
-                                  << runCoverageSrc.GetProcessState());
-    return 0;
-  }
+  std::unique_ptr<FILE, int (*)(FILE*)> stdoutHandle(
+    cmsys::SystemTools::Fopen(stdoutFile, "w"), fclose);
+  std::unique_ptr<FILE, int (*)(FILE*)> stderrHandle(
+    cmsys::SystemTools::Fopen(stderrFile, "w"), fclose);
+  builder.AddCommand(args)
+    .SetExternalStream(cmUVProcessChainBuilder::Stream_OUTPUT,
+                       cm_fileno(stdoutHandle.get()))
+    .SetExternalStream(cmUVProcessChainBuilder::Stream_ERROR,
+                       cm_fileno(stderrHandle.get()));
   // since we set the output file names wait for it to end
-  runCoverageSrc.WaitForExit();
+  auto chain = builder.Start();
+  chain.Wait();
   outputFile = stdoutFile;
   return 1;
 }
@@ -2208,7 +2138,7 @@ int cmCTestCoverageHandler::GetLabelId(std::string const& label)
 {
   auto i = this->LabelIdMap.find(label);
   if (i == this->LabelIdMap.end()) {
-    int n = int(this->Labels.size());
+    int n = static_cast<int>(this->Labels.size());
     this->Labels.push_back(label);
     LabelIdMapType::value_type entry(label, n);
     i = this->LabelIdMap.insert(entry).first;

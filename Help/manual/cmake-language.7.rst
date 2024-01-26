@@ -37,10 +37,10 @@ Scripts
 
 An individual ``<script>.cmake`` source file may be processed
 in *script mode* by using the :manual:`cmake(1)` command-line tool
-with the ``-P`` option.  Script mode simply runs the commands in
-the given CMake Language source file and does not generate a
-build system.  It does not allow CMake commands that define build
-targets or actions.
+with the :option:`-P <cmake -P>` option.  Script mode simply runs
+the commands in the given CMake Language source file and does not
+generate a build system.  It does not allow CMake commands that
+define build targets or actions.
 
 Modules
 -------
@@ -74,7 +74,7 @@ encoded in UTF-8 on Windows (using UTF-16 to call system APIs).
 Furthermore, CMake 3.0 and above allow a leading UTF-8
 `Byte-Order Mark`_ in source files.
 
-.. _`Byte-Order Mark`: http://en.wikipedia.org/wiki/Byte_order_mark
+.. _Byte-Order Mark: https://en.wikipedia.org/wiki/Byte_order_mark
 
 Source Files
 ------------
@@ -206,7 +206,7 @@ enclosed content, such as `Escape Sequences`_ or `Variable References`_,
 is performed.  A bracket argument is always given to the command
 invocation as exactly one argument.
 
-.. No code-block syntax highlighting in the following example
+.. ATTENTION No code-block syntax highlighting in the following example
    (long string literal not supported by our cmake.py)
 
 For example::
@@ -254,7 +254,7 @@ closing quotes.  Both `Escape Sequences`_ and `Variable References`_
 are evaluated.  A quoted argument is always given to the command
 invocation as exactly one argument.
 
-.. No code-block syntax highlighting in the following example
+.. ATTENTION No code-block syntax highlighting in the following example
    (escape \" not supported by our cmake.py)
 
 For example:
@@ -268,7 +268,7 @@ For example:
   It does end in an unescaped double quote.
   ")
 
-.. No code-block syntax highlighting in the following example
+.. ATTENTION No code-block syntax highlighting in the following example
    (for conformity with the two above examples)
 
 The final ``\`` on any line ending in an odd number of backslashes
@@ -391,8 +391,8 @@ Variable References
 
 A *variable reference* has the form ``${<variable>}`` and is
 evaluated inside a `Quoted Argument`_ or an `Unquoted Argument`_.
-A variable reference is replaced by the value of the variable,
-or by the empty string if the variable is not set.
+A variable reference is replaced by the value of the specified
+variable or cache entry, or if neither is set, by the empty string.
 Variable references can nest and are evaluated from the
 inside out, e.g. ``${outer_${inner_variable}_variable}``.
 
@@ -408,14 +408,16 @@ and how their values are set.
 An *environment variable reference* has the form ``$ENV{<variable>}``.
 See the `Environment Variables`_ section for more information.
 
-A *cache variable reference* has the form ``$CACHE{<variable>}``.
+A *cache variable reference* has the form ``$CACHE{<variable>}``,
+and is replaced by the value of the specified cache entry without
+checking for a normal variable of the same name.  If the cache
+entry does not exist, it is replaced by the empty string.
 See :variable:`CACHE` for more information.
 
 The :command:`if` command has a special condition syntax that
 allows for variable references in the short form ``<variable>``
-instead of ``${<variable>}``.
-However, environment and cache variables always need to be
-referenced as ``$ENV{<variable>}`` or ``$CACHE{<variable>}``.
+instead of ``${<variable>}``.  However, environment variables
+always need to be referenced as ``$ENV{<variable>}``.
 
 Comments
 --------
@@ -528,6 +530,9 @@ of alphanumeric characters plus ``_`` and ``-``.
 Variables have dynamic scope.  Each variable "set" or "unset"
 creates a binding in the current scope:
 
+Block Scope
+ The :command:`block` command may create a new scope for variable bindings.
+
 Function Scope
  `Command Definitions`_ created by the :command:`function` command
  create commands that, when invoked, process the recorded commands
@@ -540,8 +545,8 @@ Directory Scope
  bindings.  Before processing the ``CMakeLists.txt`` file for a
  directory, CMake copies all variable bindings currently defined
  in the parent directory, if any, to initialize the new directory
- scope.  CMake `Scripts`_, when processed with ``cmake -P``, bind
- variables in one "directory" scope.
+ scope.  CMake `Scripts`_, when processed with :option:`cmake -P`,
+ bind variables in one "directory" scope.
 
  A variable "set" or "unset" not inside a function call binds
  to the current directory scope.
@@ -582,7 +587,8 @@ Scope
  They are never cached.
 
 References
- `Variable References`_ have the form ``$ENV{<variable>}``.
+ `Variable References`_ have the form ``$ENV{<variable>}``, using the
+ :variable:`ENV` operator.
 
 Initialization
  Initial values of the CMake environment variables are those of
@@ -593,6 +599,13 @@ Initialization
  not the system environment at large.
  Changed values are not written back to the calling process,
  and they are not seen by subsequent build or test processes.
+
+ See the :option:`cmake -E env <cmake-E env>` command-line
+ tool to run a command in a modified environment.
+
+Inspection
+ See the :option:`cmake -E environment <cmake-E environment>` command-line
+ tool to display all current environment variables.
 
 The :manual:`cmake-env-variables(7)` manual documents environment
 variables that have special meaning to CMake.
@@ -627,3 +640,45 @@ in list elements, thus flattening nested lists:
 .. code-block:: cmake
 
  set(x a "b;c") # sets "x" to "a;b;c", not "a;b\;c"
+
+In general, lists do not support elements containing ``;`` characters.
+To avoid problems, consider the following advice:
+
+* The interfaces of many CMake commands, variables, and properties accept
+  semicolon-separated lists.  Avoid passing lists with elements containing
+  semicolons to these interfaces unless they document either direct support
+  or some way to escape or encode semicolons.
+
+* When constructing a list, substitute an otherwise-unused placeholder
+  for ``;`` in elements when.  Then substitute ``;`` for the placeholder
+  when processing list elements.
+  For example, the following code uses ``|`` in place of ``;`` characters:
+
+  .. code-block:: cmake
+
+    set(mylist a "b|c")
+    foreach(entry IN LISTS mylist)
+      string(REPLACE "|" ";" entry "${entry}")
+      # use "${entry}" normally
+    endforeach()
+
+  The :module:`ExternalProject` module's ``LIST_SEPARATOR`` option is an
+  example of an interface built using this approach.
+
+* In lists of :manual:`generator expressions <cmake-generator-expressions(7)>`,
+  use the :genex:`$<SEMICOLON>` generator expression.
+
+* In command calls, use `Quoted Argument`_ syntax whenever possible.
+  The called command will receive the content of the argument with
+  semicolons preserved.  An `Unquoted Argument`_ will be split on
+  semicolons.
+
+* In :command:`function` implementations, avoid ``ARGV`` and ``ARGN``,
+  which do not distinguish semicolons in values from those separating values.
+  Instead, prefer using named positional arguments and the ``ARGC`` and
+  ``ARGV#`` variables.
+  When using :command:`cmake_parse_arguments` to parse arguments, prefer
+  its ``PARSE_ARGV`` signature, which uses the ``ARGV#`` variables.
+
+  Note that this approach does not apply to :command:`macro` implementations
+  because they reference arguments using placeholders, not real variables.

@@ -15,11 +15,11 @@
 #include "cmCursesPathWidget.h"
 #include "cmCursesStringWidget.h"
 #include "cmCursesWidget.h"
-#include "cmProperty.h"
+#include "cmList.h"
 #include "cmState.h"
 #include "cmStateTypes.h"
-#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
   const std::string& key, int labelwidth, int entrywidth)
@@ -49,7 +49,7 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
     this->IsNewLabel = cm::make_unique<cmCursesLabelWidget>(1, 1, 1, 1, " ");
   }
 
-  cmProp value = state->GetCacheEntryValue(key);
+  cmValue value = state->GetCacheEntryValue(key);
   assert(value);
   switch (state->GetCacheEntryType(key)) {
     case cmStateEnums::BOOL: {
@@ -72,11 +72,11 @@ cmCursesCacheEntryComposite::cmCursesCacheEntryComposite(
       break;
     }
     case cmStateEnums::STRING: {
-      cmProp stringsProp = state->GetCacheEntryProperty(key, "STRINGS");
+      cmValue stringsProp = state->GetCacheEntryProperty(key, "STRINGS");
       if (stringsProp) {
         auto ow =
           cm::make_unique<cmCursesOptionsWidget>(this->EntryWidth, 1, 1, 1);
-        for (std::string const& opt : cmExpandedList(*stringsProp)) {
+        for (auto const& opt : cmList{ *stringsProp }) {
           ow->AddOption(opt);
         }
         ow->SetOption(*value);

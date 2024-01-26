@@ -46,9 +46,15 @@ name:
   variable of the same name exists.  The normal variable is not removed.
   The cache entry is not created or updated and is ignored if it exists.
 
+See :policy:`CMP0126` for a similar policy for the :command:`set(CACHE)`
+command, but note that there are some differences in ``NEW`` behavior
+between the two policies.
+
 This policy was introduced in CMake version 3.13.  CMake version
 |release| warns when the policy is not set and uses ``OLD`` behavior.
 Use the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW``
-explicitly.
+explicitly within a project.  Use the :variable:`CMAKE_POLICY_DEFAULT_CMP0077
+<CMAKE_POLICY_DEFAULT_CMP\<NNNN\>>` variable to set the policy for
+a third-party project in a subdirectory without modifying it.
 
 .. include:: DEPRECATED.txt

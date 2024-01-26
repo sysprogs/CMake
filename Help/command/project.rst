@@ -20,12 +20,18 @@ Sets the name of the project, and stores it in the variable
 ``CMakeLists.txt`` also stores the project name in the
 variable :variable:`CMAKE_PROJECT_NAME`.
 
-Also sets the variables
+Also sets the variables:
 
-* :variable:`PROJECT_SOURCE_DIR`,
-  :variable:`<PROJECT-NAME>_SOURCE_DIR`
-* :variable:`PROJECT_BINARY_DIR`,
-  :variable:`<PROJECT-NAME>_BINARY_DIR`
+:variable:`PROJECT_SOURCE_DIR`, :variable:`<PROJECT-NAME>_SOURCE_DIR`
+  Absolute path to the source directory for the project.
+
+:variable:`PROJECT_BINARY_DIR`, :variable:`<PROJECT-NAME>_BINARY_DIR`
+  Absolute path to the binary directory for the project.
+
+:variable:`PROJECT_IS_TOP_LEVEL`, :variable:`<PROJECT-NAME>_IS_TOP_LEVEL`
+  .. versionadded:: 3.21
+
+  Boolean value indicating whether the project is top-level.
 
 Further variables are set by the optional arguments described in the following.
 If any of these arguments is not used, then the corresponding variables are
@@ -96,49 +102,66 @@ The options are:
   Can also be specified without ``LANGUAGES`` keyword per the first, short signature.
 
   Selects which programming languages are needed to build the project.
-  Supported languages include ``C``, ``CXX`` (i.e.  C++), ``CUDA``,
-  ``OBJC`` (i.e. Objective-C), ``OBJCXX``, ``Fortran``, ``ISPC``, and ``ASM``.
-  By default ``C`` and ``CXX`` are enabled if no language options are given.
-  Specify language ``NONE``, or use the ``LANGUAGES`` keyword and list no languages,
-  to skip enabling any languages.
 
-  .. versionadded:: 3.8
-    Added ``CUDA`` support.
+.. include:: SUPPORTED_LANGUAGES.txt
 
-  .. versionadded:: 3.16
-    Added ``OBJC`` and ``OBJCXX`` support.
-
-  .. versionadded:: 3.18
-    Added ``ISPC`` support.
-
-  If enabling ``ASM``, list it last so that CMake can check whether
-  compilers for other languages like ``C`` work for assembly too.
+By default ``C`` and ``CXX`` are enabled if no language options are given.
+Specify language ``NONE``, or use the ``LANGUAGES`` keyword and list no languages,
+to skip enabling any languages.
 
 The variables set through the ``VERSION``, ``DESCRIPTION`` and ``HOMEPAGE_URL``
 options are intended for use as default values in package metadata and documentation.
 
+.. _`Code Injection`:
+
 Code Injection
 ^^^^^^^^^^^^^^
 
-If the :variable:`CMAKE_PROJECT_INCLUDE_BEFORE` or
-:variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE_BEFORE` variables are set,
-the files they point to will be included as the first step of the
-``project()`` command.
-If both are set, then :variable:`CMAKE_PROJECT_INCLUDE_BEFORE` will be
-included before :variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE_BEFORE`.
+A number of variables can be defined by the user to specify files to include
+at different points during the execution of the ``project()`` command.
+The following outlines the steps performed during a ``project()`` call:
 
-If the :variable:`CMAKE_PROJECT_INCLUDE` or
-:variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE` variables are set, the files
-they point to will be included as the last step of the ``project()`` command.
-If both are set, then :variable:`CMAKE_PROJECT_INCLUDE` will be included before
-:variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE`.
+* .. versionadded:: 3.15
+    For every ``project()`` call regardless of the project
+    name, include the file named by :variable:`CMAKE_PROJECT_INCLUDE_BEFORE`,
+    if set.
 
-.. versionadded:: 3.15
-  Added the ``CMAKE_PROJECT_INCLUDE`` and ``CMAKE_PROJECT_INCLUDE_BEFORE``
-  variables.
+* .. versionadded:: 3.17
+    If the ``project()`` command specifies ``<PROJECT-NAME>`` as its project
+    name, include the file named by
+    :variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE_BEFORE`, if set.
 
-.. versionadded:: 3.17
-  Added the ``CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE_BEFORE`` variable.
+* Set the various project-specific variables detailed in the `Synopsis`_
+  and `Options`_ sections above.
+
+* For the very first ``project()`` call only:
+
+  * If :variable:`CMAKE_TOOLCHAIN_FILE` is set, read it at least once.
+    It may be read multiple times and it may also be read again when
+    enabling languages later (see below).
+
+  * Set the variables describing the host and target platforms.
+    Language-specific variables might or might not be set at this point.
+    On the first run, the only language-specific variables that might be
+    defined are those a toolchain file may have set. On subsequent runs,
+    language-specific variables cached from a previous run may be set.
+
+  * .. versionadded:: 3.24
+      Include each file listed in :variable:`CMAKE_PROJECT_TOP_LEVEL_INCLUDES`,
+      if set. The variable is ignored by CMake thereafter.
+
+* Enable any languages specified in the call, or the default languages if
+  none were provided. The toolchain file may be re-read when enabling a
+  language for the first time.
+
+* .. versionadded:: 3.15
+    For every ``project()`` call regardless of the project
+    name, include the file named by :variable:`CMAKE_PROJECT_INCLUDE`,
+    if set.
+
+* If the ``project()`` command specifies ``<PROJECT-NAME>`` as its project
+  name, include the file named by
+  :variable:`CMAKE_PROJECT_<PROJECT-NAME>_INCLUDE`, if set.
 
 Usage
 ^^^^^
@@ -154,5 +177,6 @@ call exists, CMake will issue a warning and pretend there is a
   Call the ``project()`` command near the top of the top-level
   ``CMakeLists.txt``, but *after* calling :command:`cmake_minimum_required`.
   It is important to establish version and policy settings before invoking
-  other commands whose behavior they may affect.
+  other commands whose behavior they may affect and for this reason the
+  ``project()`` command will issue a warning if this order is not kept.
   See also policy :policy:`CMP0000`.

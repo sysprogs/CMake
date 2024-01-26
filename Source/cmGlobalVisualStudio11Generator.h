@@ -4,15 +4,15 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
-#include <iosfwd>
 #include <memory>
 #include <set>
 #include <string>
 
-#include "cmGlobalVisualStudio10Generator.h"
-#include "cmStateTypes.h"
+#include <cm/optional>
 
-class cmGlobalGeneratorFactory;
+#include "cmGlobalVisualStudio10Generator.h"
+#include "cmTransformDepfile.h"
+
 class cmMakefile;
 class cmake;
 
@@ -20,9 +20,15 @@ class cmake;
 class cmGlobalVisualStudio11Generator : public cmGlobalVisualStudio10Generator
 {
 public:
-  static std::unique_ptr<cmGlobalGeneratorFactory> NewFactory();
+  void EnableLanguage(std::vector<std::string> const& languages, cmMakefile*,
+                      bool optional) override;
 
-  bool MatchesGeneratorName(const std::string& name) const override;
+  bool SupportsCustomCommandDepfile() const override { return true; }
+
+  cm::optional<cmDepfileFormat> DepfileFormat() const override
+  {
+    return cmDepfileFormat::MSBuildAdditionalInputs;
+  }
 
 protected:
   cmGlobalVisualStudio11Generator(cmake* cm, const std::string& name,
@@ -47,8 +53,4 @@ protected:
 
   /** Return true if target system supports debugging deployment. */
   bool TargetSystemSupportsDeployment() const override;
-
-private:
-  class Factory;
-  friend class Factory;
 };

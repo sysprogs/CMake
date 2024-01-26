@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-class cmCompiledGeneratorExpression;
+#include "cmGeneratorExpression.h"
+
 class cmMakefile;
 
 /** \class cmInstalledFile
@@ -59,8 +60,7 @@ public:
 
   bool GetPropertyAsBool(const std::string& prop) const;
 
-  void GetPropertyAsList(const std::string& prop,
-                         std::vector<std::string>& list) const;
+  std::vector<std::string> GetPropertyAsList(const std::string& prop) const;
 
   void SetName(cmMakefile* mf, const std::string& name);
 

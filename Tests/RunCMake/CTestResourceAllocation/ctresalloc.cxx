@@ -19,6 +19,7 @@
 #include "cmCTestTestHandler.h"
 #include "cmFileLock.h"
 #include "cmFileLockResult.h"
+#include "cmList.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 
@@ -89,7 +90,8 @@ static int doWrite(int argc, char const* const* argv)
       return 1;
     }
     int resourceGroupCount = std::atoi(resourceGroupCountEnv);
-    if (resourceGroups.size() != std::size_t(resourceGroupCount)) {
+    if (resourceGroups.size() !=
+        static_cast<std::size_t>(resourceGroupCount)) {
       std::cout
         << "CTEST_RESOURCE_GROUP_COUNT does not match expected resource groups"
         << std::endl
@@ -281,12 +283,11 @@ static int doVerify(int argc, char const* const* argv)
   if (argc == 5) {
     testNames = argv[4];
   }
-  auto testNameList = cmExpandedList(testNames, false);
+  cmList testNameList{ testNames };
   std::set<std::string> testNameSet(testNameList.begin(), testNameList.end());
 
   cmCTestResourceSpec spec;
-  if (spec.ReadFromJSONFile(resFile) !=
-      cmCTestResourceSpec::ReadFileResult::READ_OK) {
+  if (spec.ReadFromJSONFile(resFile) != true) {
     std::cout << "Could not read resource spec " << resFile << std::endl;
     return 1;
   }

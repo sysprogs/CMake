@@ -7,9 +7,8 @@
 #include <memory>
 #include <vector>
 
+#include "cmGeneratorExpressionEvaluator.h"
 #include "cmGeneratorExpressionLexer.h"
-
-struct cmGeneratorExpressionEvaluator;
 
 struct cmGeneratorExpressionParser
 {
@@ -26,5 +25,5 @@ private:
 
   std::vector<cmGeneratorExpressionToken>::const_iterator it;
   const std::vector<cmGeneratorExpressionToken> Tokens;
-  unsigned int NestingLevel;
+  unsigned int NestingLevel = 0;
 };

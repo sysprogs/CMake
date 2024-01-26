@@ -53,7 +53,7 @@ is set regardless of the presence of the ``Server`` component in find_package ca
 # In Windows the default installation of PostgreSQL uses that as part of the path.
 # E.g C:\Program Files\PostgreSQL\8.4.
 # Currently, the following version numbers are known to this module:
-# "11" "10" "9.6" "9.5" "9.4" "9.3" "9.2" "9.1" "9.0" "8.4" "8.3" "8.2" "8.1" "8.0"
+# "16" "15" "14" "13" "12" "11" "10" "9.6" "9.5" "9.4" "9.3" "9.2" "9.1" "9.0" "8.4" "8.3" "8.2" "8.1" "8.0"
 #
 # To use this variable just do something like this:
 # set(PostgreSQL_ADDITIONAL_VERSIONS "9.2" "8.4.4")
@@ -102,7 +102,7 @@ set(PostgreSQL_ROOT_DIR_MESSAGE "Set the PostgreSQL_ROOT system variable to wher
 
 
 set(PostgreSQL_KNOWN_VERSIONS ${PostgreSQL_ADDITIONAL_VERSIONS}
-    "13" "12" "11" "10" "9.6" "9.5" "9.4" "9.3" "9.2" "9.1" "9.0" "8.4" "8.3" "8.2" "8.1" "8.0")
+    "16" "15" "14" "13" "12" "11" "10" "9.6" "9.5" "9.4" "9.3" "9.2" "9.1" "9.0" "8.4" "8.3" "8.2" "8.1" "8.0")
 
 # Define additional search paths for root directories.
 set( PostgreSQL_ROOT_DIRECTORIES
@@ -121,13 +121,16 @@ foreach(suffix ${PostgreSQL_KNOWN_VERSIONS})
   if(UNIX)
     list(APPEND PostgreSQL_LIBRARY_ADDITIONAL_SEARCH_SUFFIXES
         "postgresql${suffix}"
+        "postgresql@${suffix}"
         "pgsql-${suffix}/lib")
     list(APPEND PostgreSQL_INCLUDE_ADDITIONAL_SEARCH_SUFFIXES
         "postgresql${suffix}"
+        "postgresql@${suffix}"
         "postgresql/${suffix}"
         "pgsql-${suffix}/include")
     list(APPEND PostgreSQL_TYPE_ADDITIONAL_SEARCH_SUFFIXES
         "postgresql${suffix}/server"
+        "postgresql@${suffix}/server"
         "postgresql/${suffix}/server"
         "pgsql-${suffix}/include/server")
   endif()

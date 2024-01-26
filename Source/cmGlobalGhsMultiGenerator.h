@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "cmBuildOptions.h"
 #include "cmGlobalGenerator.h"
 #include "cmGlobalGeneratorFactory.h"
 #include "cmTargetDepend.h"
@@ -17,7 +18,6 @@ class cmGeneratorTarget;
 class cmLocalGenerator;
 class cmMakefile;
 class cmake;
-struct cmDocumentationEntry;
 
 class cmGlobalGhsMultiGenerator : public cmGlobalGenerator
 {
@@ -45,7 +45,7 @@ public:
   std::string GetName() const override { return GetActualName(); }
 
   /// Overloaded methods. @see cmGlobalGenerator::GetDocumentation()
-  static void GetDocumentation(cmDocumentationEntry& entry);
+  static cmDocumentationEntry GetDocumentation();
 
   /**
    * Utilized by the generator factory to determine if this generator
@@ -80,16 +80,16 @@ public:
   // Write the common disclaimer text at the top of each build file.
   void WriteFileHeader(std::ostream& fout);
 
-  const char* GetInstallTargetName() const override { return "install"; }
-
 protected:
   void Generate() override;
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
+  void AddExtraIDETargets() override;
 
 private:
   void GetToolset(cmMakefile* mf, std::string& tsd, const std::string& ts);
@@ -99,22 +99,21 @@ private:
                              std::vector<cmLocalGenerator*>& generators);
   void WriteTopLevelProject(std::ostream& fout, cmLocalGenerator* root);
   void WriteMacros(std::ostream& fout, cmLocalGenerator* root);
-  void WriteHighLevelDirectives(cmLocalGenerator* root, std::ostream& fout);
-  void WriteSubProjects(std::ostream& fout, std::string& all_target);
+  void WriteHighLevelDirectives(std::ostream& fout, cmLocalGenerator* root);
+  void WriteSubProjects(std::ostream& fout, bool filterPredefined);
   void WriteTargets(cmLocalGenerator* root);
   void WriteProjectLine(std::ostream& fout, cmGeneratorTarget const* target,
-                        cmLocalGenerator* root, std::string& rootBinaryDir);
+                        std::string& rootBinaryDir);
   void WriteCustomRuleBOD(std::ostream& fout);
   void WriteCustomTargetBOD(std::ostream& fout);
-  void WriteAllTarget(cmLocalGenerator* root,
-                      std::vector<cmLocalGenerator*>& generators,
-                      std::string& all_target);
+  bool AddCheckTarget();
+  void AddAllTarget();
 
+  std::string StampFile;
   static std::string TrimQuotes(std::string str);
 
-  std::string OsDir;
   static const char* DEFAULT_BUILD_PROGRAM;
-  static const char* DEFAULT_TOOLSET_ROOT;
+  static const char* CHECK_BUILD_SYSTEM_TARGET;
 
   bool ComputeTargetBuildOrder(cmGeneratorTarget const* tgt,
                                std::vector<cmGeneratorTarget const*>& build);

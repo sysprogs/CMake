@@ -24,12 +24,24 @@ set(CMAKE_DL_LIBS "dl")
 set(CMAKE_FIND_LIBRARY_PREFIXES "lib")
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".a")
 
-set(CMAKE_AUTOGEN_ORIGIN_DEPENDS ON)
-set(CMAKE_AUTOMOC_COMPILER_PREDEFINES ON)
+# Define feature "DEFAULT" as supported. This special feature generates the
+# default option to link a library
+# This feature is intended to be used in LINK_LIBRARY_OVERRIDE and
+# LINK_LIBRARY_OVERRIDE_<LIBRARY> target properties
+set(CMAKE_LINK_LIBRARY_USING_DEFAULT_SUPPORTED TRUE)
+
+if(NOT DEFINED CMAKE_AUTOGEN_ORIGIN_DEPENDS)
+  set(CMAKE_AUTOGEN_ORIGIN_DEPENDS ON)
+endif()
+if(NOT DEFINED CMAKE_AUTOMOC_COMPILER_PREDEFINES)
+  set(CMAKE_AUTOMOC_COMPILER_PREDEFINES ON)
+endif()
 if(NOT DEFINED CMAKE_AUTOMOC_PATH_PREFIX)
   set(CMAKE_AUTOMOC_PATH_PREFIX OFF)
 endif()
-set(CMAKE_AUTOMOC_MACRO_NAMES "Q_OBJECT" "Q_GADGET" "Q_NAMESPACE" "Q_NAMESPACE_EXPORT")
+if(NOT DEFINED CMAKE_AUTOMOC_MACRO_NAMES)
+  set(CMAKE_AUTOMOC_MACRO_NAMES "Q_OBJECT" "Q_GADGET" "Q_NAMESPACE" "Q_NAMESPACE_EXPORT")
+endif()
 
 # basically all general purpose OSs support shared libs
 set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
@@ -41,11 +53,16 @@ set (CMAKE_SKIP_INSTALL_RPATH "NO" CACHE BOOL
 
 set(CMAKE_VERBOSE_MAKEFILE FALSE CACHE BOOL "If this value is on, makefiles will be generated without the .SILENT directive, and all commands will be echoed to the console during the make.  This is useful for debugging only. With Visual Studio IDE projects all commands are done without /nologo.")
 
+if(DEFINED ENV{CMAKE_COLOR_DIAGNOSTICS} AND NOT DEFINED CACHE{CMAKE_COLOR_DIAGNOSTICS})
+  set(CMAKE_COLOR_DIAGNOSTICS $ENV{CMAKE_COLOR_DIAGNOSTICS} CACHE BOOL "Enable colored diagnostics throughout.")
+endif()
+
 if(CMAKE_GENERATOR MATCHES "Make")
-  set(CMAKE_COLOR_MAKEFILE ON CACHE BOOL
-    "Enable/Disable color output during build."
-    )
+  if(NOT DEFINED CMAKE_COLOR_DIAGNOSTICS)
+    set(CMAKE_COLOR_MAKEFILE ON CACHE BOOL "Enable/Disable color output during build.")
+  endif()
   mark_as_advanced(CMAKE_COLOR_MAKEFILE)
+
   if(DEFINED CMAKE_RULE_MESSAGES)
     set_property(GLOBAL PROPERTY RULE_MESSAGES ${CMAKE_RULE_MESSAGES})
   endif()

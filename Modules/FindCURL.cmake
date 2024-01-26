@@ -58,6 +58,18 @@ returns its results with no further action.
 
 Set ``CURL_NO_CURL_CMAKE`` to ``ON`` to disable this search.
 
+Hints
+^^^^^
+
+``CURL_USE_STATIC_LIBS``
+
+  .. versionadded:: 3.28
+
+  Set to ``TRUE`` to use static libraries.
+
+  This is meaningful only when CURL is not found via its
+  CMake Package Configuration file.
+
 #]=======================================================================]
 
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
@@ -72,6 +84,8 @@ if(NOT CURL_NO_CURL_CMAKE)
   # can print what we found and return.
   if(CURL_FOUND)
     find_package_handle_standard_args(CURL HANDLE_COMPONENTS CONFIG_MODE)
+    # The upstream curl package sets CURL_VERSION, not CURL_VERSION_STRING.
+    set(CURL_VERSION_STRING "${CURL_VERSION}")
     return()
   endif()
 endif()
@@ -80,7 +94,6 @@ find_package(PkgConfig QUIET)
 if(PKG_CONFIG_FOUND)
   pkg_check_modules(PC_CURL QUIET libcurl)
   if(PC_CURL_FOUND)
-    set(CURL_VERSION_STRING ${PC_CURL_VERSION})
     pkg_get_variable(CURL_SUPPORTED_PROTOCOLS libcurl supported_protocols)
     pkg_get_variable(CURL_SUPPORTED_FEATURES libcurl supported_features)
   endif()
@@ -120,7 +133,7 @@ if(NOT CURL_LIBRARY)
   select_library_configurations(CURL)
 endif()
 
-if(CURL_INCLUDE_DIR AND NOT CURL_VERSION_STRING)
+if(CURL_INCLUDE_DIR)
   foreach(_curl_version_header curlver.h curl.h)
     if(EXISTS "${CURL_INCLUDE_DIR}/curl/${_curl_version_header}")
       file(STRINGS "${CURL_INCLUDE_DIR}/curl/${_curl_version_header}" curl_version_str REGEX "^#define[\t ]+LIBCURL_VERSION[\t ]+\".*\"")
@@ -192,6 +205,11 @@ if(CURL_FOUND)
     set_target_properties(CURL::libcurl PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES "${CURL_INCLUDE_DIRS}")
 
+    if(CURL_USE_STATIC_LIBS)
+      set_property(TARGET CURL::libcurl APPEND PROPERTY
+                   INTERFACE_COMPILE_DEFINITIONS "CURL_STATICLIB")
+    endif()
+
     if(EXISTS "${CURL_LIBRARY}")
       set_target_properties(CURL::libcurl PROPERTIES
         IMPORTED_LINK_INTERFACE_LANGUAGES "C"
@@ -211,5 +229,11 @@ if(CURL_FOUND)
         IMPORTED_LINK_INTERFACE_LANGUAGES "C"
         IMPORTED_LOCATION_DEBUG "${CURL_LIBRARY_DEBUG}")
     endif()
+
+    if(CURL_USE_STATIC_LIBS AND MSVC)
+       set_target_properties(CURL::libcurl PROPERTIES
+           INTERFACE_LINK_LIBRARIES "normaliz.lib;ws2_32.lib;wldap32.lib")
+    endif()
+
   endif()
 endif()

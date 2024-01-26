@@ -5,12 +5,12 @@
 #include <utility>
 
 #include <cm/string_view>
+#include <cmext/algorithm>
 
 #include "cmsys/FStream.hxx"
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmCTest.h"
-#include "cmProcessTools.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmXMLWriter.h"
@@ -90,18 +90,15 @@ bool cmCTestCVS::UpdateImpl()
   }
 
   // Run "cvs update" to update the work tree.
-  std::vector<char const*> cvs_update;
-  cvs_update.push_back(this->CommandLineTool.c_str());
+  std::vector<std::string> cvs_update;
+  cvs_update.push_back(this->CommandLineTool);
   cvs_update.push_back("-z3");
   cvs_update.push_back("update");
-  for (std::string const& arg : args) {
-    cvs_update.push_back(arg.c_str());
-  }
-  cvs_update.push_back(nullptr);
+  cm::append(cvs_update, args);
 
   UpdateParser out(this, "up-out> ");
   UpdateParser err(this, "up-err> ");
-  return this->RunUpdateCommand(&cvs_update[0], &out, &err);
+  return this->RunUpdateCommand(cvs_update, &out, &err);
 }
 
 class cmCTestCVS::LogParser : public cmCTestVC::LineParser
@@ -111,7 +108,6 @@ public:
   LogParser(cmCTestCVS* cvs, const char* prefix, std::vector<Revision>& revs)
     : CVS(cvs)
     , Revisions(revs)
-    , Section(SectionHeader)
   {
     this->SetLog(&cvs->Log, prefix);
     this->RegexRevision.compile("^revision +([^ ]*) *$");
@@ -131,7 +127,7 @@ private:
     SectionRevisions,
     SectionEnd
   };
-  SectionType Section;
+  SectionType Section = SectionHeader;
   Revision Rev;
 
   bool ProcessLine() override
@@ -223,10 +219,8 @@ void cmCTestCVS::LoadRevisions(std::string const& file, const char* branchFlag,
   cmCTestLog(this->CTest, HANDLER_OUTPUT, "." << std::flush);
 
   // Run "cvs log" to get revisions of this file on this branch.
-  const char* cvs = this->CommandLineTool.c_str();
-  const char* cvs_log[] = {
-    cvs, "log", "-N", branchFlag, file.c_str(), nullptr
-  };
+  std::string cvs = this->CommandLineTool;
+  std::vector<std::string> cvs_log = { cvs, "log", "-N", branchFlag, file };
 
   LogParser out(this, "log-out> ", revisions);
   OutputLogger err(this->Log, "log-err> ");
@@ -259,7 +253,7 @@ void cmCTestCVS::WriteXMLDirectory(cmXMLWriter& xml, std::string const& path,
     revisions.resize(2, this->Unknown);
 
     // Write the entry for this file with these revisions.
-    File f(fi.second, &revisions[0], &revisions[1]);
+    File f(fi.second, revisions.data(), revisions.data() + 1);
     this->WriteXMLEntry(xml, path, fi.first, full, f);
   }
   xml.EndElement(); // Directory

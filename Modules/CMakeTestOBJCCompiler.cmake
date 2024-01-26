@@ -38,7 +38,7 @@ endif()
 if(NOT CMAKE_OBJC_COMPILER_WORKS)
   PrintTestCompilerStatus("OBJC")
   __TestCompiler_setTryCompileTargetType()
-  file(WRITE ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testOBJCCompiler.m
+  string(CONCAT __TestCompiler_testObjCCompilerSource
     "#ifdef __cplusplus\n"
     "# error \"The CMAKE_OBJC_COMPILER is set to a C++ compiler\"\n"
     "#endif\n"
@@ -47,18 +47,19 @@ if(NOT CMAKE_OBJC_COMPILER_WORKS)
     "#endif\n"
     "int main(int argc, char* argv[])\n"
     "{ (void)argv; return argc-1;}\n")
-  try_compile(CMAKE_OBJC_COMPILER_WORKS ${CMAKE_BINARY_DIR}
-    ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testOBJCCompiler.m
+  # Clear result from normal variable.
+  unset(CMAKE_OBJC_COMPILER_WORKS)
+  # Puts test result in cache variable.
+  try_compile(CMAKE_OBJC_COMPILER_WORKS
+    SOURCE_FROM_VAR testObjCCompiler.m __TestCompiler_testObjCCompilerSource
     OUTPUT_VARIABLE __CMAKE_OBJC_COMPILER_OUTPUT)
+  unset(__TestCompiler_testObjCCompilerSource)
   # Move result from cache to normal variable.
   set(CMAKE_OBJC_COMPILER_WORKS ${CMAKE_OBJC_COMPILER_WORKS})
   unset(CMAKE_OBJC_COMPILER_WORKS CACHE)
   __TestCompiler_restoreTryCompileTargetType()
   if(NOT CMAKE_OBJC_COMPILER_WORKS)
     PrintTestCompilerResult(CHECK_FAIL "broken")
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-      "Determining if the Objective-C compiler works failed with "
-      "the following output:\n${__CMAKE_OBJC_COMPILER_OUTPUT}\n\n")
     string(REPLACE "\n" "\n  " _output "${__CMAKE_OBJC_COMPILER_OUTPUT}")
     message(FATAL_ERROR "The Objective-C compiler\n  \"${CMAKE_OBJC_COMPILER}\"\n"
       "is not able to compile a simple test program.\nIt fails "
@@ -66,9 +67,6 @@ if(NOT CMAKE_OBJC_COMPILER_WORKS)
       "CMake will not be able to correctly generate this project.")
   endif()
   PrintTestCompilerResult(CHECK_PASS "works")
-  file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-    "Determining if the Objective-C compiler works passed with "
-    "the following output:\n${__CMAKE_OBJC_COMPILER_OUTPUT}\n\n")
 endif()
 
 # Try to identify the compiler features

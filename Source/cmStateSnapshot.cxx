@@ -10,20 +10,18 @@
 #include <cm/iterator>
 
 #include "cmDefinitions.h"
+#include "cmLinkedTree.h"
 #include "cmListFileCache.h"
-#include "cmProperty.h"
 #include "cmPropertyMap.h"
 #include "cmState.h"
 #include "cmStateDirectory.h"
 #include "cmStatePrivate.h"
+#include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmVersion.h"
 
-#if !defined(_WIN32)
-#  include <sys/utsname.h>
-#endif
-
 #if defined(__CYGWIN__)
-#  include "cmSystemTools.h"
+#  include "cmStringAlgorithms.h"
 #endif
 
 cmStateSnapshot::cmStateSnapshot(cmState* state)
@@ -67,7 +65,7 @@ bool cmStateSnapshot::IsValid() const
 
 cmStateSnapshot cmStateSnapshot::GetBuildsystemDirectory() const
 {
-  return { this->State, this->Position->BuildSystemDirectory->DirectoryEnd };
+  return { this->State, this->Position->BuildSystemDirectory->CurrentScope };
 }
 
 cmStateSnapshot cmStateSnapshot::GetBuildsystemDirectoryParent() const
@@ -79,7 +77,7 @@ cmStateSnapshot cmStateSnapshot::GetBuildsystemDirectoryParent() const
   cmStateDetail::PositionType parentPos = this->Position->DirectoryParent;
   if (parentPos != this->State->SnapshotData.Root()) {
     snapshot = cmStateSnapshot(this->State,
-                               parentPos->BuildSystemDirectory->DirectoryEnd);
+                               parentPos->BuildSystemDirectory->CurrentScope);
   }
 
   return snapshot;
@@ -180,9 +178,9 @@ cmPolicies::PolicyStatus cmStateSnapshot::GetPolicy(cmPolicies::PolicyID id,
   while (true) {
     assert(dir.IsValid());
     cmLinkedTree<cmStateDetail::PolicyStackEntry>::iterator leaf =
-      dir->DirectoryEnd->Policies;
+      dir->CurrentScope->Policies;
     cmLinkedTree<cmStateDetail::PolicyStackEntry>::iterator root =
-      dir->DirectoryEnd->PolicyRoot;
+      dir->CurrentScope->PolicyRoot;
     for (; leaf != root; ++leaf) {
       if (parent_scope) {
         parent_scope = false;
@@ -193,7 +191,7 @@ cmPolicies::PolicyStatus cmStateSnapshot::GetPolicy(cmPolicies::PolicyID id,
         return status;
       }
     }
-    cmStateDetail::PositionType e = dir->DirectoryEnd;
+    cmStateDetail::PositionType e = dir->CurrentScope;
     cmStateDetail::PositionType p = e->DirectoryParent;
     if (p == this->State->SnapshotData.Root()) {
       break;
@@ -208,8 +206,7 @@ bool cmStateSnapshot::HasDefinedPolicyCMP0011()
   return !this->Position->Policies->IsEmpty();
 }
 
-std::string const* cmStateSnapshot::GetDefinition(
-  std::string const& name) const
+cmValue cmStateSnapshot::GetDefinition(std::string const& name) const
 {
   assert(this->Position->Vars.IsValid());
   return cmDefinitions::Get(name, this->Position->Vars, this->Position->Root);
@@ -267,12 +264,10 @@ bool cmStateSnapshot::RaiseScope(std::string const& var, const char* varDef)
   return true;
 }
 
-template <typename T, typename U, typename V>
+template <typename T, typename U>
 void InitializeContentFromParent(T& parentContent, T& thisContent,
-                                 U& parentBacktraces, U& thisBacktraces,
-                                 V& contentEndPosition)
+                                 U& contentEndPosition)
 {
-  auto parentBegin = parentContent.begin();
   auto parentEnd = parentContent.end();
 
   auto parentRbegin = cm::make_reverse_iterator(parentEnd);
@@ -280,60 +275,58 @@ void InitializeContentFromParent(T& parentContent, T& thisContent,
   parentRbegin = std::find(parentRbegin, parentRend, cmPropertySentinal);
   auto parentIt = parentRbegin.base();
 
-  thisContent = std::vector<std::string>(parentIt, parentEnd);
-
-  auto btIt = parentBacktraces.begin() + std::distance(parentBegin, parentIt);
-  auto btEnd = parentBacktraces.end();
-
-  thisBacktraces = std::vector<cmListFileBacktrace>(btIt, btEnd);
+  thisContent = std::vector<BT<std::string>>(parentIt, parentEnd);
 
   contentEndPosition = thisContent.size();
 }
 
 void cmStateSnapshot::SetDefaultDefinitions()
 {
-/* Up to CMake 2.4 here only WIN32, UNIX and APPLE were set.
-  With CMake must separate between target and host platform. In most cases
-  the tests for WIN32, UNIX and APPLE will be for the target system, so an
-  additional set of variables for the host system is required ->
-  CMAKE_HOST_WIN32, CMAKE_HOST_UNIX, CMAKE_HOST_APPLE.
-  WIN32, UNIX and APPLE are now set in the platform files in
-  Modules/Platforms/.
-  To keep cmake scripts (-P) and custom language and compiler modules
-  working, these variables are still also set here in this place, but they
-  will be reset in CMakeSystemSpecificInformation.cmake before the platform
-  files are executed. */
-#if defined(_WIN32)
-  this->SetDefinition("WIN32", "1");
-  this->SetDefinition("CMAKE_HOST_WIN32", "1");
-  this->SetDefinition("CMAKE_HOST_SYSTEM_NAME", "Windows");
-#else
-  this->SetDefinition("UNIX", "1");
-  this->SetDefinition("CMAKE_HOST_UNIX", "1");
-
-#  if defined(__ANDROID__)
-  this->SetDefinition("CMAKE_HOST_SYSTEM_NAME", "Android");
-#  else
-  struct utsname uts_name;
-  if (uname(&uts_name) >= 0) {
-    this->SetDefinition("CMAKE_HOST_SYSTEM_NAME", uts_name.sysname);
-  }
-#  endif
-#endif
-#if defined(__CYGWIN__)
-  std::string legacy;
-  if (cmSystemTools::GetEnv("CMAKE_LEGACY_CYGWIN_WIN32", legacy) &&
-      cmIsOn(legacy)) {
+  /* Up to CMake 2.4 here only WIN32, UNIX and APPLE were set.
+    With CMake must separate between target and host platform. In most cases
+    the tests for WIN32, UNIX and APPLE will be for the target system, so an
+    additional set of variables for the host system is required ->
+    CMAKE_HOST_WIN32, CMAKE_HOST_UNIX, CMAKE_HOST_APPLE.
+    WIN32, UNIX and APPLE are now set in the platform files in
+    Modules/Platforms/.
+    To keep cmake scripts (-P) and custom language and compiler modules
+    working, these variables are still also set here in this place, but they
+    will be reset in CMakeSystemSpecificInformation.cmake before the platform
+    files are executed. */
+  cm::string_view hostSystemName = cmSystemTools::GetSystemName();
+  this->SetDefinition("CMAKE_HOST_SYSTEM_NAME", hostSystemName);
+  if (hostSystemName == "Windows") {
     this->SetDefinition("WIN32", "1");
     this->SetDefinition("CMAKE_HOST_WIN32", "1");
+  } else {
+    this->SetDefinition("UNIX", "1");
+    this->SetDefinition("CMAKE_HOST_UNIX", "1");
   }
-#endif
 #if defined(__APPLE__)
   this->SetDefinition("APPLE", "1");
   this->SetDefinition("CMAKE_HOST_APPLE", "1");
 #endif
 #if defined(__sun__)
   this->SetDefinition("CMAKE_HOST_SOLARIS", "1");
+#endif
+
+#if defined(__OpenBSD__)
+  this->SetDefinition("BSD", "OpenBSD");
+  this->SetDefinition("CMAKE_HOST_BSD", "OpenBSD");
+#elif defined(__FreeBSD__)
+  this->SetDefinition("BSD", "FreeBSD");
+  this->SetDefinition("CMAKE_HOST_BSD", "FreeBSD");
+#elif defined(__NetBSD__)
+  this->SetDefinition("BSD", "NetBSD");
+  this->SetDefinition("CMAKE_HOST_BSD", "NetBSD");
+#elif defined(__DragonFly__)
+  this->SetDefinition("BSD", "DragonFlyBSD");
+  this->SetDefinition("CMAKE_HOST_BSD", "DragonFlyBSD");
+#endif
+
+#if defined(__linux__)
+  this->SetDefinition("LINUX", "1");
+  this->SetDefinition("CMAKE_HOST_LINUX", "1");
 #endif
 
   this->SetDefinition("CMAKE_MAJOR_VERSION",
@@ -375,43 +368,33 @@ void cmStateSnapshot::InitializeFromParent()
   InitializeContentFromParent(
     parent->BuildSystemDirectory->IncludeDirectories,
     this->Position->BuildSystemDirectory->IncludeDirectories,
-    parent->BuildSystemDirectory->IncludeDirectoryBacktraces,
-    this->Position->BuildSystemDirectory->IncludeDirectoryBacktraces,
     this->Position->IncludeDirectoryPosition);
 
   InitializeContentFromParent(
     parent->BuildSystemDirectory->CompileDefinitions,
     this->Position->BuildSystemDirectory->CompileDefinitions,
-    parent->BuildSystemDirectory->CompileDefinitionsBacktraces,
-    this->Position->BuildSystemDirectory->CompileDefinitionsBacktraces,
     this->Position->CompileDefinitionsPosition);
 
   InitializeContentFromParent(
     parent->BuildSystemDirectory->CompileOptions,
     this->Position->BuildSystemDirectory->CompileOptions,
-    parent->BuildSystemDirectory->CompileOptionsBacktraces,
-    this->Position->BuildSystemDirectory->CompileOptionsBacktraces,
     this->Position->CompileOptionsPosition);
 
   InitializeContentFromParent(
     parent->BuildSystemDirectory->LinkOptions,
     this->Position->BuildSystemDirectory->LinkOptions,
-    parent->BuildSystemDirectory->LinkOptionsBacktraces,
-    this->Position->BuildSystemDirectory->LinkOptionsBacktraces,
     this->Position->LinkOptionsPosition);
 
   InitializeContentFromParent(
     parent->BuildSystemDirectory->LinkDirectories,
     this->Position->BuildSystemDirectory->LinkDirectories,
-    parent->BuildSystemDirectory->LinkDirectoriesBacktraces,
-    this->Position->BuildSystemDirectory->LinkDirectoriesBacktraces,
     this->Position->LinkDirectoriesPosition);
 
-  cmProp include_regex =
+  cmValue include_regex =
     parent->BuildSystemDirectory->Properties.GetPropertyValue(
       "INCLUDE_REGULAR_EXPRESSION");
   this->Position->BuildSystemDirectory->Properties.SetProperty(
-    "INCLUDE_REGULAR_EXPRESSION", cmToCStr(include_regex));
+    "INCLUDE_REGULAR_EXPRESSION", include_regex);
 }
 
 cmState* cmStateSnapshot::GetState() const

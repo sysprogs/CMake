@@ -6,6 +6,7 @@
         ".*cmake_pch(_[^.]+)?(\\.hxx)?\\.cxx$"
       ],
       "includes": null,
+      "frameworks": null,
       "defines": null,
       "precompileHeaders": [
         {
@@ -52,6 +53,7 @@
         "^empty\\.cxx$"
       ],
       "includes": null,
+      "frameworks": null,
       "defines": null,
       "precompileHeaders": [
         {
@@ -97,6 +99,7 @@
     {
       "path": ".*cmake_pch(_[^.]+)?(\\.hxx)?\\.cxx$",
       "isGenerated": null,
+      "fileSetName": null,
       "sourceGroupName": "Source Files",
       "compileGroupLanguage": "CXX",
       "backtrace": [
@@ -111,6 +114,7 @@
     {
       "path": "^empty\\.cxx$",
       "isGenerated": null,
+      "fileSetName": null,
       "sourceGroupName": "Source Files",
       "compileGroupLanguage": "CXX",
       "backtrace": [
@@ -131,6 +135,7 @@
     {
       "path": ".*/cmake_pch(_[^.]+)?\\.hxx$",
       "isGenerated": null,
+      "fileSetName": null,
       "sourceGroupName": "Precompile Header File",
       "compileGroupLanguage": null,
       "backtrace": [

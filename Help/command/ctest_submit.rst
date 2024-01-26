@@ -3,7 +3,7 @@ ctest_submit
 
 Perform the :ref:`CTest Submit Step` as a :ref:`Dashboard Client`.
 
-::
+.. code-block:: cmake
 
   ctest_submit([PARTS <part>...] [FILES <file>...]
                [SUBMIT_URL <url>]
@@ -30,7 +30,8 @@ The options are:
     Build      = ctest_build results, in Build.xml
     Test       = ctest_test results, in Test.xml
     Coverage   = ctest_coverage results, in Coverage.xml
-    MemCheck   = ctest_memcheck results, in DynamicAnalysis.xml
+    MemCheck   = ctest_memcheck results, in DynamicAnalysis.xml and
+                 DynamicAnalysis-Test.xml
     Notes      = Files listed by CTEST_NOTES_FILES, in Notes.xml
     ExtraFiles = Files listed by CTEST_EXTRA_SUBMIT_FILES
     Upload     = Files prepared for upload by ctest_upload(), in Upload.xml
@@ -95,7 +96,7 @@ Submit to CDash Upload API
 
 .. versionadded:: 3.2
 
-::
+.. code-block:: cmake
 
   ctest_submit(CDASH_UPLOAD <file> [CDASH_UPLOAD_TYPE <type>]
                [SUBMIT_URL <url>]

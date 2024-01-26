@@ -1,18 +1,20 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
    file Copyright.txt or https://cmake.org/licensing for details.  */
+#define cmListFileCache_cxx
 #include "cmListFileCache.h"
 
-#include <cassert>
 #include <memory>
 #include <sstream>
 #include <utility>
 
+#ifdef _WIN32
+#  include <cmsys/Encoding.hxx>
+#endif
+
+#include "cmList.h"
 #include "cmListFileLexer.h"
 #include "cmMessageType.h"
 #include "cmMessenger.h"
-#include "cmState.h"
-#include "cmStateDirectory.h"
-#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 
 struct cmListFileParser
@@ -34,10 +36,11 @@ struct cmListFileParser
   cmListFile* ListFile;
   cmListFileBacktrace Backtrace;
   cmMessenger* Messenger;
-  const char* FileName;
+  const char* FileName = nullptr;
   cmListFileLexer* Lexer;
   std::string FunctionName;
   long FunctionLine;
+  long FunctionLineEnd;
   std::vector<cmListFileArgument> FunctionArguments;
   enum
   {
@@ -52,7 +55,6 @@ cmListFileParser::cmListFileParser(cmListFile* lf, cmListFileBacktrace lfbt,
   : ListFile(lf)
   , Backtrace(std::move(lfbt))
   , Messenger(messenger)
-  , FileName(nullptr)
   , Lexer(cmListFileLexer_New())
 {
 }
@@ -76,16 +78,22 @@ void cmListFileParser::IssueError(const std::string& text) const
   cmListFileBacktrace lfbt = this->Backtrace;
   lfbt = lfbt.Push(lfc);
   this->Messenger->IssueMessage(MessageType::FATAL_ERROR, text, lfbt);
-  cmSystemTools::SetFatalErrorOccured();
+  cmSystemTools::SetFatalErrorOccurred();
 }
 
 bool cmListFileParser::ParseFile(const char* filename)
 {
   this->FileName = filename;
 
+#ifdef _WIN32
+  std::string expandedFileName = cmsys::Encoding::ToNarrow(
+    cmSystemTools::ConvertToWindowsExtendedPath(filename));
+  filename = expandedFileName.c_str();
+#endif
+
   // Open the file.
   cmListFileLexer_BOM bom;
-  if (!cmListFileLexer_SetFileName(this->Lexer, this->FileName, &bom)) {
+  if (!cmListFileLexer_SetFileName(this->Lexer, filename, &bom)) {
     this->IssueFileOpenError("cmListFileCache: error can not open file.");
     return false;
   }
@@ -138,7 +146,7 @@ bool cmListFileParser::Parse()
         if (this->ParseFunction(token->text, token->line)) {
           this->ListFile->Functions.emplace_back(
             std::move(this->FunctionName), this->FunctionLine,
-            std::move(this->FunctionArguments));
+            this->FunctionLineEnd, std::move(this->FunctionArguments));
         } else {
           return false;
         }
@@ -166,7 +174,7 @@ bool cmListFileParser::Parse()
       MessageType::FATAL_ERROR,
       "Flow control statements are not properly nested.",
       this->Backtrace.Push(*badNesting));
-    cmSystemTools::SetFatalErrorOccured();
+    cmSystemTools::SetFatalErrorOccurred();
     return false;
   }
 
@@ -251,6 +259,7 @@ bool cmListFileParser::ParseFunction(const char* name, long line)
       }
     } else if (token->type == cmListFileLexer_Token_ParenRight) {
       if (parenDepth == 0) {
+        this->FunctionLineEnd = token->line;
         return true;
       }
       parenDepth--;
@@ -338,6 +347,7 @@ enum class NestingStateEnum
   Foreach,
   Function,
   Macro,
+  Block
 };
 
 struct NestingState
@@ -361,68 +371,78 @@ cm::optional<cmListFileContext> cmListFileParser::CheckNesting() const
     if (name == "if") {
       stack.push_back({
         NestingStateEnum::If,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       });
     } else if (name == "elseif") {
       if (!TopIs(stack, NestingStateEnum::If)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.back() = {
         NestingStateEnum::If,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       };
     } else if (name == "else") {
       if (!TopIs(stack, NestingStateEnum::If)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.back() = {
         NestingStateEnum::Else,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       };
     } else if (name == "endif") {
       if (!TopIs(stack, NestingStateEnum::If) &&
           !TopIs(stack, NestingStateEnum::Else)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.pop_back();
     } else if (name == "while") {
       stack.push_back({
         NestingStateEnum::While,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       });
     } else if (name == "endwhile") {
       if (!TopIs(stack, NestingStateEnum::While)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.pop_back();
     } else if (name == "foreach") {
       stack.push_back({
         NestingStateEnum::Foreach,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       });
     } else if (name == "endforeach") {
       if (!TopIs(stack, NestingStateEnum::Foreach)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.pop_back();
     } else if (name == "function") {
       stack.push_back({
         NestingStateEnum::Function,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       });
     } else if (name == "endfunction") {
       if (!TopIs(stack, NestingStateEnum::Function)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.pop_back();
     } else if (name == "macro") {
       stack.push_back({
         NestingStateEnum::Macro,
-        cmListFileContext::FromCommandContext(func, this->FileName),
+        cmListFileContext::FromListFileFunction(func, this->FileName),
       });
     } else if (name == "endmacro") {
       if (!TopIs(stack, NestingStateEnum::Macro)) {
-        return cmListFileContext::FromCommandContext(func, this->FileName);
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
+      }
+      stack.pop_back();
+    } else if (name == "block") {
+      stack.push_back({
+        NestingStateEnum::Block,
+        cmListFileContext::FromListFileFunction(func, this->FileName),
+      });
+    } else if (name == "endblock") {
+      if (!TopIs(stack, NestingStateEnum::Block)) {
+        return cmListFileContext::FromListFileFunction(func, this->FileName);
       }
       stack.pop_back();
     }
@@ -435,164 +455,8 @@ cm::optional<cmListFileContext> cmListFileParser::CheckNesting() const
   return cm::nullopt;
 }
 
-// We hold either the bottom scope of a directory or a call/file context.
-// Discriminate these cases via the parent pointer.
-struct cmListFileBacktrace::Entry
-{
-  Entry(cmStateSnapshot bottom)
-    : Bottom(bottom)
-  {
-  }
-
-  Entry(std::shared_ptr<Entry const> parent, cmListFileContext lfc)
-    : Context(std::move(lfc))
-    , Parent(std::move(parent))
-  {
-  }
-
-  ~Entry()
-  {
-    if (this->Parent) {
-      this->Context.~cmListFileContext();
-    } else {
-      this->Bottom.~cmStateSnapshot();
-    }
-  }
-
-  bool IsBottom() const { return !this->Parent; }
-
-  union
-  {
-    cmStateSnapshot Bottom;
-    cmListFileContext Context;
-  };
-  std::shared_ptr<Entry const> Parent;
-};
-
-cmListFileBacktrace::cmListFileBacktrace(cmStateSnapshot const& snapshot)
-  : TopEntry(std::make_shared<Entry const>(snapshot.GetCallStackBottom()))
-{
-}
-
-/* NOLINTNEXTLINE(performance-unnecessary-value-param) */
-cmListFileBacktrace::cmListFileBacktrace(std::shared_ptr<Entry const> parent,
-                                         cmListFileContext const& lfc)
-  : TopEntry(std::make_shared<Entry const>(std::move(parent), lfc))
-{
-}
-
-cmListFileBacktrace::cmListFileBacktrace(std::shared_ptr<Entry const> top)
-  : TopEntry(std::move(top))
-{
-}
-
-cmStateSnapshot cmListFileBacktrace::GetBottom() const
-{
-  cmStateSnapshot bottom;
-  if (Entry const* cur = this->TopEntry.get()) {
-    while (Entry const* parent = cur->Parent.get()) {
-      cur = parent;
-    }
-    bottom = cur->Bottom;
-  }
-  return bottom;
-}
-
-cmListFileBacktrace cmListFileBacktrace::Push(std::string const& file) const
-{
-  // We are entering a file-level scope but have not yet reached
-  // any specific line or command invocation within it.  This context
-  // is useful to print when it is at the top but otherwise can be
-  // skipped during call stack printing.
-  cmListFileContext lfc;
-  lfc.FilePath = file;
-  return this->Push(lfc);
-}
-
-cmListFileBacktrace cmListFileBacktrace::Push(
-  cmListFileContext const& lfc) const
-{
-  assert(this->TopEntry);
-  assert(!this->TopEntry->IsBottom() || this->TopEntry->Bottom.IsValid());
-  return cmListFileBacktrace(this->TopEntry, lfc);
-}
-
-cmListFileBacktrace cmListFileBacktrace::Pop() const
-{
-  assert(this->TopEntry);
-  assert(!this->TopEntry->IsBottom());
-  return cmListFileBacktrace(this->TopEntry->Parent);
-}
-
-cmListFileContext const& cmListFileBacktrace::Top() const
-{
-  assert(this->TopEntry);
-  assert(!this->TopEntry->IsBottom());
-  return this->TopEntry->Context;
-}
-
-void cmListFileBacktrace::PrintTitle(std::ostream& out) const
-{
-  // The title exists only if we have a call on top of the bottom.
-  if (!this->TopEntry || this->TopEntry->IsBottom()) {
-    return;
-  }
-  cmListFileContext lfc = this->TopEntry->Context;
-  cmStateSnapshot bottom = this->GetBottom();
-  if (!bottom.GetState()->GetIsInTryCompile()) {
-    lfc.FilePath = bottom.GetDirectory().ConvertToRelPathIfNotContained(
-      bottom.GetState()->GetSourceDirectory(), lfc.FilePath);
-  }
-  out << (lfc.Line ? " at " : " in ") << lfc;
-}
-
-void cmListFileBacktrace::PrintCallStack(std::ostream& out) const
-{
-  // The call stack exists only if we have at least two calls on top
-  // of the bottom.
-  if (!this->TopEntry || this->TopEntry->IsBottom() ||
-      this->TopEntry->Parent->IsBottom()) {
-    return;
-  }
-
-  bool first = true;
-  cmStateSnapshot bottom = this->GetBottom();
-  for (Entry const* cur = this->TopEntry->Parent.get(); !cur->IsBottom();
-       cur = cur->Parent.get()) {
-    if (cur->Context.Name.empty() &&
-        cur->Context.Line != cmListFileContext::DeferPlaceholderLine) {
-      // Skip this whole-file scope.  When we get here we already will
-      // have printed a more-specific context within the file.
-      continue;
-    }
-    if (first) {
-      first = false;
-      out << "Call Stack (most recent call first):\n";
-    }
-    cmListFileContext lfc = cur->Context;
-    if (!bottom.GetState()->GetIsInTryCompile()) {
-      lfc.FilePath = bottom.GetDirectory().ConvertToRelPathIfNotContained(
-        bottom.GetState()->GetSourceDirectory(), lfc.FilePath);
-    }
-    out << "  " << lfc << "\n";
-  }
-}
-
-size_t cmListFileBacktrace::Depth() const
-{
-  size_t depth = 0;
-  if (Entry const* cur = this->TopEntry.get()) {
-    for (; !cur->IsBottom(); cur = cur->Parent.get()) {
-      ++depth;
-    }
-  }
-  return depth;
-}
-
-bool cmListFileBacktrace::Empty() const
-{
-  return !this->TopEntry || this->TopEntry->IsBottom();
-}
+#include "cmConstStack.tcc"
+template class cmConstStack<cmListFileContext, cmListFileBacktrace>;
 
 std::ostream& operator<<(std::ostream& os, cmListFileContext const& lfc)
 {
@@ -631,11 +495,12 @@ std::ostream& operator<<(std::ostream& os, BT<std::string> const& s)
   return os << s.Value;
 }
 
-std::vector<BT<std::string>> ExpandListWithBacktrace(
-  std::string const& list, cmListFileBacktrace const& bt)
+std::vector<BT<std::string>> cmExpandListWithBacktrace(
+  std::string const& list, cmListFileBacktrace const& bt,
+  cmList::EmptyElements emptyArgs)
 {
   std::vector<BT<std::string>> result;
-  std::vector<std::string> tmp = cmExpandedList(list);
+  cmList tmp{ list, emptyArgs };
   result.reserve(tmp.size());
   for (std::string& i : tmp) {
     result.emplace_back(std::move(i), bt);

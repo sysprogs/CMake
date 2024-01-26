@@ -3,26 +3,31 @@
 #include "cm_codecvt.hxx"
 
 #if defined(_WIN32)
-#  include <windows.h>
+#  include <cassert>
+#  include <cstring>
 
-#  include <assert.h>
-#  include <string.h>
+#  include <windows.h>
 #  undef max
 #  include "cmsys/Encoding.hxx"
+
+#  include "cm_utf8.h"
 #endif
 
-#if defined(_WIN32)
-/* Number of leading ones before a zero in the byte (see cm_utf8.c).  */
-extern "C" unsigned char const cm_utf8_ones[256];
-#endif
+#include "cm_codecvt_Encoding.hxx"
 
-codecvt::codecvt(Encoding e)
+codecvt::codecvt(codecvt_Encoding e)
 #if defined(_WIN32)
   : m_codepage(0)
 #endif
 {
   switch (e) {
-    case codecvt::ANSI:
+    case codecvt_Encoding::ConsoleOutput:
+#if defined(_WIN32)
+      m_noconv = false;
+      m_codepage = GetConsoleOutputCP();
+      break;
+#endif
+    case codecvt_Encoding::ANSI:
 #if defined(_WIN32)
       m_noconv = false;
       m_codepage = CP_ACP;
@@ -30,9 +35,10 @@ codecvt::codecvt(Encoding e)
 #endif
     // We don't know which ANSI encoding to use for other platforms than
     // Windows so we don't do any conversion there
-    case codecvt::UTF8:
+    case codecvt_Encoding::UTF8:
+    case codecvt_Encoding::UTF8_WITH_BOM:
     // Assume internal encoding is UTF-8
-    case codecvt::None:
+    case codecvt_Encoding::None:
     // No encoding
     default:
       this->m_noconv = true;
@@ -41,7 +47,7 @@ codecvt::codecvt(Encoding e)
 
 codecvt::~codecvt() = default;
 
-bool codecvt::do_always_noconv() const throw()
+bool codecvt::do_always_noconv() const noexcept
 {
   return this->m_noconv;
 }
@@ -167,7 +173,7 @@ std::codecvt_base::result codecvt::Decode(mbstate_t& state, int size,
   }
 
   int tlen = WideCharToMultiByte(m_codepage, 0, wbuf, wlen, to_next,
-                                 to_end - to_next, NULL, NULL);
+                                 to_end - to_next, nullptr, nullptr);
   if (tlen <= 0) {
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
       return std::codecvt_base::partial;
@@ -202,7 +208,7 @@ std::codecvt_base::result codecvt::DecodePartial(mbstate_t& state,
   }
 
   int tlen = WideCharToMultiByte(m_codepage, 0, wbuf, wlen, to_next,
-                                 to_end - to_next, NULL, NULL);
+                                 to_end - to_next, nullptr, nullptr);
   if (tlen <= 0) {
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
       return std::codecvt_base::partial;
@@ -233,12 +239,12 @@ void codecvt::BufferPartial(mbstate_t& state, int size,
 }
 #endif
 
-int codecvt::do_max_length() const throw()
+int codecvt::do_max_length() const noexcept
 {
   return 4;
 }
 
-int codecvt::do_encoding() const throw()
+int codecvt::do_encoding() const noexcept
 {
   return 0;
 }

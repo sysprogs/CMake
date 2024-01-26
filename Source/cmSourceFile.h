@@ -10,10 +10,10 @@
 
 #include "cmCustomCommand.h"
 #include "cmListFileCache.h"
-#include "cmProperty.h"
 #include "cmPropertyMap.h"
 #include "cmSourceFileLocation.h"
 #include "cmSourceFileLocationKind.h"
+#include "cmValue.h"
 
 class cmMakefile;
 
@@ -41,18 +41,26 @@ public:
   void SetCustomCommand(std::unique_ptr<cmCustomCommand> cc);
 
   //! Set/Get a property of this source file
-  void SetProperty(const std::string& prop, const char* value);
+  void SetProperty(const std::string& prop, cmValue value);
+  void RemoveProperty(const std::string& prop)
+  {
+    this->SetProperty(prop, cmValue{ nullptr });
+  }
+  void SetProperty(const std::string& prop, const std::string& value)
+  {
+    this->SetProperty(prop, cmValue(value));
+  }
   void AppendProperty(const std::string& prop, const std::string& value,
                       bool asString = false);
   //! Might return a nullptr if the property is not set or invalid
-  cmProp GetProperty(const std::string& prop) const;
+  cmValue GetProperty(const std::string& prop) const;
   //! Always returns a valid pointer
   const std::string& GetSafeProperty(const std::string& prop) const;
   bool GetPropertyAsBool(const std::string& prop) const;
 
   /** Implement getting a property when called from a CMake language
       command like get_property or get_source_file_property.  */
-  cmProp GetPropertyForUser(const std::string& prop);
+  cmValue GetPropertyForUser(const std::string& prop);
 
   /// Marks this file as generated
   /**
@@ -145,6 +153,9 @@ public:
   std::string GetObjectLibrary() const;
 
 private:
+  template <typename ValueType>
+  void StoreProperty(const std::string& prop, ValueType value);
+
   cmSourceFileLocation Location;
   cmPropertyMap Properties;
   std::unique_ptr<cmCustomCommand> CustomCommand;
@@ -175,8 +186,8 @@ private:
 #define CM_HEADER_REGEX "\\.(h|hh|h\\+\\+|hm|hpp|hxx|in|txx|inl)$"
 
 #define CM_SOURCE_REGEX                                                       \
-  "\\.(C|F|M|c|c\\+\\+|cc|cpp|mpp|cxx|cu|f|f90|for|fpp|ftn|m|mm|"             \
-  "rc|def|r|odl|idl|hpj|bat)$"
+  "\\.(C|F|M|c|c\\+\\+|cc|cpp|mpp|cxx|ixx|cppm|ccm|cxxm|c\\+\\+m|cu"          \
+  "|f|f90|for|fpp|ftn|m|mm|rc|def|r|odl|idl|hpj|bat)$"
 
 #define CM_PCH_REGEX "cmake_pch(_[^.]+)?\\.(h|hxx)$"
 

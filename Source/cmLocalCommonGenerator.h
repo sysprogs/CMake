@@ -21,8 +21,7 @@ class cmSourceFile;
 class cmLocalCommonGenerator : public cmLocalGenerator
 {
 public:
-  cmLocalCommonGenerator(cmGlobalGenerator* gg, cmMakefile* mf,
-                         std::string wd);
+  cmLocalCommonGenerator(cmGlobalGenerator* gg, cmMakefile* mf);
   ~cmLocalCommonGenerator() override;
 
   std::vector<std::string> const& GetConfigNames() const
@@ -30,7 +29,7 @@ public:
     return this->ConfigNames;
   }
 
-  std::string GetWorkingDirectory() const { return this->WorkingDirectory; }
+  virtual std::string const& GetWorkingDirectory() const;
 
   std::string GetTargetFortranFlags(cmGeneratorTarget const* target,
                                     std::string const& config) override;
@@ -40,8 +39,6 @@ public:
     cmGeneratorTarget const* gt = nullptr) override;
 
 protected:
-  std::string WorkingDirectory;
-
   std::vector<std::string> ConfigNames;
 
   friend class cmCommonTargetGenerator;

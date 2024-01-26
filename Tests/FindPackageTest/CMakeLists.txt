@@ -20,11 +20,11 @@ find_package(OpenGL QUIET)
 find_package(NotAPackage QUIET)
 
 # Look for a package that has an advanced find module.
-find_package(VTK QUIET)
+find_package(Boost QUIET)
 
 add_executable(FindPackageTest FindPackageTest.cxx)
 
-# test behaviour of cmFindBase wrt. the CMAKE_PREFIX_PATH variable
+# test behavior of cmFindBase wrt. the CMAKE_PREFIX_PATH variable
 # foo.h should be found in ${CMAKE_CURRENT_SOURCE_DIR}/include:
 
 set(CMAKE_PREFIX_PATH /blub /blah "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -189,7 +189,9 @@ find_package(ArchD 4.0 EXACT NAMES zot)
 unset(CMAKE_LIBRARY_ARCHITECTURE)
 
 # Test find_package() with CMAKE_FIND_PACKAGE_RESOLVE_SYMLINKS enabled
-if(UNIX)
+if(UNIX
+    AND NOT MSYS # FIXME: This works on CYGWIN but not on MSYS
+    )
   # Create ./symlink pointing back here.
   execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
       . "${CMAKE_CURRENT_SOURCE_DIR}/symlink")

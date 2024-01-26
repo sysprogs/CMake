@@ -27,25 +27,60 @@
 # Tru64                         Tru64
 # Ultrix                        ULTRIX
 # cygwin                        CYGWIN_NT-5.1
+# MSYS                          MSYS_NT-6.1
 # MacOSX                        Darwin
 
 
 # find out on which system cmake runs
 if(CMAKE_HOST_UNIX)
-  find_program(CMAKE_UNAME uname /bin /usr/bin /usr/local/bin )
+  find_program(CMAKE_UNAME NAMES uname PATHS /bin /usr/bin /usr/local/bin)
   if(CMAKE_UNAME)
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "AIX")
-      exec_program(${CMAKE_UNAME} ARGS -v OUTPUT_VARIABLE _CMAKE_HOST_SYSTEM_MAJOR_VERSION)
-      exec_program(${CMAKE_UNAME} ARGS -r OUTPUT_VARIABLE _CMAKE_HOST_SYSTEM_MINOR_VERSION)
+      execute_process(COMMAND ${CMAKE_UNAME} -v
+        OUTPUT_VARIABLE _CMAKE_HOST_SYSTEM_MAJOR_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+      execute_process(COMMAND ${CMAKE_UNAME} -r
+        OUTPUT_VARIABLE _CMAKE_HOST_SYSTEM_MINOR_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
       set(CMAKE_HOST_SYSTEM_VERSION "${_CMAKE_HOST_SYSTEM_MAJOR_VERSION}.${_CMAKE_HOST_SYSTEM_MINOR_VERSION}")
       unset(_CMAKE_HOST_SYSTEM_MAJOR_VERSION)
       unset(_CMAKE_HOST_SYSTEM_MINOR_VERSION)
+    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Android")
+      execute_process(COMMAND getprop ro.build.version.sdk
+        OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+
+      if(NOT DEFINED CMAKE_SYSTEM_VERSION)
+        set(_ANDROID_API_LEVEL_H $ENV{PREFIX}/include/android/api-level.h)
+        set(_ANDROID_API_REGEX "#define __ANDROID_API__ ([0-9]+)")
+        file(READ ${_ANDROID_API_LEVEL_H} _ANDROID_API_LEVEL_H_CONTENT)
+        string(REGEX MATCH ${_ANDROID_API_REGEX} _ANDROID_API_LINE "${_ANDROID_API_LEVEL_H_CONTENT}")
+        string(REGEX REPLACE ${_ANDROID_API_REGEX} "\\1" _ANDROID_API "${_ANDROID_API_LINE}")
+        if(_ANDROID_API)
+          set(CMAKE_SYSTEM_VERSION "${_ANDROID_API}")
+        endif()
+
+        unset(_ANDROID_API_LEVEL_H)
+        unset(_ANDROID_API_LEVEL_H_CONTENT)
+        unset(_ANDROID_API_REGEX)
+        unset(_ANDROID_API_LINE)
+        unset(_ANDROID_API)
+      endif()
     else()
-      exec_program(${CMAKE_UNAME} ARGS -r OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION)
+      execute_process(COMMAND ${CMAKE_UNAME} -r
+        OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
     endif()
-    if(CMAKE_HOST_SYSTEM_NAME MATCHES "Linux|CYGWIN.*|^GNU$|Android")
-      exec_program(${CMAKE_UNAME} ARGS -m OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
-        RETURN_VALUE val)
+    if(CMAKE_HOST_SYSTEM_NAME MATCHES "Linux|CYGWIN.*|MSYS.*|^GNU$|Android")
+      execute_process(COMMAND ${CMAKE_UNAME} -m
+        OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
+        RESULT_VARIABLE val
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
     elseif(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
       # If we are running on Apple Silicon, honor CMAKE_APPLE_SILICON_PROCESSOR.
       if(DEFINED CMAKE_APPLE_SILICON_PROCESSOR)
@@ -73,8 +108,11 @@ if(CMAKE_HOST_UNIX)
       if(_CMAKE_APPLE_SILICON_PROCESSOR)
         set(CMAKE_HOST_SYSTEM_PROCESSOR "${_CMAKE_APPLE_SILICON_PROCESSOR}")
       else()
-        exec_program(${CMAKE_UNAME} ARGS -m OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
-          RETURN_VALUE val)
+        execute_process(COMMAND ${CMAKE_UNAME} -m
+          OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
+          RESULT_VARIABLE val
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+          ERROR_QUIET)
       endif()
       unset(_CMAKE_APPLE_SILICON_PROCESSOR)
       if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "Power Macintosh")
@@ -82,14 +120,23 @@ if(CMAKE_HOST_UNIX)
         set(CMAKE_HOST_SYSTEM_PROCESSOR "powerpc")
       endif()
     elseif(CMAKE_HOST_SYSTEM_NAME MATCHES "OpenBSD")
-      exec_program(arch ARGS -s OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
-        RETURN_VALUE val)
+      execute_process(COMMAND arch -s
+        OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
+        RESULT_VARIABLE val
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
     else()
-      exec_program(${CMAKE_UNAME} ARGS -p OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
-        RETURN_VALUE val)
+      execute_process(COMMAND ${CMAKE_UNAME} -p
+        OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
+        RESULT_VARIABLE val
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
       if("${val}" GREATER 0)
-        exec_program(${CMAKE_UNAME} ARGS -m OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
-          RETURN_VALUE val)
+        execute_process(COMMAND ${CMAKE_UNAME} -m
+          OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_PROCESSOR
+          RESULT_VARIABLE val
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+          ERROR_QUIET)
       endif()
     endif()
     # check the return of the last uname -m or -p
@@ -127,7 +174,6 @@ if(CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "${_INCLUDED_TOOLCHAIN_FILE}" CACHE FILEPATH "The CMake toolchain file" FORCE)
   else()
     message(FATAL_ERROR "Could not find toolchain file: ${CMAKE_TOOLCHAIN_FILE}")
-    set(CMAKE_TOOLCHAIN_FILE "NOTFOUND" CACHE FILEPATH "The CMake toolchain file" FORCE)
   endif()
 endif()
 
@@ -152,56 +198,41 @@ else()
     set(CMAKE_SYSTEM_VERSION "${CMAKE_HOST_SYSTEM_VERSION}")
   endif()
   set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+  if(CMAKE_CROSSCOMPILING)
+    message(AUTHOR_WARNING
+      "CMAKE_CROSSCOMPILING has been set by the project, toolchain file, or user.  "
+      "CMake is resetting it to false because CMAKE_SYSTEM_NAME was not set.  "
+      "To indicate cross compilation, only CMAKE_SYSTEM_NAME needs to be set."
+      )
+  endif()
   set(CMAKE_CROSSCOMPILING FALSE)
   set(PRESET_CMAKE_SYSTEM_NAME FALSE)
 endif()
 
 include(Platform/${CMAKE_SYSTEM_NAME}-Determine OPTIONAL)
 
-macro(ADJUST_CMAKE_SYSTEM_VARIABLES _PREFIX)
-  if(NOT ${_PREFIX}_NAME)
-    set(${_PREFIX}_NAME "UnknownOS")
-  endif()
-
-  # fix for BSD/OS , remove the /
-  if(${_PREFIX}_NAME MATCHES BSD.OS)
-    set(${_PREFIX}_NAME BSDOS)
-  endif()
-
-  # fix for GNU/kFreeBSD, remove the GNU/
-  if(${_PREFIX}_NAME MATCHES kFreeBSD)
-    set(${_PREFIX}_NAME kFreeBSD)
-  endif()
-
-  # fix for CYGWIN which has windows version in it
-  if(${_PREFIX}_NAME MATCHES CYGWIN)
-    set(${_PREFIX}_NAME CYGWIN)
-  endif()
-
-  # set CMAKE_SYSTEM to the CMAKE_SYSTEM_NAME
-  set(${_PREFIX}  ${${_PREFIX}_NAME})
-  # if there is a CMAKE_SYSTEM_VERSION then add a -${CMAKE_SYSTEM_VERSION}
-  if(${_PREFIX}_VERSION)
-    set(${_PREFIX} ${${_PREFIX}}-${${_PREFIX}_VERSION})
-  endif()
-
-endmacro()
-
-ADJUST_CMAKE_SYSTEM_VARIABLES(CMAKE_SYSTEM)
-ADJUST_CMAKE_SYSTEM_VARIABLES(CMAKE_HOST_SYSTEM)
+set(CMAKE_SYSTEM ${CMAKE_SYSTEM_NAME})
+if(CMAKE_SYSTEM_VERSION)
+  string(APPEND CMAKE_SYSTEM -${CMAKE_SYSTEM_VERSION})
+endif()
+set(CMAKE_HOST_SYSTEM ${CMAKE_HOST_SYSTEM_NAME})
+if(CMAKE_HOST_SYSTEM_VERSION)
+  string(APPEND CMAKE_HOST_SYSTEM -${CMAKE_HOST_SYSTEM_VERSION})
+endif()
 
 # this file is also executed from cpack, then we don't need to generate these files
 # in this case there is no CMAKE_BINARY_DIR
 if(CMAKE_BINARY_DIR)
   # write entry to the log file
   if(PRESET_CMAKE_SYSTEM_NAME)
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-                "The target system is: ${CMAKE_SYSTEM_NAME} - ${CMAKE_SYSTEM_VERSION} - ${CMAKE_SYSTEM_PROCESSOR}\n")
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-                "The host system is: ${CMAKE_HOST_SYSTEM_NAME} - ${CMAKE_HOST_SYSTEM_VERSION} - ${CMAKE_HOST_SYSTEM_PROCESSOR}\n")
+    message(CONFIGURE_LOG
+      "The target system is: ${CMAKE_SYSTEM_NAME} - ${CMAKE_SYSTEM_VERSION} - ${CMAKE_SYSTEM_PROCESSOR}\n"
+      "The host system is: ${CMAKE_HOST_SYSTEM_NAME} - ${CMAKE_HOST_SYSTEM_VERSION} - ${CMAKE_HOST_SYSTEM_PROCESSOR}\n"
+      )
   else()
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-                "The system is: ${CMAKE_SYSTEM_NAME} - ${CMAKE_SYSTEM_VERSION} - ${CMAKE_SYSTEM_PROCESSOR}\n")
+    message(CONFIGURE_LOG
+      "The system is: ${CMAKE_SYSTEM_NAME} - ${CMAKE_SYSTEM_VERSION} - ${CMAKE_SYSTEM_PROCESSOR}\n"
+      )
   endif()
 
   # if a toolchain file is used, it needs to be included in the configured file,

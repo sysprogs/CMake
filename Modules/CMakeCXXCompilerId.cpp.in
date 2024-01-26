@@ -5,6 +5,12 @@
 # error "A C compiler has been selected for C++."
 #endif
 
+#if !defined(__has_include)
+/* If the compiler does not have __has_include, pretend the answer is
+   always no.  */
+#  define __has_include(x) 0
+#endif
+
 @CMAKE_CXX_COMPILER_ID_CONTENT@
 
 /* Construct the string literal in pieces to prevent the source from
@@ -43,7 +49,7 @@ char const *info_cray = "INFO" ":" "compiler_wrapper[CrayPrgEnv]";
 #  define CXX_STD __cplusplus
 #endif
 
-const char* info_language_dialect_default = "INFO" ":" "dialect_default["
+const char* info_language_standard_default = "INFO" ":" "standard_default["
 #if CXX_STD > 202002L
   "23"
 #elif CXX_STD > 201703L
@@ -59,6 +65,16 @@ const char* info_language_dialect_default = "INFO" ":" "dialect_default["
 #endif
 "]";
 
+const char* info_language_extensions_default = "INFO" ":" "extensions_default["
+#if (defined(__clang__) || defined(__GNUC__) || defined(__xlC__) ||           \
+     defined(__TI_COMPILER_VERSION__)) &&                                     \
+  !defined(__STRICT_ANSI__)
+  "ON"
+#else
+  "OFF"
+#endif
+"]";
+
 /*--------------------------------------------------------------------------*/
 
 int main(int argc, char* argv[])
@@ -66,6 +82,7 @@ int main(int argc, char* argv[])
   int require = 0;
   require += info_compiler[argc];
   require += info_platform[argc];
+  require += info_arch[argc];
 #ifdef COMPILER_VERSION_MAJOR
   require += info_version[argc];
 #endif
@@ -81,7 +98,8 @@ int main(int argc, char* argv[])
 #if defined(__CRAYXT_COMPUTE_LINUX_TARGET)
   require += info_cray[argc];
 #endif
-  require += info_language_dialect_default[argc];
+  require += info_language_standard_default[argc];
+  require += info_language_extensions_default[argc];
   (void)argv;
   return require;
 }

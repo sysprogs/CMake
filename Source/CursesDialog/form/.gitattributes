@@ -1,1 +1,2 @@
-* -format.clang-format-6.0
+* -whitespace
+* -format.clang-format

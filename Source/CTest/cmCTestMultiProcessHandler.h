@@ -4,22 +4,24 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
+#include <cm/optional>
+
 #include <cm3p/uv.h>
-#include <stddef.h>
 
 #include "cmCTest.h"
 #include "cmCTestResourceAllocator.h"
+#include "cmCTestResourceSpec.h"
 #include "cmCTestTestHandler.h"
 #include "cmUVHandlePtr.h"
 
 struct cmCTestBinPackerAllocation;
-class cmCTestResourceSpec;
 class cmCTestRunTest;
 
 /** \class cmCTestMultiProcessHandler
@@ -90,12 +92,12 @@ public:
     this->RepeatCount = count;
   }
 
-  void SetQuiet(bool b) { this->Quiet = b; }
-
-  void InitResourceAllocator(const cmCTestResourceSpec& spec)
+  void SetResourceSpecFile(const std::string& resourceSpecFile)
   {
-    this->ResourceAllocator.InitializeFromResourceSpec(spec);
+    this->ResourceSpecFile = resourceSpecFile;
   }
+
+  void SetQuiet(bool b) { this->Quiet = b; }
 
   void CheckResourcesAvailable();
 
@@ -158,6 +160,15 @@ protected:
     std::map<std::string, ResourceAllocationError>* errors = nullptr);
   void DeallocateResources(int index);
   bool AllResourcesAvailable();
+  bool InitResourceAllocator(std::string& error);
+  bool CheckGeneratedResourceSpec();
+
+  bool UseResourceSpec = false;
+  cmCTestResourceSpec ResourceSpec;
+  std::string ResourceSpecFile;
+  std::string ResourceSpecSetupFixture;
+  cm::optional<std::size_t> ResourceSpecSetupTest;
+  bool HasInvalidGeneratedResourceSpec;
 
   // map from test number to set of depend tests
   TestMap Tests;

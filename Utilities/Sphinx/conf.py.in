@@ -32,7 +32,7 @@ nitpicky = True
 smartquotes = False
 
 cmake_manuals = sorted(glob.glob(r'@conf_docs@/manual/*.rst'))
-cmake_manual_description = re.compile('^\.\. cmake-manual-description:(.*)$')
+cmake_manual_description = re.compile(r'^\.\. cmake-manual-description:(.*)$')
 man_pages = []
 for fpath in cmake_manuals:
     try:
@@ -55,6 +55,7 @@ for fpath in cmake_manuals:
 man_show_urls = False
 man_make_section_directory = False
 
+html_baseurl = '@conf_baseurl@'
 html_show_sourcelink = True
 html_static_path = ['@conf_path@/static']
 html_style = 'cmake.css'
@@ -86,3 +87,14 @@ html_favicon = '@conf_path@/static/cmake-favicon.ico'
 # https://bitbucket.org/birkenfeld/sphinx/issue/1448/make-qthelp-more-configurable
 # qthelp_namespace = "org.cmake"
 # qthelp_qch_name = "CMake.qch"
+
+linkcheck_ignore = [r'about:|https://gitlab.kitware.com/cmake/community/-/wikis/doc/cpack']
+
+linkcheck_allowed_redirects = {
+    r'https://cdash\.org': r'https://www\.cdash\.org/',
+    r'https://cmake.org/get-involved/': r'https://cmake.org/documentation/',
+    r'https://docs\.nvidia\.com/cuda/': r'https://docs\.nvidia\.com/cuda/index\.html',
+    r'https://learn\.microsoft\.com/en-us/cpp/c-language/parsing-c-command-line-arguments': r'https://learn\.microsoft\.com/en-us/cpp/c-language/parsing-c-command-line-arguments\?.*',
+    r'https://openjdk\.java\.net/jeps/313': r'https://openjdk\.org:443/jeps/313',
+    r'https://www\.sphinx-doc\.org': r'https://www\.sphinx-doc\.org/en/master/',
+}

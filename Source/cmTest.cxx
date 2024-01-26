@@ -5,11 +5,10 @@
 #include "cmMakefile.h"
 #include "cmProperty.h"
 #include "cmState.h"
-#include "cmStringAlgorithms.h"
+#include "cmValue.h"
 
 cmTest::cmTest(cmMakefile* mf)
-  : CommandExpandLists(false)
-  , Backtrace(mf->GetBacktrace())
+  : Backtrace(mf->GetBacktrace())
 {
   this->Makefile = mf;
   this->OldStyle = true;
@@ -32,20 +31,20 @@ void cmTest::SetCommand(std::vector<std::string> const& command)
   this->Command = command;
 }
 
-const char* cmTest::GetProperty(const std::string& prop) const
+cmValue cmTest::GetProperty(const std::string& prop) const
 {
-  cmProp retVal = this->Properties.GetPropertyValue(prop);
+  cmValue retVal = this->Properties.GetPropertyValue(prop);
   if (!retVal) {
     const bool chain =
       this->Makefile->GetState()->IsPropertyChained(prop, cmProperty::TEST);
     if (chain) {
-      if (cmProp p = this->Makefile->GetProperty(prop, chain)) {
-        return p->c_str();
+      if (cmValue p = this->Makefile->GetProperty(prop, chain)) {
+        return p;
       }
     }
     return nullptr;
   }
-  return retVal->c_str();
+  return retVal;
 }
 
 bool cmTest::GetPropertyAsBool(const std::string& prop) const
@@ -53,7 +52,7 @@ bool cmTest::GetPropertyAsBool(const std::string& prop) const
   return cmIsOn(this->GetProperty(prop));
 }
 
-void cmTest::SetProperty(const std::string& prop, const char* value)
+void cmTest::SetProperty(const std::string& prop, cmValue value)
 {
   this->Properties.SetProperty(prop, value);
 }

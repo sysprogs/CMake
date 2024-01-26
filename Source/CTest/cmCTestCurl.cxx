@@ -112,14 +112,12 @@ bool cmCTestCurl::UploadFile(std::string const& local_file,
 {
   response.clear();
   if (!this->InitCurl()) {
-    cmCTestLog(this->CTest, ERROR_MESSAGE, "Initialization of curl failed");
+    cmCTestLog(this->CTest, ERROR_MESSAGE, "Initialization of curl failed\n");
     return false;
   }
   /* enable uploading */
   curl_easy_setopt(this->Curl, CURLOPT_UPLOAD, 1);
 
-  /* HTTP PUT please */
-  ::curl_easy_setopt(this->Curl, CURLOPT_PUT, 1);
   ::curl_easy_setopt(this->Curl, CURLOPT_VERBOSE, 1);
 
   FILE* ftpfile = cmsys::SystemTools::Fopen(local_file, "rb");
@@ -159,7 +157,7 @@ bool cmCTestCurl::UploadFile(std::string const& local_file,
   // Now run off and do what you've been told!
   ::curl_easy_perform(this->Curl);
   ::fclose(ftpfile);
-  ::curl_easy_setopt(this->Curl, CURLOPT_HTTPHEADER, NULL);
+  ::curl_easy_setopt(this->Curl, CURLOPT_HTTPHEADER, nullptr);
   ::curl_slist_free_all(headers);
 
   if (!responseData.empty()) {
@@ -176,7 +174,7 @@ bool cmCTestCurl::UploadFile(std::string const& local_file,
   if (response.empty()) {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
                "No response from server.\n"
-                 << curlDebug);
+                 << curlDebug << std::endl);
     return false;
   }
   return true;
@@ -192,7 +190,7 @@ bool cmCTestCurl::HttpRequest(std::string const& url,
                        << "fields " << fields << "\n",
                      this->Quiet);
   if (!this->InitCurl()) {
-    cmCTestLog(this->CTest, ERROR_MESSAGE, "Initialization of curl failed");
+    cmCTestLog(this->CTest, ERROR_MESSAGE, "Initialization of curl failed\n");
     return false;
   }
   curl_easy_setopt(this->Curl, CURLOPT_POST, 1);

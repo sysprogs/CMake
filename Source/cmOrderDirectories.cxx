@@ -6,6 +6,7 @@
 #include <cassert>
 #include <functional>
 #include <sstream>
+#include <type_traits>
 #include <vector>
 
 #include <cm/memory>
@@ -359,7 +360,7 @@ void cmOrderDirectories::SetLinkExtensionInfo(
   std::string const& removeExtRegex)
 {
   this->LinkExtensions = linkExtensions;
-  this->RemoveLibraryExtension.compile(removeExtRegex.c_str());
+  this->RemoveLibraryExtension.compile(removeExtRegex);
 }
 
 void cmOrderDirectories::CollectOriginalDirectories()
@@ -512,7 +513,7 @@ void cmOrderDirectories::VisitDirectory(unsigned int i)
   }
 
   // Now that all directories required to come before this one have
-  // been emmitted, emit this directory.
+  // been emitted, emit this directory.
   this->OrderedDirectories.push_back(this->OriginalDirectories[i]);
 }
 

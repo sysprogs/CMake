@@ -13,6 +13,8 @@
    https://blake2.net.
 */
 
+#include "archive_platform.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -25,6 +27,9 @@
 #include "archive_blake2_impl.h"
 
 #define PARALLELISM_DEGREE 8
+
+/* Remove system-defined preprocessor defintions that conflict with us.  */
+#undef FS
 
 /*
   blake2sp_init_param defaults to setting the expecting output length

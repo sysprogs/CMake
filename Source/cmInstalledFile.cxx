@@ -5,9 +5,10 @@
 #include <utility>
 
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmMakefile.h"
-#include "cmStringAlgorithms.h"
+#include "cmValue.h"
 
 cmInstalledFile::cmInstalledFile() = default;
 
@@ -20,7 +21,7 @@ cmInstalledFile::Property::~Property() = default;
 void cmInstalledFile::SetName(cmMakefile* mf, const std::string& name)
 {
   cmListFileBacktrace backtrace = mf->GetBacktrace();
-  cmGeneratorExpression ge(backtrace);
+  cmGeneratorExpression ge(*mf->GetCMakeInstance(), backtrace);
 
   this->Name = name;
   this->NameExpression = ge.Parse(name);
@@ -55,7 +56,7 @@ void cmInstalledFile::AppendProperty(cmMakefile const* mf,
                                      bool /*asString*/)
 {
   cmListFileBacktrace backtrace = mf->GetBacktrace();
-  cmGeneratorExpression ge(backtrace);
+  cmGeneratorExpression ge(*mf->GetCMakeInstance(), backtrace);
 
   Property& property = this->Properties[prop];
   property.ValueExpressions.push_back(ge.Parse(value));
@@ -96,12 +97,11 @@ bool cmInstalledFile::GetPropertyAsBool(const std::string& prop) const
   return isSet && cmIsOn(value);
 }
 
-void cmInstalledFile::GetPropertyAsList(const std::string& prop,
-                                        std::vector<std::string>& list) const
+std::vector<std::string> cmInstalledFile::GetPropertyAsList(
+  const std::string& prop) const
 {
   std::string value;
   this->GetProperty(prop, value);
 
-  list.clear();
-  cmExpandList(value, list);
+  return std::move(cmList(value).data());
 }

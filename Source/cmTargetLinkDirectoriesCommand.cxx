@@ -3,6 +3,7 @@
 #include "cmTargetLinkDirectoriesCommand.h"
 
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
@@ -34,7 +35,8 @@ private:
                            bool prepend, bool /*system*/) override
   {
     cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
-    tgt->InsertLinkDirectory(this->Join(content), lfbt, prepend);
+    tgt->InsertLinkDirectory(BT<std::string>(this->Join(content), lfbt),
+                             prepend);
     return true; // Successfully handled.
   }
 };
@@ -57,7 +59,7 @@ std::string TargetLinkDirectoriesImpl::Join(
     directories.push_back(unixPath);
   }
 
-  return cmJoin(directories, ";");
+  return cmList::to_string(directories);
 }
 
 } // namespace

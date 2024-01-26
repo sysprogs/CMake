@@ -10,6 +10,7 @@
         "^cxx_alias_exe::@53632cba2752272bb008$"
     ],
     "projectName": "Alias",
-    "minimumCMakeVersion": "3.12",
-    "hasInstallRule": null
+    "minimumCMakeVersion": "3.13",
+    "hasInstallRule": null,
+    "installers": []
 }

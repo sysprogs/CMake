@@ -224,7 +224,7 @@ static const std::vector<AllocationComparison> comparisons{
   /* clang-format on */
 };
 
-bool TestExpectedPackResult(const ExpectedPackResult& expected)
+static bool TestExpectedPackResult(const ExpectedPackResult& expected)
 {
   std::vector<cmCTestBinPackerAllocation> roundRobinAllocations;
   roundRobinAllocations.reserve(expected.SlotsNeeded.size());
@@ -275,7 +275,7 @@ bool TestExpectedPackResult(const ExpectedPackResult& expected)
   return true;
 }
 
-int testCTestBinPacker(int /*unused*/, char* /*unused*/ [])
+int testCTestBinPacker(int /*unused*/, char* /*unused*/[])
 {
   int retval = 0;
 

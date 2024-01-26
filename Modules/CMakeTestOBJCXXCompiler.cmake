@@ -38,7 +38,7 @@ endif()
 if(NOT CMAKE_OBJCXX_COMPILER_WORKS)
   PrintTestCompilerStatus("OBJCXX")
   __TestCompiler_setTryCompileTargetType()
-  file(WRITE ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testOBJCXXCompiler.mm
+  string(CONCAT __TestCompiler_testObjCXXCompilerSource
     "#ifndef __cplusplus\n"
     "# error \"The CMAKE_OBJCXX_COMPILER is set to a C compiler\"\n"
     "#endif\n"
@@ -46,18 +46,19 @@ if(NOT CMAKE_OBJCXX_COMPILER_WORKS)
     "# error \"The CMAKE_OBJCXX_COMPILER is not an Objective-C++ compiler\"\n"
     "#endif\n"
     "int main(){return 0;}\n")
-  try_compile(CMAKE_OBJCXX_COMPILER_WORKS ${CMAKE_BINARY_DIR}
-    ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/testOBJCXXCompiler.mm
+  # Clear result from normal variable.
+  unset(CMAKE_OBJCXX_COMPILER_WORKS)
+  # Puts test result in cache variable.
+  try_compile(CMAKE_OBJCXX_COMPILER_WORKS
+    SOURCE_FROM_VAR testObjCXXCompiler.mm __TestCompiler_testObjCXXCompilerSource
     OUTPUT_VARIABLE __CMAKE_OBJCXX_COMPILER_OUTPUT)
+  unset(__TestCompiler_testObjCXXCompilerSource)
   # Move result from cache to normal variable.
   set(CMAKE_OBJCXX_COMPILER_WORKS ${CMAKE_OBJCXX_COMPILER_WORKS})
   unset(CMAKE_OBJCXX_COMPILER_WORKS CACHE)
   __TestCompiler_restoreTryCompileTargetType()
   if(NOT CMAKE_OBJCXX_COMPILER_WORKS)
     PrintTestCompilerResult(CHECK_FAIL "broken")
-    file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-      "Determining if the Objective-C++ compiler works failed with "
-      "the following output:\n${__CMAKE_OBJCXX_COMPILER_OUTPUT}\n\n")
     string(REPLACE "\n" "\n  " _output "${__CMAKE_OBJCXX_COMPILER_OUTPUT}")
     message(FATAL_ERROR "The Objective-C++ compiler\n  \"${CMAKE_OBJCXX_COMPILER}\"\n"
       "is not able to compile a simple test program.\nIt fails "
@@ -65,9 +66,6 @@ if(NOT CMAKE_OBJCXX_COMPILER_WORKS)
       "CMake will not be able to correctly generate this project.")
   endif()
   PrintTestCompilerResult(CHECK_PASS "works")
-  file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-    "Determining if the Objective-C++ compiler works passed with "
-    "the following output:\n${__CMAKE_OBJCXX_COMPILER_OUTPUT}\n\n")
 endif()
 
 # Try to identify the compiler features

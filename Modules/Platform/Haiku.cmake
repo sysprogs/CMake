@@ -1,11 +1,3 @@
-# process only once
-if(HAIKU)
-  return()
-endif()
-
-set(HAIKU 1)
-set(UNIX 1)
-
 set(CMAKE_DL_LIBS "")
 set(CMAKE_SHARED_LIBRARY_C_FLAGS "-fPIC")
 set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "-shared")

@@ -1,5 +1,22 @@
 include(RunCMake)
 
+if(RunCMake_GENERATOR MATCHES "Ninja")
+  # Detect ninja version so we know what tests can be supported.
+  execute_process(
+    COMMAND "${RunCMake_MAKE_PROGRAM}" --version
+    OUTPUT_VARIABLE ninja_out
+    ERROR_VARIABLE ninja_out
+    RESULT_VARIABLE ninja_res
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+  if(ninja_res EQUAL 0 AND "x${ninja_out}" MATCHES "^x[0-9]+\\.[0-9]+")
+    set(ninja_version "${ninja_out}")
+    message(STATUS "ninja version: ${ninja_version}")
+  else()
+    message(FATAL_ERROR "'ninja --version' reported:\n${ninja_out}")
+  endif()
+endif()
+
 if(RunCMake_GENERATOR STREQUAL "Borland Makefiles" OR
    RunCMake_GENERATOR STREQUAL "Watcom WMake")
   set(fs_delay 3)
@@ -43,13 +60,16 @@ set(run_BuildDepends_skip_step_3 1)
 
 run_BuildDepends(C-Exe)
 if(NOT RunCMake_GENERATOR STREQUAL "Xcode")
-  if(RunCMake_GENERATOR MATCHES "Visual Studio 10" OR
-      RunCMake_GENERATOR_TOOLSET MATCHES "^(v80|v90|v100)$")
+  if(RunCMake_GENERATOR_TOOLSET MATCHES "^(v80|v90|v100)$")
     # VS 10 forgets to re-link when a manifest changes
     set(run_BuildDepends_skip_step_2 1)
   endif()
   run_BuildDepends(C-Exe-Manifest)
   unset(run_BuildDepends_skip_step_2)
+endif()
+
+if(CMake_TEST_Fortran)
+  run_BuildDepends(FortranInclude)
 endif()
 
 run_BuildDepends(Custom-Symbolic-and-Byproduct)
@@ -142,6 +162,7 @@ endif()
 
 if ((RunCMake_GENERATOR STREQUAL "Unix Makefiles"
       AND (CMAKE_C_COMPILER_ID STREQUAL "GNU"
+        OR CMAKE_C_COMPILER_ID STREQUAL "LCC"
         OR CMAKE_C_COMPILER_ID STREQUAL "Clang"
         OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang"))
     OR (RunCMake_GENERATOR STREQUAL "NMake Makefiles"
@@ -153,9 +174,14 @@ endif()
 
 if (RunCMake_GENERATOR MATCHES "Makefiles")
   run_cmake(CustomCommandDependencies-BadArgs)
+  run_cmake_with_options(CustomCommandDependencies-compiler-deps-legacy -DCMAKE_DEPENDS_USE_COMPILER=FALSE)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  run_cmake_command(CustomCommandDependencies-compiler-deps-legacy ${CMAKE_COMMAND} --build . --config Debug)
+  unset(RunCMake_TEST_NO_CLEAN)
 endif()
 
-if(RunCMake_GENERATOR MATCHES "Make|Ninja")
+if(RunCMake_GENERATOR MATCHES "Make|Ninja|Visual Studio|Xcode" AND
+    NOT RunCMake_GENERATOR MATCHES "Visual Studio (9|10)( |$)")
   unset(run_BuildDepends_skip_step_3)
   run_BuildDepends(CustomCommandDepfile)
   set(run_BuildDepends_skip_step_3 1)
@@ -163,4 +189,24 @@ endif()
 
 if(RunCMake_GENERATOR MATCHES "Make")
   run_BuildDepends(MakeDependencies)
+endif()
+
+if(RunCMake_GENERATOR MATCHES "^Visual Studio 9 " OR
+   (RunCMake_GENERATOR MATCHES "Ninja" AND ninja_version VERSION_LESS 1.7))
+  # This build tool misses the dependency.
+  set(run_BuildDepends_skip_step_2 1)
+endif()
+run_BuildDepends(CustomCommandUnityBuild)
+unset(run_BuildDepends_skip_step_2)
+
+if (RunCMake_GENERATOR MATCHES "Make|Ninja")
+  set(run_BuildDepends_skip_step_2 1)
+  run_BuildDepends(LinkDependsCheck)
+  include("${RunCMake_BINARY_DIR}/LinkDependsCheck-build/LinkDependsUseLinker.cmake")
+  if ((NOT DEFINED CMAKE_LINK_DEPENDS_USE_LINKER OR CMAKE_LINK_DEPENDS_USE_LINKER)
+      AND CMAKE_C_LINK_DEPENDS_USE_LINKER)
+    run_BuildDepends(LinkDependsExternalLibrary)
+    unset(run_BuildDepends_skip_step_2)
+    run_BuildDepends(LinkDepends)
+  endif()
 endif()

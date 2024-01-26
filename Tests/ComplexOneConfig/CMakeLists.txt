@@ -5,6 +5,14 @@ cmake_minimum_required(VERSION 2.4)
 cmake_policy(SET CMP0054 NEW)
 project (Complex)
 
+# Inform the test if the debug configuration is getting built.
+string(APPEND CMAKE_C_FLAGS_RELEASE " -DCOMPLEX_NDEBUG")
+string(APPEND CMAKE_CXX_FLAGS_RELEASE " -DCOMPLEX_NDEBUG")
+string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " -DCOMPLEX_NDEBUG")
+string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -DCOMPLEX_NDEBUG")
+string(APPEND CMAKE_C_FLAGS_MINSIZEREL " -DCOMPLEX_NDEBUG")
+string(APPEND CMAKE_CXX_FLAGS_MINSIZEREL " -DCOMPLEX_NDEBUG")
+
 # Try setting a new policy.  The IF test is for coverage.
 if(POLICY CMP0003)
   cmake_policy(SET CMP0003 NEW)
@@ -223,6 +231,12 @@ configure_file(
   ${Complex_SOURCE_DIR}/Library/dummy
   ${Complex_BINARY_DIR}/Library/dummylib.lib
   COPYONLY)
+if(CMAKE_C_COMPILER_ID STREQUAL "OrangeC")
+  configure_file(
+    ${Complex_SOURCE_DIR}/Library/dummy
+    ${Complex_BINARY_DIR}/Library/dummylib.l
+    COPYONLY)
+endif()
 foreach (ext ${CMAKE_SHLIB_SUFFIX};.so;.a;.sl)
   configure_file(
     ${Complex_SOURCE_DIR}/Library/dummy
@@ -276,12 +290,12 @@ if (WIN32)
       ${Complex_SOURCE_DIR}/Library/dummy
       "${dir}/${file}"
       COPYONLY)
-    exec_program(${CMAKE_COMMAND} ARGS "-E write_regv \"${hkey}\" \"${dir}\"")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E write_regv "${hkey}" "${dir}")
     find_path(REGISTRY_TEST_PATH
       ${file}
       "[${hkey}]" DOC "Registry_Test_Path")
-    exec_program(${CMAKE_COMMAND} ARGS "-E delete_regv \"${hkey}\"")
-    exec_program(${CMAKE_COMMAND} ARGS "-E rm -f \"${dir}/${file}\"")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E delete_regv "${hkey}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E rm -f "${dir}/${file}")
   endif ()
 endif ()
 
@@ -386,21 +400,6 @@ string(REGEX REPLACE ".([bd])." "[\\1]" RESULT "a(b)c(d)e")
 if(NOT RESULT STREQUAL "a[b]c[d]e")
   message(SEND_ERROR
     "string(REGEX REPLACE ... ) test failed (\"${RESULT}\" v. \"a[b]c[d]e\")")
-endif()
-
-#
-# This tests needs Ansi C++98
-#
-set(CMAKE_CXX_STANDARD 98)
-#
-# GNU extensions are needed for stricmp() on Windows.
-#
-set(CMAKE_CXX_EXTENSIONS TRUE)
-
-# Clang/C2 in C++98 mode cannot properly handle some of MSVC headers
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
-    CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
-  set(CMAKE_CXX_STANDARD 11)
 endif()
 
 #

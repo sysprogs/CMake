@@ -25,7 +25,8 @@ private:
   std::string LanguageLinkerCudaDeviceCompileRule(
     const std::string& config) const;
   std::string LanguageLinkerCudaFatbinaryRule(const std::string& config) const;
-
+  std::string TextStubsGeneratorRule(const std::string& config) const;
+  bool CheckUseResponseFileForLibraries(const std::string& config) const;
   const char* GetVisibleTypeName() const;
   void WriteLanguagesRules(const std::string& config);
 
@@ -48,6 +49,9 @@ private:
                                       const std::string& output);
 
   void WriteObjectLibStatement(const std::string& config);
+  void WriteCxxModuleLibraryStatement(const std::string& config,
+                                      const std::string& fileConfig,
+                                      bool firstForConfig);
 
   std::vector<std::string> ComputeLinkCmd(const std::string& config);
   std::vector<std::string> ComputeDeviceLinkCmd();

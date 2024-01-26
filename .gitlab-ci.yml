@@ -1,5 +1,5 @@
 include:
-    # Metadata shared my many jobs
+    # Metadata shared by many jobs
     - local: .gitlab/rules.yml
     - local: .gitlab/artifacts.yml
 
@@ -18,6 +18,10 @@ stages:
     - test-ext
     - upload
 
+variables:
+    # Some jobs that place their artifacts in a different directory will override this.
+    CMAKE_CI_BUILD_DIR: build
+
 ################################################################################
 # Job declarations
 #
@@ -34,370 +38,1493 @@ stages:
 #   - dependency/needs jobs for required jobs
 ################################################################################
 
+# Job prefixes:
+#   - `b:` build
+#   - `l:` lint
+#   - `p:` prep
+#   - `t:` test
+#   - `u:` upload
+
 # Prep jobs
 
-prep:source-package:
+p:source-package:
     extends:
         - .linux_prep_source
         - .cmake_prep_source_linux
-        - .linux_builder_tags
+        - .linux_x86_64_tags
         - .cmake_release_artifacts
         - .run_only_for_package
+    variables:
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-source"
 
-prep:doc-package:
+p:doc-package:
     extends:
-        - .fedora33_sphinx_package
+        - .fedora39_sphinx_package
         - .cmake_prep_doc_linux
-        - .linux_builder_tags_qt
+        - .linux_x86_64_tags
         - .cmake_doc_artifacts
         - .run_only_for_package
 
-.upload:source-package:
+u:source-package:
     extends:
-        - .rsync_upload
+        - .rsync_upload_package
         - .run_only_for_package
     dependencies:
-        - prep:source-package
+        - p:source-package
     needs:
-        - prep:source-package
-    variables:
-        RSYNC_DESTINATION: dev
+        - p:source-package
+
+# Documentation builds
+
+b:cmake.org-help:
+    extends:
+        - .cmake_org_help
+        - .run_cmake_org_help
+    dependencies: []
+    needs: []
+
+u:cmake.org-help:
+    extends:
+        - .rsync_upload_help
+        - .run_cmake_org_help
+    dependencies:
+        - b:cmake.org-help
+    needs:
+        - b:cmake.org-help
 
 # Lint builds
 
-build:debian10-iwyu:
+l:codespell:
     extends:
-        - .debian10_iwyu
-        - .cmake_build_linux
-        - .linux_builder_tags
+        - .cmake_codespell_linux
+        - .linux_x86_64_tags
         - .run_automatically
 
-build:fedora33-tidy:
+l:iwyu-debian12:
     extends:
-        - .fedora33_tidy
+        - .debian12_iwyu
         - .cmake_build_linux
-        - .linux_builder_tags_qt
+        - .linux_x86_64_tags
+        - .cmake_cdash_artifacts
         - .run_automatically
 
-build:fedora33-sphinx:
+l:tidy-fedora39:
     extends:
-        - .fedora33_sphinx
+        - .fedora39_tidy
         - .cmake_build_linux
-        - .linux_builder_tags_qt
+        - .linux_x86_64_tags
+        - .cmake_cdash_artifacts
+        - .run_automatically
+
+l:sphinx-fedora39:
+    extends:
+        - .fedora39_sphinx
+        - .cmake_build_linux
+        - .cmake_sphinx_artifacts
+        - .linux_x86_64_tags
         - .run_automatically
     variables:
         CMAKE_CI_JOB_CONTINUOUS: "true"
         CMAKE_CI_JOB_HELP: "true"
 
+l:clang-analyzer-fedora39:
+    extends:
+        - .fedora39_clang_analyzer
+        - .cmake_build_linux
+        - .linux_x86_64_tags
+        - .run_automatically
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
 # Linux builds
 
-build:centos6-x86_64:
+b:centos7-x86_64:
     extends:
         - .linux_release_x86_64
         - .cmake_build_linux_release
         - .cmake_release_artifacts
-        - .linux_builder_tags
+        - .linux_x86_64_tags
         - .run_manually
+    variables:
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-centos7-x86_64"
 
-build:centos7-aarch64:
+b:centos7-aarch64:
     extends:
         - .linux_release_aarch64
         - .cmake_build_linux_release
         - .cmake_release_artifacts
-        - .linux_builder_tags_aarch64
+        - .linux_aarch64_tags
         - .run_manually
     variables:
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-centos7-aarch64"
         CMAKE_CI_NO_MR: "true"
 
-test:debian10-ninja:
+t:debian12-ninja:
     extends:
-        - .debian10_ninja
+        - .debian12_ninja
         - .cmake_test_linux_release
-        - .linux_builder_tags_qt
+        - .linux_x86_64_tags
+        - .cmake_junit_artifacts
         - .run_dependent
-    dependencies:
-        - build:centos6-x86_64
-    needs:
-        - build:centos6-x86_64
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY_NINJA: "true"
 
-test:debian10-aarch64-ninja:
+t:debian12-aarch64-ninja:
     extends:
-        - .debian10_aarch64_ninja
+        - .debian12_aarch64_ninja
         - .cmake_test_linux_release
-        - .linux_builder_tags_aarch64_qt
+        - .linux_aarch64_tags
+        - .cmake_junit_artifacts
         - .run_dependent
-    dependencies:
-        - build:centos7-aarch64
-    needs:
-        - build:centos7-aarch64
+        - .needs_centos7_aarch64
     variables:
         CMAKE_CI_NO_MR: "true"
 
-test:fedora33-makefiles:
+t:debian12-ninja-clang:
     extends:
-        - .fedora33_makefiles
+        - .debian12_ninja_clang
         - .cmake_test_linux_release
-        - .linux_builder_tags_qt
+        - .linux_x86_64_tags
         - .run_dependent
-    dependencies:
-        - build:centos6-x86_64
-    needs:
-        - build:centos6-x86_64
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
 
-test:cuda10.2-nvidia:
+t:debian12-makefiles-clang:
+    extends:
+        - .debian12_makefiles_clang
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:debian12-ninja-multi-symlinked:
+    extends:
+        - .debian12_ninja_multi_symlinked
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .cmake_junit_artifacts
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+        CMAKE_CI_JOB_NIGHTLY_NINJA: "true"
+
+t:debian12-hip-radeon:
+    extends:
+        - .debian12_hip_radeon
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_radeon
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:fedora39-hip-radeon:
+    extends:
+        - .fedora39_hip_radeon
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_radeon
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:fedora39-ninja-clang:
+    extends:
+        - .fedora39_ninja_clang
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:fedora39-ninja-multi-clang:
+    extends:
+        - .fedora39_ninja_multi_clang
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:fedora39-makefiles-clang:
+    extends:
+        - .fedora39_makefiles_clang
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:fedora39-makefiles:
+    extends:
+        - .fedora39_makefiles
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+
+t:fedora39-makefiles-nospace:
+    extends:
+        - .fedora39_makefiles
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .cmake_junit_artifacts
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        GIT_CLONE_PATH: "$CI_BUILDS_DIR/cmake-ci"
+        CMAKE_CI_BUILD_NAME: fedora39_makefiles_nospace
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:nvhpc22.11-ninja:
+    extends:
+        - .nvhpc_ninja
+        - .cmake_test_linux_release
+        - .linux_x86_64_v3_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:cuda9.2-nvidia:
+    extends:
+        - .cuda9.2_nvidia
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:cuda10.2-nvidia:
     extends:
         - .cuda10.2_nvidia
         - .cmake_test_linux_release
-        - .linux_builder_tags_cuda
+        - .linux_x86_64_tags_cuda
+        - .cmake_junit_artifacts
         - .run_dependent
-    dependencies:
-        - build:centos6-x86_64
-    needs:
-        - build:centos6-x86_64
+        - .needs_centos7_x86_64
 
-build:fedora33-ninja:
+t:cuda10.2-clang:
     extends:
-        - .fedora33_ninja
+        - .cuda10.2_clang
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:cuda11.6-nvidia:
+    extends:
+        - .cuda11.6_nvidia
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .cmake_junit_artifacts
+        - .run_dependent
+        - .needs_centos7_x86_64
+
+t:cuda11.6-clang:
+    extends:
+        - .cuda11.6_clang
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:cuda11.8-minimal-ninja:
+    extends:
+        - .cuda11.8_minimal_nvidia
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:cuda11.8-minimal-splayed-ninja:
+    extends:
+        - .cuda11.8_splayed_nvidia
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:hip5.5-nvidia:
+    extends:
+        - .hip5.5_nvidia
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_cuda
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:hip5.5-radeon:
+    extends:
+        - .hip5.5_radeon
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags_radeon
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_NO_MR: "true"
+
+t:linux-gcc-cxx-modules-ninja:
+    extends:
+        - .gcc_cxx_modules_ninja
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:linux-gcc-cxx-modules-ninja-multi:
+    extends:
+        - .gcc_cxx_modules_ninja_multi
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:debian10-legacy:
+    extends:
+        - .debian10_legacy
+        - .cmake_test_linux_release
+        - .linux_x86_64_tags
+        - .cmake_junit_artifacts
+        - .run_dependent
+        - .needs_centos7_x86_64
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:fedora39-ninja:
+    extends:
+        - .fedora39_ninja
         - .cmake_build_linux
         - .cmake_build_artifacts
-        - .linux_builder_tags_qt
+        - .linux_x86_64_tags
         - .run_manually
+    variables:
+        CMAKE_CI_JOB_CONTINUOUS: "true"
 
-test:fedora33-ninja:
+b:fedora39-makefiles-symlinked:
     extends:
-        - .fedora33_ninja
+        - .fedora39_makefiles_symlinked
+        - .cmake_build_linux
+        - .cmake_build_artifacts
+        - .linux_x86_64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:debian12-makefiles-inplace:
+    extends:
+        - .debian12_makefiles_inplace
+        - .cmake_build_linux_standalone
+        - .linux_x86_64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:debian12-extdeps:
+    extends:
+        - .debian12_extdeps
+        - .cmake_build_linux_standalone
+        - .linux_x86_64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:debian12-aarch64-extdeps:
+    extends:
+        - .debian12_aarch64_extdeps
+        - .cmake_build_linux_standalone
+        - .linux_aarch64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:fedora39-extdeps:
+    extends:
+        - .fedora39_extdeps
+        - .cmake_build_linux_standalone
+        - .linux_x86_64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:fedora39-ninja:
+    extends:
+        - .fedora39_ninja
         - .cmake_test_linux
-        - .linux_builder_tags_x11
+        - .linux_x86_64_tags_x11
         - .cmake_test_artifacts
         - .run_dependent
     dependencies:
-        - build:fedora33-ninja
+        - b:fedora39-ninja
     needs:
-        - build:fedora33-ninja
+        - b:fedora39-ninja
+    variables:
+        CMAKE_CI_JOB_CONTINUOUS: "true"
 
-test:fedora33-ninja-multi:
+t:fedora39-makefiles-symlinked:
     extends:
-        - .fedora33_ninja_multi
-        - .cmake_test_linux_external
-        - .linux_builder_tags_qt
+        - .fedora39_makefiles_symlinked
+        - .cmake_test_linux
+        - .linux_x86_64_tags_x11
+        - .cmake_test_artifacts
         - .run_dependent
     dependencies:
-        - test:fedora33-ninja
+        - b:fedora39-makefiles-symlinked
     needs:
-        - test:fedora33-ninja
+        - b:fedora39-makefiles-symlinked
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
 
-build:linux-x86_64-package:
+t:fedora39-ninja-multi:
+    extends:
+        - .fedora39_ninja_multi
+        - .cmake_test_linux_external
+        - .linux_x86_64_tags
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:fedora39-ninja
+    needs:
+        - t:fedora39-ninja
+
+t:intel2016-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2016_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2016-el7
+
+t:intel2016u1-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2016u1_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2016u1-el7
+
+t:intel2016u2-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2016u2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2016u2-el7
+
+t:intel2017-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017-el7
+
+t:intel2017u1-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u1_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u1-el7
+
+t:intel2017u2-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u2-el7
+
+t:intel2017u3-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u3_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u3-el7
+
+t:intel2017u4-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u4_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u4-el7
+
+t:intel2017u5-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u5_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u5-el7
+
+t:intel2017u6-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u6_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u6-el7
+
+t:intel2017u7-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u7_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u7-el7
+
+t:intel2017u8-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2017u8_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2017u8-el7
+
+t:intel2018-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2018_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2018-el7
+
+t:intel2018u1-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2018u1_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2018u1-el7
+
+t:intel2018u2-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2018u2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2018u2-el7
+
+t:intel2018u3-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2018u3_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2018u3-el7
+
+t:intel2018u4-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2018u4_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2018u4-el7
+
+t:intel2019-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2019_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2019-el7
+
+t:intel2019u1-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2019u1_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2019u1-el7
+
+t:intel2019u2-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2019u2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2019u2-el7
+
+t:intel2019u3-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2019u3_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2019u3-el7
+
+t:intel2019u4-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2019u4_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2019u4-el7
+
+t:intel2020-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2020_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2020-el8
+
+t:intel2020u2-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2020u2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2020u2-el8
+
+t:intel2020u4-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2020u4_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2020u4-el8
+
+t:intel2021.1.1-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.1.1_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.1.1-el8
+
+t:intel2021.1.2-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.1.2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.1.2-el8
+
+t:intel2021.2.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.2.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.2.0-el8
+
+t:intel2021.3.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.3.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.3.0-el8
+
+t:intel2021.4.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.4.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.4.0-el8
+
+t:intel2021.5.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.5.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2022.0.2-el8
+
+t:intel2021.6.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.6.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2022.1.0-el8
+
+t:intel2021.7.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.7.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2022.2.0-el8
+
+t:intel2021.8.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.8.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2023.0.0-el8
+
+t:intel2021.9.0-makefiles:
+    extends:
+        - .cmake_test_linux_intelclassic_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: intel2021.9.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2023.1.0-el8
+
+t:oneapi2021.1.1-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2021.1.1_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.1.1-el8
+
+t:oneapi2021.1.2-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2021.1.2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.1.2-el8
+
+t:oneapi2021.2.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2021.2.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.2.0-el8
+
+t:oneapi2021.3.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2021.3.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.3.0-el8
+
+t:oneapi2021.4.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2021.4.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2021.4.0-el8
+
+t:oneapi2022.0.2-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2022.0.2_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2022.0.2-el8
+
+t:oneapi2022.1.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2022.1.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2022.1.0-el8
+
+t:oneapi2022.2.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2022.2.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2022.2.0-el8
+
+t:oneapi2023.0.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2023.0.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2023.0.0-el8
+
+t:oneapi2023.1.0-makefiles:
+    extends:
+        - .cmake_test_linux_inteloneapi_makefiles
+    variables:
+        CMAKE_CI_BUILD_NAME: oneapi2023.1.0_makefiles
+        CMAKE_CI_INTELCOMPILER_IMAGE_TAG: 2023.1.0-el8
+
+b:linux-x86_64-package:
     extends:
         - .linux_package
         - .linux_release_x86_64
         - .cmake_build_linux_release
         - .cmake_release_artifacts
-        - .linux_builder_tags
+        - .linux_x86_64_tags
         - .run_only_for_package
     dependencies:
-        - prep:doc-package
+        - p:doc-package
     needs:
-        - prep:doc-package
-
-.upload:linux-x86_64-package:
-    extends:
-        - .rsync_upload
-        - .run_only_for_package
-    dependencies:
-        - build:linux-x86_64-package
-    needs:
-        - build:linux-x86_64-package
+        - p:doc-package
     variables:
-        RSYNC_DESTINATION: dev
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-linux-x86_64"
 
-build:linux-aarch64-package:
+u:linux-x86_64-package:
+    extends:
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:linux-x86_64-package
+    needs:
+        - b:linux-x86_64-package
+
+b:linux-aarch64-package:
     extends:
         - .linux_package
         - .linux_release_aarch64
         - .cmake_build_linux_release
         - .cmake_release_artifacts
-        - .linux_builder_tags_aarch64
+        - .linux_aarch64_tags
         - .run_only_for_package
     dependencies:
-        - prep:doc-package
+        - p:doc-package
     needs:
-        - prep:doc-package
-
-.upload:linux-aarch64-package:
-    extends:
-        - .rsync_upload
-        - .run_only_for_package
-    dependencies:
-        - build:linux-aarch64-package
-    needs:
-        - build:linux-aarch64-package
+        - p:doc-package
     variables:
-        RSYNC_DESTINATION: dev
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-linux-aarch64"
+
+u:linux-aarch64-package:
+    extends:
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:linux-aarch64-package
+    needs:
+        - b:linux-aarch64-package
+
+## Sanitizer builds
+
+b:fedora39-asan:
+    extends:
+        - .fedora39_asan
+        - .cmake_build_linux
+        - .cmake_build_artifacts
+        - .linux_x86_64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:fedora39-asan:
+    extends:
+        - .fedora39_asan
+        - .cmake_memcheck_linux
+        - .linux_x86_64_tags
+        - .run_dependent
+    dependencies:
+        - b:fedora39-asan
+    needs:
+        - b:fedora39-asan
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
 
 # macOS builds
 
-build:macos-x86_64-ninja:
+b:macos-x86_64-ninja:
     extends:
         - .macos_x86_64_ninja
         - .cmake_build_macos
         - .cmake_build_artifacts
-        - .macos_x86_64_builder_tags
-        - .run_manually
-
-build:macos-arm64-ninja:
-    extends:
-        - .macos_arm64_ninja
-        - .cmake_build_macos
-        - .cmake_build_artifacts
-        - .macos_arm64_builder_tags
+        - .macos_x86_64_tags
         - .run_manually
     variables:
         CMAKE_CI_NO_MR: "true"
 
-test:macos-x86_64-ninja:
+b:macos-arm64-ninja:
+    extends:
+        - .macos_arm64_ninja
+        - .cmake_build_macos
+        - .cmake_build_artifacts
+        - .macos_arm64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_CONTINUOUS: "true"
+
+b:macos-arm64-ninja-symlinked:
+    extends:
+        - .macos_arm64_ninja_symlinked
+        - .cmake_build_macos
+        - .cmake_build_artifacts
+        - .macos_arm64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:macos-arm64-pch:
+    extends:
+        - .macos_arm64_pch
+        - .cmake_build_macos
+        - .macos_arm64_tags
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:macos-x86_64-ninja:
     extends:
         - .macos_x86_64_ninja
         - .cmake_test_macos
         - .cmake_test_artifacts
-        - .macos_x86_64_builder_tags
+        - .macos_x86_64_tags
         - .run_dependent
     dependencies:
-        - build:macos-x86_64-ninja
+        - b:macos-x86_64-ninja
     needs:
-        - build:macos-x86_64-ninja
+        - b:macos-x86_64-ninja
+    variables:
+        CMAKE_CI_NO_MR: "true"
 
-test:macos-arm64-ninja:
+t:macos-arm64-ninja:
     extends:
         - .macos_arm64_ninja
         - .cmake_test_macos
         - .cmake_test_artifacts
-        - .macos_arm64_builder_tags
+        - .macos_arm64_tags
         - .run_dependent
     dependencies:
-        - build:macos-arm64-ninja
+        - b:macos-arm64-ninja
     needs:
-        - build:macos-arm64-ninja
+        - b:macos-arm64-ninja
     variables:
-        CMAKE_CI_NO_MR: "true"
+        CMAKE_CI_JOB_CONTINUOUS: "true"
+        CMAKE_CI_JOB_NIGHTLY_NINJA: "true"
 
-build:macos-x86_64-makefiles:
+t:macos-arm64-ninja-symlinked:
+    extends:
+        - .macos_arm64_ninja_symlinked
+        - .cmake_test_macos
+        - .cmake_test_artifacts
+        - .macos_arm64_tags
+        - .run_dependent
+    dependencies:
+        - b:macos-arm64-ninja-symlinked
+    needs:
+        - b:macos-arm64-ninja-symlinked
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+        CMAKE_CI_JOB_NIGHTLY_NINJA: "true"
+
+b:macos-x86_64-makefiles:
     extends:
         - .macos_x86_64_makefiles
         - .cmake_build_macos
         - .cmake_build_artifacts
-        - .macos_x86_64_builder_tags
+        - .macos_x86_64_tags
         - .run_manually
 
-test:macos-x86_64-makefiles:
+t:macos-x86_64-makefiles:
     extends:
         - .macos_x86_64_makefiles
         - .cmake_test_macos
-        - .macos_x86_64_builder_tags
+        - .macos_x86_64_tags
         - .run_dependent
     dependencies:
-        - build:macos-x86_64-makefiles
+        - b:macos-x86_64-makefiles
     needs:
-        - build:macos-x86_64-makefiles
+        - b:macos-x86_64-makefiles
 
-test:macos-x86_64-xcode:
+t:macos-arm64-ninja-multi:
+    extends:
+        - .macos_arm64_ninja_multi
+        - .cmake_test_macos_external
+        - .macos_arm64_tags_ext
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:macos-arm64-ninja
+    needs:
+        - t:macos-arm64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:macos-x86_64-xcode:
     extends:
         - .macos_x86_64_xcode
         - .cmake_test_macos_external
-        - .macos_x86_64_builder_ext_tags
+        - .macos_x86_64_tags_ext
+        - .cmake_junit_artifacts
         - .run_dependent
     dependencies:
-        - test:macos-x86_64-ninja
+        - t:macos-x86_64-ninja
     needs:
-        - test:macos-x86_64-ninja
-
-test:macos-arm64-xcode:
-    extends:
-        - .macos_arm64_xcode
-        - .cmake_test_macos_external
-        - .macos_arm64_builder_ext_tags
-        - .run_dependent
-    dependencies:
-        - test:macos-arm64-ninja
-    needs:
-        - test:macos-arm64-ninja
+        - t:macos-x86_64-ninja
     variables:
         CMAKE_CI_NO_MR: "true"
 
-build:macos-package:
+t:macos-arm64-xcode:
+    extends:
+        - .macos_arm64_xcode
+        - .cmake_test_macos_external
+        - .macos_arm64_tags_ext
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:macos-arm64-ninja
+    needs:
+        - t:macos-arm64-ninja
+
+t:macos-arm64-xcode-symlinked:
+    extends:
+        - .macos_arm64_xcode_symlinked
+        - .cmake_test_macos_external
+        - .macos_arm64_tags_ext
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:macos-arm64-ninja
+    needs:
+        - t:macos-arm64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:macos-x86_64-ninja-ub:
+    extends:
+        - .macos_x86_64_ninja_ub
+        - .cmake_test_macos_external
+        - .macos_x86_64_tags_ext
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:macos-x86_64-ninja
+    needs:
+        - t:macos-x86_64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:macos-arm64-xcode-ub:
+    extends:
+        - .macos_arm64_xcode_ub
+        - .cmake_test_macos_external
+        - .macos_arm64_tags_ext
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:macos-arm64-ninja
+    needs:
+        - t:macos-arm64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+b:macos-package:
     extends:
         - .macos_package
-        - .cmake_build_macos_package
+        - .cmake_build_macos
         - .cmake_release_artifacts
-        - .macos_x86_64_builder_tags_package
+        - .macos_arm64_tags_package
         - .run_only_for_package
     dependencies:
-        - prep:doc-package
+        - p:doc-package
     needs:
-        - prep:doc-package
-
-.upload:macos-package:
-    extends:
-        - .rsync_upload
-        - .run_only_for_package
-    dependencies:
-        - build:macos-package
-    needs:
-        - build:macos-package
+        - p:doc-package
     variables:
-        RSYNC_DESTINATION: dev
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-macos-universal"
 
-build:macos10.10-package:
+u:macos-package:
+    extends:
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:macos-package
+    needs:
+        - b:macos-package
+
+b:macos10.10-package:
     extends:
         - .macos10.10_package
-        - .cmake_build_macos_package
+        - .cmake_build_macos
         - .cmake_release_artifacts
-        - .macos_x86_64_builder_tags_package
+        - .macos_arm64_tags_package
         - .run_only_for_package
     dependencies:
-        - prep:doc-package
+        - p:doc-package
     needs:
-        - prep:doc-package
-
-.upload:macos10.10-package:
-    extends:
-        - .rsync_upload
-        - .run_only_for_package
-    dependencies:
-        - build:macos10.10-package
-    needs:
-        - build:macos10.10-package
+        - p:doc-package
     variables:
-        RSYNC_DESTINATION: dev
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-macos10.10-universal"
 
-# Windows builds
-
-build:windows-vs2019-x64-ninja:
+u:macos10.10-package:
     extends:
-        - .windows_vs2019_x64_ninja
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:macos10.10-package
+    needs:
+        - b:macos10.10-package
+
+# Windows x86_64 jobs
+
+b:windows-vs2022-x64-ninja:
+    extends:
+        - .windows_vs2022_x64_ninja
         - .cmake_build_windows
         - .cmake_build_artifacts
-        - .windows_builder_tags
+        - .windows_x86_64_tags_nonconcurrent_vs2022
         - .run_manually
 
-test:windows-vs2019-x64-ninja:
+b:windows-vs2022-x64-pch:
     extends:
-        - .windows_vs2019_x64_ninja
+        - .windows_vs2022_x64_pch
+        - .cmake_build_windows
+        - .windows_x86_64_tags_nonconcurrent_vs2022
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-vs2022-x64-ninja:
+    extends:
+        - .windows_vs2022_x64_ninja
         - .cmake_test_windows
-        - .windows_builder_tags
+        - .windows_x86_64_tags_nonconcurrent_vs2022
         - .cmake_test_artifacts
         - .run_dependent
     dependencies:
-        - build:windows-vs2019-x64-ninja
+        - b:windows-vs2022-x64-ninja
     needs:
-        - build:windows-vs2019-x64-ninja
+        - b:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY_NINJA: "true"
 
-test:windows-vs2019-x64:
+t:windows-vs2022-x64-ninja-multi:
+    extends:
+        - .windows_vs2022_x64_ninja_multi
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent_vs2022
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-vs2022-x64:
+    extends:
+        - .windows_vs2022_x64
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent_vs2022
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+
+t:windows-vs2019-x64:
     extends:
         - .windows_vs2019_x64
         - .cmake_test_windows_external
-        - .windows_builder_ext_tags
+        - .windows_x86_64_tags_concurrent_vs2019
+        - .cmake_junit_artifacts
         - .run_dependent
     dependencies:
-        - test:windows-vs2019-x64-ninja
+        - t:windows-vs2022-x64-ninja
     needs:
-        - test:windows-vs2019-x64-ninja
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-vs2022-x64-nmake:
+    extends:
+        - .windows_vs2022_x64_nmake
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent_vs2022
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-vs2022-x64-jom:
+    extends:
+        - .windows_vs2022_x64_jom
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent_vs2022
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-borland5.5:
+    extends:
+        - .windows_borland5.5
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-borland5.8:
+    extends:
+        - .windows_borland5.8
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-clang17.0-cl-ninja:
+    extends:
+        - .windows_clang_ninja
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_BUILD_NAME: windows_clang17.0_cl_ninja
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-clang17.0-cl-nmake:
+    extends:
+        - .windows_clang_nmake
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_BUILD_NAME: windows_clang17.0_cl_nmake
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-clang17.0-gnu-ninja:
+    extends:
+        - .windows_clang_ninja
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_BUILD_NAME: windows_clang17.0_gnu_ninja
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-clang17.0-gnu-nmake:
+    extends:
+        - .windows_clang_nmake
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_BUILD_NAME: windows_clang17.0_gnu_nmake
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-intel2021.9.0-ninja:
+    extends:
+        - .windows_intelclassic_ninja
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_BUILD_NAME: windows_intel2021.9.0_ninja
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-oneapi2023.1.0-ninja:
+    extends:
+        - .windows_inteloneapi_ninja
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_BUILD_NAME: windows_oneapi2023.1.0_ninja
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:mingw_osdn_io-mingw_makefiles:
+    extends:
+        - .mingw_osdn_io_mingw_makefiles
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:mingw_osdn_io-msys_makefiles:
+    extends:
+        - .mingw_osdn_io_msys_makefiles
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-msvc-v71-nmake:
+    extends:
+        - .windows_msvc_v71_nmake
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-openwatcom1.9:
+    extends:
+        - .windows_openwatcom1.9
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-orangec6.73.1:
+    extends:
+        - .windows_orangec6.73.1
+        - .cmake_test_windows_external
+        - .windows_x86_64_tags_concurrent
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-vs2022-x64-ninja
+    needs:
+        - t:windows-vs2022-x64-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+# Windows arm64 jobs
+
+b:windows-arm64-vs2022-ninja:
+    extends:
+        - .windows_arm64_vs2022_ninja
+        - .cmake_build_windows
+        - .cmake_build_artifacts
+        - .windows_arm64_tags_nonconcurrent_vs2022
+        - .run_manually
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-arm64-vs2022-ninja:
+    extends:
+        - .windows_arm64_vs2022_ninja
+        - .cmake_test_windows
+        - .windows_arm64_tags_nonconcurrent_vs2022
+        - .cmake_test_artifacts
+        - .run_dependent
+    dependencies:
+        - b:windows-arm64-vs2022-ninja
+    needs:
+        - b:windows-arm64-vs2022-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+t:windows-arm64-vs2022:
+    extends:
+        - .windows_arm64_vs2022
+        - .cmake_test_windows_external
+        - .windows_arm64_tags_concurrent_vs2022
+        - .cmake_junit_artifacts
+        - .run_dependent
+    dependencies:
+        - t:windows-arm64-vs2022-ninja
+    needs:
+        - t:windows-arm64-vs2022-ninja
+    variables:
+        CMAKE_CI_JOB_NIGHTLY: "true"
+
+# Windows package jobs
+
+b:windows-x86_64-package:
+    extends:
+        - .windows_x86_64_package
+        - .cmake_build_windows
+        - .cmake_release_artifacts
+        - .windows_x86_64_tags_nonconcurrent_vs2022
+        - .run_only_for_package
+    dependencies:
+        - p:doc-package
+    needs:
+        - p:doc-package
+    variables:
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-windows-x86_64"
+
+u:windows-x86_64-package:
+    extends:
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:windows-x86_64-package
+    needs:
+        - b:windows-x86_64-package
+
+b:windows-i386-package:
+    extends:
+        - .windows_i386_package
+        - .cmake_build_windows
+        - .cmake_release_artifacts
+        - .windows_x86_64_tags_nonconcurrent_vs2022
+        - .run_only_for_package
+    dependencies:
+        - p:doc-package
+    needs:
+        - p:doc-package
+    variables:
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-windows-i386"
+
+u:windows-i386-package:
+    extends:
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:windows-i386-package
+    needs:
+        - b:windows-i386-package
+
+b:windows-arm64-package:
+    extends:
+        - .windows_arm64_package
+        - .cmake_build_windows
+        - .cmake_release_artifacts
+        - .windows_x86_64_tags_nonconcurrent_vs2022_arm64
+        - .run_only_for_package
+    dependencies:
+        - p:doc-package
+    needs:
+        - p:doc-package
+    variables:
+        CMAKE_CI_ARTIFACTS_NAME: "artifacts-windows-arm64"
+
+u:windows-arm64-package:
+    extends:
+        - .rsync_upload_package
+        - .run_only_for_package
+    dependencies:
+        - b:windows-arm64-package
+    needs:
+        - b:windows-arm64-package

@@ -18,11 +18,11 @@ as a variant of some of the `Command-Line Build Tool Generators`_ to
 produce project files for an auxiliary IDE.
 
 CMake Generators are platform-specific so each may be available only
-on certain platforms.  The :manual:`cmake(1)` command-line tool ``--help``
-output lists available generators on the current platform.  Use its ``-G``
-option to specify the generator for a new build tree.
-The :manual:`cmake-gui(1)` offers interactive selection of a generator
-when creating a new build tree.
+on certain platforms.  The :manual:`cmake(1)` command-line tool
+:option:`--help <cmake --help>` output lists available generators on the
+current platform.  Use its :option:`-G <cmake -G>` option to specify the
+generator for a new build tree. The :manual:`cmake-gui(1)` offers
+interactive selection of a generator when creating a new build tree.
 
 CMake Generators
 ================
@@ -91,6 +91,7 @@ Visual Studio Generators
    /generator/Visual Studio 14 2015
    /generator/Visual Studio 15 2017
    /generator/Visual Studio 16 2019
+   /generator/Visual Studio 17 2022
 
 Other Generators
 ^^^^^^^^^^^^^^^^
@@ -101,13 +102,21 @@ Other Generators
    /generator/Green Hills MULTI
    /generator/Xcode
 
+.. _`Extra Generators`:
+
 Extra Generators
 ================
 
+.. deprecated:: 3.27
+
+  Support for "Extra Generators" is deprecated and will be removed from
+  a future version of CMake.  IDEs may use the :manual:`cmake-file-api(7)`
+  to view CMake-generated project build trees.
+
 Some of the `CMake Generators`_ listed in the :manual:`cmake(1)`
-command-line tool ``--help`` output may have variants that specify
-an extra generator for an auxiliary IDE tool.  Such generator
-names have the form ``<extra-generator> - <main-generator>``.
+command-line tool :option:`--help <cmake --help>` output may have
+variants that specify an extra generator for an auxiliary IDE tool.
+Such generator names have the form ``<extra-generator> - <main-generator>``.
 The following extra generators are known to CMake.
 
 .. toctree::

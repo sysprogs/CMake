@@ -359,7 +359,121 @@ class cmMakefile;
          3, 20, 0, cmPolicies::WARN)                                          \
   SELECT(POLICY, CMP0120,                                                     \
          "The WriteCompilerDetectionHeader module is removed.", 3, 20, 0,     \
-         cmPolicies::WARN)
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0121,                                                     \
+         "The list() command now validates parsing of index arguments.", 3,   \
+         21, 0, cmPolicies::WARN)                                             \
+  SELECT(                                                                     \
+    POLICY, CMP0122,                                                          \
+    "UseSWIG use standard library name conventions for csharp language.", 3,  \
+    21, 0, cmPolicies::WARN)                                                  \
+  SELECT(POLICY, CMP0123,                                                     \
+         "ARMClang cpu/arch compile and link flags must be set explicitly.",  \
+         3, 21, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0124,                                                     \
+         "foreach() loop variables are only available in the loop scope.", 3, \
+         21, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0125,                                                     \
+         "find_(path|file|library|program) have consistent behavior for "     \
+         "cache variables.",                                                  \
+         3, 21, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0126,                                                     \
+         "set(CACHE) does not remove a normal variable of the same name.", 3, \
+         21, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0127,                                                     \
+         "cmake_dependent_option() supports full Condition Syntax.", 3, 22,   \
+         0, cmPolicies::WARN)                                                 \
+  SELECT(POLICY, CMP0128,                                                     \
+         "Selection of language standard and extension flags improved.", 3,   \
+         22, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0129,                                                     \
+         "Compiler id for MCST LCC compilers is now LCC, not GNU.", 3, 23, 0, \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0130, "while() diagnoses condition evaluation errors.",   \
+         3, 24, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0131,                                                     \
+         "LINK_LIBRARIES supports the LINK_ONLY generator expression.", 3,    \
+         24, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0132,                                                     \
+         "Do not set compiler environment variables on first run", 3, 24, 0,  \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0133,                                                     \
+         "The CPack module disables SLA by default in the CPack DragNDrop "   \
+         "Generator.",                                                        \
+         3, 24, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0134,                                                     \
+         "Fallback to \"HOST\" Windows registry view when \"TARGET\" view "   \
+         "is not usable.",                                                    \
+         3, 24, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0135,                                                     \
+         "ExternalProject ignores timestamps in archives by default for the " \
+         "URL download method",                                               \
+         3, 24, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0136,                                                     \
+         "Watcom runtime library flags are selected by an abstraction.", 3,   \
+         24, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0137,                                                     \
+         "try_compile() passes platform variables in project mode", 3, 24, 0, \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0138,                                                     \
+         "CheckIPOSupported uses flags from calling project.", 3, 24, 0,      \
+         cmPolicies::WARN)                                                    \
+  SELECT(                                                                     \
+    POLICY, CMP0139,                                                          \
+    "The if() command supports path comparisons using PATH_EQUAL operator.",  \
+    3, 24, 0, cmPolicies::WARN)                                               \
+  SELECT(POLICY, CMP0140, "The return() command checks its arguments.", 3,    \
+         25, 0, cmPolicies::WARN)                                             \
+  SELECT(                                                                     \
+    POLICY, CMP0141,                                                          \
+    "MSVC debug information format flags are selected by an abstraction.", 3, \
+    25, 0, cmPolicies::WARN)                                                  \
+  SELECT(POLICY, CMP0142,                                                     \
+         "The Xcode generator does not append per-config suffixes to "        \
+         "library search paths.",                                             \
+         3, 25, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0143,                                                     \
+         "Global property USE_FOLDERS treated as ON by default", 3, 26, 0,    \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0144,                                                     \
+         "find_package uses upper-case <PACKAGENAME>_ROOT variables.", 3, 27, \
+         0, cmPolicies::WARN)                                                 \
+  SELECT(POLICY, CMP0145, "The Dart and FindDart modules are removed.", 3,    \
+         27, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0146, "The FindCUDA module is removed.", 3, 27, 0,        \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0147,                                                     \
+         "Visual Studio generators build custom commands in parallel.", 3,    \
+         27, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0148,                                                     \
+         "The FindPythonInterp and FindPythonLibs modules are removed.", 3,   \
+         27, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0149,                                                     \
+         "Visual Studio generators select latest Windows SDK by default.", 3, \
+         27, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0150,                                                     \
+         "ExternalProject_Add and FetchContent_Declare commands "             \
+         "treat relative GIT_REPOSITORY paths as being relative "             \
+         "to the parent project's remote.",                                   \
+         3, 27, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0151,                                                     \
+         "AUTOMOC include directory is a system include directory by "        \
+         "default.",                                                          \
+         3, 27, 0, cmPolicies::WARN)                                          \
+  SELECT(                                                                     \
+    POLICY, CMP0152,                                                          \
+    "file(REAL_PATH) resolves symlinks before collapsing ../ components.", 3, \
+    28, 0, cmPolicies::WARN)                                                  \
+  SELECT(POLICY, CMP0153, "The exec_program command should not be called.",   \
+         3, 28, 0, cmPolicies::WARN)                                          \
+  SELECT(                                                                     \
+    POLICY, CMP0154,                                                          \
+    "Generated files are private by default in targets using file sets.", 3,  \
+    28, 0, cmPolicies::WARN)                                                  \
+  SELECT(POLICY, CMP0155,                                                     \
+         "C++ sources in targets with at least C++20 are scanned for "        \
+         "imports when supported.",                                           \
+         3, 28, 0, cmPolicies::WARN)
 
 #define CM_SELECT_ID(F, A1, A2, A3, A4, A5, A6) F(A1)
 #define CM_FOR_EACH_POLICY_ID(POLICY)                                         \
@@ -395,7 +509,15 @@ class cmMakefile;
   F(CMP0108)                                                                  \
   F(CMP0112)                                                                  \
   F(CMP0113)                                                                  \
-  F(CMP0119)
+  F(CMP0119)                                                                  \
+  F(CMP0131)                                                                  \
+  F(CMP0142)                                                                  \
+  F(CMP0154)                                                                  \
+  F(CMP0155)
+
+#define CM_FOR_EACH_CUSTOM_COMMAND_POLICY(F)                                  \
+  F(CMP0116)                                                                  \
+  F(CMP0147)
 
 /** \class cmPolicies
  * \brief Handles changes in CMake behavior and policies

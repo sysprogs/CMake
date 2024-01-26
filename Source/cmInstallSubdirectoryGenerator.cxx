@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmPolicies.h"
@@ -17,7 +18,7 @@ cmInstallSubdirectoryGenerator::cmInstallSubdirectoryGenerator(
   cmMakefile* makefile, std::string binaryDirectory,
   cmListFileBacktrace backtrace)
   : cmInstallGenerator("", std::vector<std::string>(), "", MessageDefault,
-                       false, std::move(backtrace))
+                       false, false, std::move(backtrace))
   , Makefile(makefile)
   , BinaryDirectory(std::move(binaryDirectory))
 {
@@ -57,6 +58,7 @@ void cmInstallSubdirectoryGenerator::GenerateScript(std::ostream& os)
       this->LocalGenerator->GetPolicyStatus(cmPolicies::CMP0082);
     switch (status) {
       case cmPolicies::WARN:
+        CM_FALLTHROUGH;
       case cmPolicies::OLD:
         // OLD behavior is handled in cmLocalGenerator::GenerateInstallRules()
         break;

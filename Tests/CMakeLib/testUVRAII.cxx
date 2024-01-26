@@ -30,8 +30,7 @@ static bool testAsyncShutdown()
     std::thread([&] {
       std::this_thread::sleep_for(std::chrono::seconds(2));
       signal.send();
-    })
-      .detach();
+    }).detach();
 
     if (uv_run(&Loop, UV_RUN_DEFAULT) != 0) {
       std::cerr << "Unclean exit state in testAsyncDtor" << std::endl;
@@ -169,7 +168,7 @@ static bool testAllMoves()
   allTypes b(std::move(a));
   allTypes c = std::move(b);
   return true;
-};
+}
 
 static bool testLoopReset()
 {
@@ -192,7 +191,7 @@ static bool testLoopReset()
   }
 
   return true;
-};
+}
 
 static bool testLoopDestructor()
 {
@@ -217,14 +216,19 @@ static bool testLoopDestructor()
   }
 
   return true;
-};
+}
 
 int testUVRAII(int, char** const)
 {
-  if ((testAsyncShutdown() &&
-       testAsyncDtor() & testAsyncMove() & testCrossAssignment() &
-         testAllMoves() & testLoopReset() & testLoopDestructor()) == 0) {
+  if (!testAsyncShutdown()) {
     return -1;
   }
-  return 0;
+  bool passed = true;
+  passed = testAsyncDtor() && passed;
+  passed = testAsyncMove() && passed;
+  passed = testCrossAssignment() && passed;
+  passed = testAllMoves() && passed;
+  passed = testLoopReset() && passed;
+  passed = testLoopDestructor() && passed;
+  return passed ? 0 : -1;
 }

@@ -17,6 +17,8 @@ class cmImplicitDependsList
 {
 };
 
+class cmStateSnapshot;
+
 /** \class cmCustomCommand
  * \brief A class to encapsulate a custom command
  *
@@ -25,22 +27,22 @@ class cmImplicitDependsList
 class cmCustomCommand
 {
 public:
-  /** Main constructor specifies all information for the command.  */
-  cmCustomCommand(std::vector<std::string> outputs,
-                  std::vector<std::string> byproducts,
-                  std::vector<std::string> depends,
-                  cmCustomCommandLines commandLines, cmListFileBacktrace lfbt,
-                  const char* comment, const char* workingDirectory,
-                  bool stdPipesUTF8);
-
   /** Get the output file produced by the command.  */
   const std::vector<std::string>& GetOutputs() const;
+  void SetOutputs(std::vector<std::string> outputs);
+  void SetOutputs(std::string output);
 
   /** Get the extra files produced by the command.  */
   const std::vector<std::string>& GetByproducts() const;
+  void SetByproducts(std::vector<std::string> byproducts);
 
   /** Get the vector that holds the list of dependencies.  */
   const std::vector<std::string>& GetDepends() const;
+  void SetDepends(std::vector<std::string> depends);
+
+  bool HasMainDependency() const { return this->HasMainDependency_; }
+  const std::string& GetMainDependency() const;
+  void SetMainDependency(std::string main_dependency);
 
   /** Get the working directory.  */
   std::string const& GetWorkingDirectory() const
@@ -48,14 +50,25 @@ public:
     return this->WorkingDirectory;
   }
 
+  void SetWorkingDirectory(const char* workingDirectory)
+  {
+    this->WorkingDirectory = (workingDirectory ? workingDirectory : "");
+  }
+
   /** Get the list of command lines.  */
   const cmCustomCommandLines& GetCommandLines() const;
+  void SetCommandLines(cmCustomCommandLines commandLines);
 
   /** Get the comment string for the command.  */
   const char* GetComment() const;
+  void SetComment(const char* comment);
 
   /** Get a value indicating if the command uses UTF-8 output pipes. */
   bool GetStdPipesUTF8() const { return this->StdPipesUTF8; }
+  void SetStdPipesUTF8(bool stdPipesUTF8)
+  {
+    this->StdPipesUTF8 = stdPipesUTF8;
+  }
 
   /** Append to the list of command lines.  */
   void AppendCommands(const cmCustomCommandLines& commandLines);
@@ -74,6 +87,7 @@ public:
 
   /** Backtrace of the command that created this custom command.  */
   cmListFileBacktrace const& GetBacktrace() const;
+  void SetBacktrace(cmListFileBacktrace lfbt);
 
   void SetImplicitDepends(cmImplicitDependsList const&);
   void AppendImplicitDepends(cmImplicitDependsList const&);
@@ -88,6 +102,11 @@ public:
   bool GetCommandExpandLists() const;
   void SetCommandExpandLists(bool b);
 
+  /** Set/Get whether to use additional dependencies coming from
+      users of OUTPUT of the custom command. */
+  bool GetDependsExplicitOnly() const;
+  void SetDependsExplicitOnly(bool b);
+
   /** Set/Get the depfile (used by the Ninja generator) */
   const std::string& GetDepfile() const;
   void SetDepfile(const std::string& depfile);
@@ -96,9 +115,22 @@ public:
   const std::string& GetJobPool() const;
   void SetJobPool(const std::string& job_pool);
 
-  /** Set/Get the CMP0116 status (used by the Ninja generator) */
-  cmPolicies::PolicyStatus GetCMP0116Status() const;
-  void SetCMP0116Status(cmPolicies::PolicyStatus cmp0116);
+  /** Set/Get whether this custom command should be given access to the
+      jobserver (if possible).  */
+  bool GetJobserverAware() const;
+  void SetJobserverAware(bool b);
+
+#define DECLARE_CC_POLICY_ACCESSOR(P)                                         \
+  cmPolicies::PolicyStatus Get##P##Status() const;
+  CM_FOR_EACH_CUSTOM_COMMAND_POLICY(DECLARE_CC_POLICY_ACCESSOR)
+#undef DECLARE_CC_POLICY_ACCESSOR
+
+  /** Record policy values from state snapshot */
+  void RecordPolicyValues(const cmStateSnapshot& snapshot);
+
+  /** Set/Get the associated target */
+  const std::string& GetTarget() const;
+  void SetTarget(const std::string& target);
 
 private:
   std::vector<std::string> Outputs;
@@ -107,15 +139,25 @@ private:
   cmCustomCommandLines CommandLines;
   cmListFileBacktrace Backtrace;
   cmImplicitDependsList ImplicitDepends;
+  std::string Target;
   std::string Comment;
   std::string WorkingDirectory;
   std::string Depfile;
   std::string JobPool;
+  bool JobserverAware = false;
   bool HaveComment = false;
   bool EscapeAllowMakeVars = false;
   bool EscapeOldStyle = true;
   bool UsesTerminal = false;
   bool CommandExpandLists = false;
   bool StdPipesUTF8 = false;
-  cmPolicies::PolicyStatus CMP0116Status = cmPolicies::WARN;
+  bool HasMainDependency_ = false;
+  bool DependsExplicitOnly = false;
+
+// Policies are NEW for synthesized custom commands, and set by cmMakefile for
+// user-created custom commands.
+#define DECLARE_CC_POLICY_FIELD(P)                                            \
+  cmPolicies::PolicyStatus P##Status = cmPolicies::NEW;
+  CM_FOR_EACH_CUSTOM_COMMAND_POLICY(DECLARE_CC_POLICY_FIELD)
+#undef DECLARE_CC_POLICY_FIELD
 };

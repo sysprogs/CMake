@@ -17,19 +17,20 @@
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
-#include "cmProperty.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTransformDepfile.h"
+#include "cmValue.h"
 
 namespace {
 std::string EvaluateSplitConfigGenex(
   cm::string_view input, cmGeneratorExpression const& ge, cmLocalGenerator* lg,
   bool useOutputConfig, std::string const& outputConfig,
-  std::string const& commandConfig,
+  std::string const& commandConfig, cmGeneratorTarget const* target,
   std::set<BT<std::pair<std::string, bool>>>* utils = nullptr)
 {
   std::string result;
@@ -87,11 +88,11 @@ std::string EvaluateSplitConfigGenex(
     // Evaluate this genex in the selected configuration.
     std::unique_ptr<cmCompiledGeneratorExpression> cge =
       ge.Parse(std::string(genex));
-    result += cge->Evaluate(lg, *config);
+    result += cge->Evaluate(lg, *config, target);
 
     // Record targets referenced by the genex.
     if (utils) {
-      // FIXME: What is the proper condition for a cross-dependency?
+      // Use a cross-dependency if we referenced the command config.
       bool const cross = !useOutputConfig;
       for (cmGeneratorTarget* gt : cge->GetTargets()) {
         utils->emplace(BT<std::pair<std::string, bool>>(
@@ -114,8 +115,9 @@ std::vector<std::string> EvaluateDepends(std::vector<std::string> const& paths,
     std::string const& ep =
       EvaluateSplitConfigGenex(p, ge, lg, /*useOutputConfig=*/true,
                                /*outputConfig=*/outputConfig,
-                               /*commandConfig=*/commandConfig);
-    cm::append(depends, cmExpandedList(ep));
+                               /*commandConfig=*/commandConfig,
+                               /*target=*/nullptr);
+    cm::append(depends, cmList{ ep });
   }
   for (std::string& p : depends) {
     if (cmSystemTools::FileIsFullPath(p)) {
@@ -139,20 +141,45 @@ std::vector<std::string> EvaluateOutputs(std::vector<std::string> const& paths,
   }
   return outputs;
 }
+
+std::string EvaluateDepfile(std::string const& path,
+                            cmGeneratorExpression const& ge,
+                            cmLocalGenerator* lg, std::string const& config)
+{
+  std::unique_ptr<cmCompiledGeneratorExpression> cge = ge.Parse(path);
+  return cge->Evaluate(lg, config);
+}
+
+std::string EvaluateComment(const char* comment,
+                            cmGeneratorExpression const& ge,
+                            cmLocalGenerator* lg, std::string const& config)
+{
+  std::unique_ptr<cmCompiledGeneratorExpression> cge = ge.Parse(comment);
+  return cge->Evaluate(lg, config);
+}
 }
 
 cmCustomCommandGenerator::cmCustomCommandGenerator(
   cmCustomCommand const& cc, std::string config, cmLocalGenerator* lg,
-  bool transformDepfile, cm::optional<std::string> crossConfig)
+  bool transformDepfile, cm::optional<std::string> crossConfig,
+  std::function<std::string(const std::string&, const std::string&)>
+    computeInternalDepfile)
   : CC(&cc)
   , OutputConfig(crossConfig ? *crossConfig : config)
   , CommandConfig(std::move(config))
+  , Target(cc.GetTarget())
   , LG(lg)
   , OldStyle(cc.GetEscapeOldStyle())
   , MakeVars(cc.GetEscapeAllowMakeVars())
   , EmulatorsWithArguments(cc.GetCommandLines().size())
+  , ComputeInternalDepfile(std::move(computeInternalDepfile))
 {
-  cmGeneratorExpression ge(cc.GetBacktrace());
+
+  cmGeneratorExpression ge(*lg->GetCMakeInstance(), cc.GetBacktrace());
+  cmGeneratorTarget const* target{ lg->FindGeneratorTargetToUse(
+    this->Target) };
+
+  bool const distinctConfigs = this->OutputConfig != this->CommandConfig;
 
   const cmCustomCommandLines& cmdlines = this->CC->GetCommandLines();
   for (cmCustomCommandLine const& cmdline : cmdlines) {
@@ -162,15 +189,17 @@ cmCustomCommandGenerator::cmCustomCommandGenerator(
     for (std::string const& clarg : cmdline) {
       std::string parsed_arg = EvaluateSplitConfigGenex(
         clarg, ge, this->LG, useOutputConfig, this->OutputConfig,
-        this->CommandConfig, &this->Utilities);
+        this->CommandConfig, target, &this->Utilities);
       if (this->CC->GetCommandExpandLists()) {
-        cm::append(argv, cmExpandedList(parsed_arg));
+        cm::append(argv, cmList{ parsed_arg });
       } else {
         argv.push_back(std::move(parsed_arg));
       }
 
-      // For remaining arguments, we default to the OUTPUT_CONFIG.
-      useOutputConfig = true;
+      if (distinctConfigs) {
+        // For remaining arguments, we default to the OUTPUT_CONFIG.
+        useOutputConfig = true;
+      }
     }
 
     if (!argv.empty()) {
@@ -178,7 +207,7 @@ cmCustomCommandGenerator::cmCustomCommandGenerator(
       // collect the target to add a target-level dependency on it.
       cmGeneratorTarget* gt = this->LG->FindGeneratorTargetToUse(argv.front());
       if (gt && gt->GetType() == cmStateEnums::EXECUTABLE) {
-        // FIXME: What is the proper condition for a cross-dependency?
+        // GetArgv0Location uses the command config, so use a cross-dependency.
         bool const cross = true;
         this->Utilities.emplace(BT<std::pair<std::string, bool>>(
           { gt->GetName(), cross }, cc.GetBacktrace()));
@@ -205,8 +234,11 @@ cmCustomCommandGenerator::cmCustomCommandGenerator(
       case cmDepfileFormat::GccDepfile:
         argv.emplace_back("gccdepfile");
         break;
-      case cmDepfileFormat::VsTlog:
-        argv.emplace_back("vstlog");
+      case cmDepfileFormat::MakeDepfile:
+        argv.emplace_back("makedepfile");
+        break;
+      case cmDepfileFormat::MSBuildAdditionalInputs:
+        argv.emplace_back("MSBuildAdditionalInputs");
         break;
     }
     argv.push_back(this->LG->GetSourceDirectory());
@@ -228,9 +260,9 @@ cmCustomCommandGenerator::cmCustomCommandGenerator(
 
   const std::string& workingdirectory = this->CC->GetWorkingDirectory();
   if (!workingdirectory.empty()) {
-    this->WorkingDirectory =
-      EvaluateSplitConfigGenex(workingdirectory, ge, this->LG, true,
-                               this->OutputConfig, this->CommandConfig);
+    this->WorkingDirectory = EvaluateSplitConfigGenex(
+      workingdirectory, ge, this->LG, true, this->OutputConfig,
+      this->CommandConfig, target);
     // Convert working directory to a full path.
     if (!this->WorkingDirectory.empty()) {
       std::string const& build_dir = this->LG->GetCurrentBinaryDirectory();
@@ -259,7 +291,7 @@ void cmCustomCommandGenerator::FillEmulatorsWithArguments()
     if (target && target->GetType() == cmStateEnums::EXECUTABLE &&
         !target->IsImported()) {
 
-      cmProp emulator_property =
+      cmValue emulator_property =
         target->GetProperty("CROSSCOMPILING_EMULATOR");
       if (!emulator_property) {
         continue;
@@ -294,9 +326,9 @@ const char* cmCustomCommandGenerator::GetArgv0Location(unsigned int c) const
 
 bool cmCustomCommandGenerator::HasOnlyEmptyCommandLines() const
 {
-  for (size_t i = 0; i < this->CommandLines.size(); ++i) {
-    for (size_t j = 0; j < this->CommandLines[i].size(); ++j) {
-      if (!this->CommandLines[i][j].empty()) {
+  for (cmCustomCommandLine const& ccl : this->CommandLines) {
+    for (std::string const& cl : ccl) {
+      if (!cl.empty()) {
         return false;
       }
     }
@@ -317,7 +349,7 @@ std::string cmCustomCommandGenerator::GetCommand(unsigned int c) const
   return this->CommandLines[c][0];
 }
 
-std::string escapeForShellOldStyle(const std::string& str)
+static std::string escapeForShellOldStyle(const std::string& str)
 {
   std::string result;
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -381,9 +413,21 @@ void cmCustomCommandGenerator::AppendArguments(unsigned int c,
   }
 }
 
+std::string cmCustomCommandGenerator::GetDepfile() const
+{
+  const auto& depfile = this->CC->GetDepfile();
+  if (depfile.empty()) {
+    return "";
+  }
+
+  cmGeneratorExpression ge(*this->LG->GetCMakeInstance(),
+                           this->CC->GetBacktrace());
+  return EvaluateDepfile(depfile, ge, this->LG, this->OutputConfig);
+}
+
 std::string cmCustomCommandGenerator::GetFullDepfile() const
 {
-  std::string depfile = this->CC->GetDepfile();
+  std::string depfile = this->GetDepfile();
   if (depfile.empty()) {
     return "";
   }
@@ -394,6 +438,24 @@ std::string cmCustomCommandGenerator::GetFullDepfile() const
   return cmSystemTools::CollapseFullPath(depfile);
 }
 
+std::string cmCustomCommandGenerator::GetInternalDepfileName(
+  const std::string& /*config*/, const std::string& depfile) const
+{
+  cmCryptoHash hash(cmCryptoHash::AlgoSHA256);
+  std::string extension;
+  switch (*this->LG->GetGlobalGenerator()->DepfileFormat()) {
+    case cmDepfileFormat::GccDepfile:
+    case cmDepfileFormat::MakeDepfile:
+      extension = ".d";
+      break;
+    case cmDepfileFormat::MSBuildAdditionalInputs:
+      extension = ".AdditionalInputs";
+      break;
+  }
+  return cmStrCat(this->LG->GetBinaryDirectory(), "/CMakeFiles/d/",
+                  hash.HashString(depfile), extension);
+}
+
 std::string cmCustomCommandGenerator::GetInternalDepfile() const
 {
   std::string depfile = this->GetFullDepfile();
@@ -401,23 +463,25 @@ std::string cmCustomCommandGenerator::GetInternalDepfile() const
     return "";
   }
 
-  cmCryptoHash hash(cmCryptoHash::AlgoSHA256);
-  std::string extension;
-  switch (*this->LG->GetGlobalGenerator()->DepfileFormat()) {
-    case cmDepfileFormat::GccDepfile:
-      extension = ".d";
-      break;
-    case cmDepfileFormat::VsTlog:
-      extension = ".tlog";
-      break;
+  if (this->ComputeInternalDepfile) {
+    return this->ComputeInternalDepfile(this->OutputConfig, depfile);
   }
-  return cmStrCat(this->LG->GetBinaryDirectory(), "/CMakeFiles/d/",
-                  hash.HashString(depfile), extension);
+  return this->GetInternalDepfileName(this->OutputConfig, depfile);
 }
 
-const char* cmCustomCommandGenerator::GetComment() const
+cm::optional<std::string> cmCustomCommandGenerator::GetComment() const
 {
-  return this->CC->GetComment();
+  const char* comment = this->CC->GetComment();
+  if (!comment) {
+    return cm::nullopt;
+  }
+  if (!*comment) {
+    return std::string();
+  }
+
+  cmGeneratorExpression ge(*this->LG->GetCMakeInstance(),
+                           this->CC->GetBacktrace());
+  return EvaluateComment(comment, ge, this->LG, this->OutputConfig);
 }
 
 std::string cmCustomCommandGenerator::GetWorkingDirectory() const

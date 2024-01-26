@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.5)
+cmake_policy(SET CMP0043 OLD) # testing the old behavior
+
 project(Preprocess)
 
 # This test is meant both as a test and as a reference for supported
@@ -197,9 +199,14 @@ endif()
 #-----------------------------------------------------------------------------
 
 # Inform the test if the debug configuration is getting built.
-# The NDEBUG definition takes care of this for release.
 string(APPEND CMAKE_C_FLAGS_DEBUG " -DPREPROCESS_DEBUG")
 string(APPEND CMAKE_CXX_FLAGS_DEBUG " -DPREPROCESS_DEBUG")
+string(APPEND CMAKE_C_FLAGS_RELEASE " -DPREPROCESS_NDEBUG")
+string(APPEND CMAKE_CXX_FLAGS_RELEASE " -DPREPROCESS_NDEBUG")
+string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " -DPREPROCESS_NDEBUG")
+string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -DPREPROCESS_NDEBUG")
+string(APPEND CMAKE_C_FLAGS_MINSIZEREL " -DPREPROCESS_NDEBUG")
+string(APPEND CMAKE_CXX_FLAGS_MINSIZEREL " -DPREPROCESS_NDEBUG")
 
 # Inform the test if it built from Xcode.
 if(PP_XCODE)

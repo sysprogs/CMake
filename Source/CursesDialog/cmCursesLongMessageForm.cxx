@@ -43,7 +43,8 @@ void cmCursesLongMessageForm::UpdateContent(std::string const& output,
   if (!output.empty() && this->Messages.size() < MAX_CONTENT_SIZE) {
     this->Messages.push_back('\n');
     this->Messages.append(output);
-    form_driver(this->Form, REQ_NEW_LINE);
+    form_driver(this->Form, REQ_NEXT_LINE);
+    form_driver(this->Form, REQ_BEG_LINE);
     this->DrawMessage(output.c_str());
   }
 
@@ -78,12 +79,13 @@ void cmCursesLongMessageForm::UpdateStatusBar()
 
   char version[cmCursesMainForm::MAX_WIDTH];
   char vertmp[128];
-  sprintf(vertmp, "CMake Version %s", cmVersion::GetCMakeVersion());
+  snprintf(vertmp, sizeof(vertmp), "CMake Version %s",
+           cmVersion::GetCMakeVersion());
   size_t sideSpace = (width - strlen(vertmp));
   for (size_t i = 0; i < sideSpace; i++) {
     version[i] = ' ';
   }
-  sprintf(version + sideSpace, "%s", vertmp);
+  snprintf(version + sideSpace, sizeof(version) - sideSpace, "%s", vertmp);
   version[width] = '\0';
 
   char fmt_s[] = "%s";
@@ -105,7 +107,7 @@ void cmCursesLongMessageForm::PrintKeys()
     return;
   }
   char firstLine[512];
-  sprintf(firstLine, "Press [e] to exit screen");
+  snprintf(firstLine, sizeof(firstLine), "Press [e] to exit screen");
 
   char fmt_s[] = "%s";
   curses_move(y - 2, 0);
@@ -151,7 +153,8 @@ void cmCursesLongMessageForm::DrawMessage(const char* msg) const
   int i = 0;
   while (msg[i] != '\0' && i < MAX_CONTENT_SIZE) {
     if (msg[i] == '\n' && msg[i + 1] != '\0') {
-      form_driver(this->Form, REQ_NEW_LINE);
+      form_driver(this->Form, REQ_NEXT_LINE);
+      form_driver(this->Form, REQ_BEG_LINE);
     } else {
       form_driver(this->Form, msg[i]);
     }
@@ -176,16 +179,23 @@ void cmCursesLongMessageForm::HandleInput()
     this->PrintKeys();
     int key = getch();
 
-    sprintf(debugMessage, "Message widget handling input, key: %d", key);
+#ifdef _WIN32
+    if (key == KEY_RESIZE) {
+      HandleResize();
+    }
+#endif // _WIN32
+
+    snprintf(debugMessage, sizeof(debugMessage),
+             "Message widget handling input, key: %d", key);
     cmCursesForm::LogMessage(debugMessage);
 
     // quit
     if (key == 'o' || key == 'e') {
       break;
     }
-    if (key == KEY_DOWN || key == ctrl('n')) {
+    if (key == KEY_DOWN || key == ctrl('n') || key == 'j') {
       form_driver(this->Form, REQ_SCR_FLINE);
-    } else if (key == KEY_UP || key == ctrl('p')) {
+    } else if (key == KEY_UP || key == ctrl('p') || key == 'k') {
       form_driver(this->Form, REQ_SCR_BLINE);
     } else if (key == KEY_NPAGE || key == ctrl('d')) {
       form_driver(this->Form, REQ_SCR_FPAGE);

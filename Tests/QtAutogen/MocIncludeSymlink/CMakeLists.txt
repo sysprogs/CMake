@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16)
 project(MocIncludeSymlink)
-include("../AutogenCoreTest.cmake")
+get_filename_component(AUTOGEN_CORE_TEST_CMAKE "../AutogenCoreTest.cmake" ABSOLUTE)
+include("${AUTOGEN_CORE_TEST_CMAKE}")
 
 #
 # Tests if MocInclude can be build when
@@ -63,7 +64,9 @@ macro(buildMocInclude sourceDir binaryDir)
     CMAKE_FLAGS "-DQT_TEST_VERSION=${QT_TEST_VERSION}"
                 "-DCMAKE_AUTOMOC_PATH_PREFIX=ON"
                 "-DCMAKE_AUTOGEN_VERBOSE=${CMAKE_AUTOGEN_VERBOSE}"
+                "-DCMAKE_PREFIX_PATH:STRING=${CMAKE_PREFIX_PATH}"
                 "-DQT_QMAKE_EXECUTABLE:FILEPATH=${QT_QMAKE_EXECUTABLE}"
+                "-DAUTOGEN_CORE_TEST_CMAKE:STRING=${AUTOGEN_CORE_TEST_CMAKE}"
     OUTPUT_VARIABLE output
   )
   if (result)

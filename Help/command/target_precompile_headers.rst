@@ -25,15 +25,15 @@ The named ``<target>`` must have been created by a command such as
 :ref:`ALIAS target <Alias Targets>`.
 
 The ``INTERFACE``, ``PUBLIC`` and ``PRIVATE`` keywords are required to
-specify the scope of the following arguments.  ``PRIVATE`` and ``PUBLIC``
-items will populate the :prop_tgt:`PRECOMPILE_HEADERS` property of
-``<target>``.  ``PUBLIC`` and ``INTERFACE`` items will populate the
+specify the :ref:`scope <Target Usage Requirements>` of the following arguments.
+``PRIVATE`` and ``PUBLIC`` items will populate the :prop_tgt:`PRECOMPILE_HEADERS`
+property of ``<target>``.  ``PUBLIC`` and ``INTERFACE`` items will populate the
 :prop_tgt:`INTERFACE_PRECOMPILE_HEADERS` property of ``<target>``
 (:ref:`IMPORTED targets <Imported Targets>` only support ``INTERFACE`` items).
 Repeated calls for the same ``<target>`` will append items in the order called.
 
 Projects should generally avoid using ``PUBLIC`` or ``INTERFACE`` for targets
-that will be :ref:`exported <install(EXPORT)>`, or they should at least use
+that will be :command:`exported <install(EXPORT)>`, or they should at least use
 the :genex:`$<BUILD_INTERFACE:...>` generator expression to prevent precompile
 headers from appearing in an installed exported target.  Consumers of a target
 should typically be in control of what precompile headers they use, not have
@@ -70,17 +70,16 @@ included by absolute path.  For example:
       <unordered_map>
   )
 
-Arguments to ``target_precompile_headers()`` may use "generator expressions"
-with the syntax ``$<...>``.
-See the :manual:`cmake-generator-expressions(7)` manual for available
-expressions.
-The :genex:`$<COMPILE_LANGUAGE:...>` generator expression is particularly
-useful for specifying a language-specific header to precompile for
-only one language (e.g. ``CXX`` and not ``C``).  In this case, header
-file names that are not explicitly in double quotes or angle brackets
-must be specified by absolute path.  Also, when specifying angle brackets
-inside a generator expression, be sure to encode the closing ``>`` as
-``$<ANGLE-R>``.  For example:
+.. |command_name| replace:: ``target_precompile_headers``
+.. |more_see_also| replace:: The :genex:`$<COMPILE_LANGUAGE:...>` generator
+   expression is particularly useful for specifying a language-specific header
+   to precompile for only one language (e.g. ``CXX`` and not ``C``).  In this
+   case, header file names that are not explicitly in double quotes or angle
+   brackets must be specified by absolute path.  Also, when specifying angle
+   brackets inside a generator expression, be sure to encode the closing
+   ``>`` as :genex:`$<ANGLE-R>`.  For example:
+.. include:: GENEX_NOTE.txt
+   :start-line: 1
 
 .. code-block:: cmake
 
@@ -95,7 +94,7 @@ Reusing Precompile Headers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The command also supports a second signature which can be used to specify that
-one target re-uses a precompiled header file artifact from another target
+one target reuses a precompiled header file artifact from another target
 instead of generating its own:
 
 .. code-block:: cmake
@@ -118,8 +117,17 @@ the ``REUSE_FROM`` form is used.
 See Also
 ^^^^^^^^
 
-To disable precompile headers for specific targets, see the
-:prop_tgt:`DISABLE_PRECOMPILE_HEADERS` target property.
+* To disable precompile headers for specific targets, see the
+  :prop_tgt:`DISABLE_PRECOMPILE_HEADERS` target property.
 
-To prevent precompile headers from being used when compiling a specific
-source file, see the :prop_sf:`SKIP_PRECOMPILE_HEADERS` source file property.
+* To prevent precompile headers from being used when compiling a specific
+  source file, see the :prop_sf:`SKIP_PRECOMPILE_HEADERS` source file property.
+
+* :command:`target_compile_definitions`
+* :command:`target_compile_features`
+* :command:`target_compile_options`
+* :command:`target_include_directories`
+* :command:`target_link_libraries`
+* :command:`target_link_directories`
+* :command:`target_link_options`
+* :command:`target_sources`

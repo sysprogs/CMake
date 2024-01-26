@@ -9,8 +9,8 @@ libraries need to use the :prop_tgt:`STATIC_LIBRARY_OPTIONS` target property.
 
 These options are used for both normal linking and device linking
 (see policy :policy:`CMP0105`). To control link options for normal and device
-link steps, ``$<HOST_LINK>`` and ``$<DEVICE_LINK>``
-:manual:`generator expressions <cmake-generator-expressions(7)>` can be used.
+link steps, :genex:`$<HOST_LINK>` and :genex:`$<DEVICE_LINK>` generator
+expressions can be used.
 
 This property holds a :ref:`semicolon-separated list <CMake Language Lists>` of
 options specified so far for its target.  Use the :command:`target_link_options`
@@ -28,3 +28,9 @@ for more on defining buildsystem properties.
 .. note::
 
   This property must be used in preference to :prop_tgt:`LINK_FLAGS` property.
+
+.. include:: ../command/DEVICE_LINK_OPTIONS.txt
+
+.. include:: ../command/OPTIONS_SHELL.txt
+
+.. include:: ../command/LINK_OPTIONS_LINKER.txt

@@ -6,11 +6,11 @@
 
 #include <iosfwd>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "cmListFileCache.h"
 #include "cmLocalCommonGenerator.h"
 #include "cmNinjaTypes.h"
 #include "cmOutputConverter.h"
@@ -21,6 +21,7 @@ class cmGeneratedFileStream;
 class cmGeneratorTarget;
 class cmGlobalGenerator;
 class cmGlobalNinjaGenerator;
+class cmListFileBacktrace;
 class cmMakefile;
 class cmRulePlaceholderExpander;
 class cmake;
@@ -41,7 +42,8 @@ public:
 
   void Generate() override;
 
-  cmRulePlaceholderExpander* CreateRulePlaceholderExpander() const override;
+  std::unique_ptr<cmRulePlaceholderExpander> CreateRulePlaceholderExpander()
+    const override;
 
   std::string GetTargetDirectory(
     cmGeneratorTarget const* target) const override;
@@ -51,6 +53,10 @@ public:
 
   const cmake* GetCMakeInstance() const;
   cmake* GetCMakeInstance();
+
+  std::string const& GetWorkingDirectory() const override;
+
+  std::string MaybeRelativeToWorkDir(std::string const& path) const override;
 
   /// @returns the relative path between the HomeOutputDirectory and this
   /// local generators StartOutputDirectory.
@@ -90,11 +96,12 @@ public:
   bool HasUniqueByproducts(std::vector<std::string> const& byproducts,
                            cmListFileBacktrace const& bt);
 
+  std::string GetLinkDependencyFile(cmGeneratorTarget* target,
+                                    std::string const& config) const override;
+
 protected:
   std::string ConvertToIncludeReference(
-    std::string const& path,
-    cmOutputConverter::OutputFormat format = cmOutputConverter::SHELL,
-    bool forceFullPaths = false) override;
+    std::string const& path, cmOutputConverter::OutputFormat format) override;
 
 private:
   cmGeneratedFileStream& GetImplFileStream(const std::string& config) const;
@@ -108,6 +115,7 @@ private:
                                        const std::string& config);
   void WriteNinjaFilesInclusionConfig(std::ostream& os);
   void WriteNinjaFilesInclusionCommon(std::ostream& os);
+  void WriteNinjaWorkDir(std::ostream& os);
   void WriteProcessedMakefile(std::ostream& os);
   void WritePools(std::ostream& os);
 

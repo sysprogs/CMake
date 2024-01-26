@@ -85,6 +85,11 @@ else()
 
     # ARMClang need target options
     "--target=arm-arm-none-eabi -mcpu=cortex-m3"
+
+    # MSVC needs at least one include directory for __has_include to function,
+    # but custom toolchains may run MSVC with no INCLUDE env var and no -I flags.
+    # Also avoid linking so this works with no LIB env var.
+    "-c -I__does_not_exist__"
     )
 endif()
 if(CMAKE_C_COMPILER_TARGET)
@@ -123,11 +128,6 @@ if(NOT CMAKE_C_COMPILER_ID_RUN)
   if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_COMPILER_IS_GNUCC 1)
   endif()
-  if(CMAKE_C_PLATFORM_ID MATCHES "MinGW")
-    set(CMAKE_COMPILER_IS_MINGW 1)
-  elseif(CMAKE_C_PLATFORM_ID MATCHES "Cygwin")
-    set(CMAKE_COMPILER_IS_CYGWIN 1)
-  endif()
 else()
   if(NOT DEFINED CMAKE_C_COMPILER_FRONTEND_VARIANT)
     # Some toolchain files set our internal CMAKE_C_COMPILER_ID_RUN
@@ -160,9 +160,9 @@ endif ()
 # "arm-unknown-nto-qnx6" instead of the correct "arm-unknown-nto-qnx6.3.0-"
 if (NOT _CMAKE_TOOLCHAIN_PREFIX)
 
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|QCC")
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|QCC|LCC")
     get_filename_component(COMPILER_BASENAME "${CMAKE_C_COMPILER}" NAME)
-    if (COMPILER_BASENAME MATCHES "^(.+-)?(clang|g?cc)(-cl)?(-[0-9]+(\\.[0-9]+)*)?(-[^.]+)?(\\.exe)?$")
+    if (COMPILER_BASENAME MATCHES "^(.+-)?(clang|g?cc)(-cl)?(-?[0-9]+(\\.[0-9]+)*)?(-[^.]+)?(\\.exe)?$")
       set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
       set(_CMAKE_TOOLCHAIN_SUFFIX ${CMAKE_MATCH_4})
       set(_CMAKE_COMPILER_SUFFIX ${CMAKE_MATCH_6})

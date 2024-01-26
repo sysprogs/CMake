@@ -1,32 +1,35 @@
-add_library(MathFunctions mysqrt.cxx)
+add_library(MathFunctions MathFunctions.cxx)
 
 # state that anybody linking to us needs to include the current source dir
 # to find MathFunctions.h, while we don't.
 target_include_directories(MathFunctions
-          INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
-          )
+                           INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+                           )
 
-# does this system provide the log and exp functions?
-include(CheckSymbolExists)
-check_symbol_exists(log "math.h" HAVE_LOG)
-check_symbol_exists(exp "math.h" HAVE_EXP)
-if(NOT (HAVE_LOG AND HAVE_EXP))
-  unset(HAVE_LOG CACHE)
-  unset(HAVE_EXP CACHE)
-  set(CMAKE_REQUIRED_LIBRARIES "m")
-  check_symbol_exists(log "math.h" HAVE_LOG)
-  check_symbol_exists(exp "math.h" HAVE_EXP)
-  if(HAVE_LOG AND HAVE_EXP)
-    target_link_libraries(MathFunctions PRIVATE m)
-  endif()
+# should we use our own math functions
+option(USE_MYMATH "Use tutorial provided math implementation" ON)
+if (USE_MYMATH)
+  target_compile_definitions(MathFunctions PRIVATE "USE_MYMATH")
+
+  # library that just does sqrt
+  add_library(SqrtLibrary STATIC
+              mysqrt.cxx
+              )
+
+  # link SqrtLibrary to tutorial_compiler_flags
+  target_link_libraries(SqrtLibrary PUBLIC tutorial_compiler_flags)
+
+  target_link_libraries(MathFunctions PRIVATE SqrtLibrary)
 endif()
 
-# add compile definitions
-if(HAVE_LOG AND HAVE_EXP)
-  target_compile_definitions(MathFunctions
-                             PRIVATE "HAVE_LOG" "HAVE_EXP")
-endif()
+# link MathFunctions to tutorial_compiler_flags
+target_link_libraries(MathFunctions PUBLIC tutorial_compiler_flags)
 
-# install rules
-install(TARGETS MathFunctions DESTINATION lib)
+# install libs
+set(installable_libs MathFunctions tutorial_compiler_flags)
+if(TARGET SqrtLibrary)
+  list(APPEND installable_libs SqrtLibrary)
+endif()
+install(TARGETS ${installable_libs} DESTINATION lib)
+# install include headers
 install(FILES MathFunctions.h DESTINATION include)

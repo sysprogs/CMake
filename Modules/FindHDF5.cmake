@@ -161,6 +161,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 # scope somewhere else. We can't rely on it because different components may
 # have been requested for this call.
 set(HDF5_FOUND OFF)
+set(HDF5_LIBRARIES)
+set(HDF5_HL_LIBRARIES)
 
 # List of the valid HDF5 components
 set(HDF5_VALID_LANGUAGE_BINDINGS C CXX Fortran)
@@ -215,12 +217,9 @@ endif()
 
 # Test first if the current compilers automatically wrap HDF5
 function(_HDF5_test_regular_compiler_C success version is_parallel)
-  set(scratch_directory
-    ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/hdf5)
   if(NOT ${success} OR
-     NOT EXISTS ${scratch_directory}/compiler_has_h5_c)
-    set(test_file ${scratch_directory}/cmake_hdf5_test.c)
-    file(WRITE ${test_file}
+     NOT EXISTS ${_HDF5_TEST_DIR}/compiler_has_h5_c)
+    file(WRITE "${_HDF5_TEST_DIR}/${_HDF5_TEST_SRC}"
       "#include <hdf5.h>\n"
       "const char* info_ver = \"INFO\" \":\" H5_VERSION;\n"
       "#ifdef H5_HAVE_PARALLEL\n"
@@ -236,12 +235,12 @@ function(_HDF5_test_regular_compiler_C success version is_parallel)
       "  fid = H5Fcreate(\"foo.h5\",H5F_ACC_TRUNC,H5P_DEFAULT,H5P_DEFAULT);\n"
       "  return 0;\n"
       "}")
-    try_compile(${success} ${scratch_directory} ${test_file}
-      COPY_FILE ${scratch_directory}/compiler_has_h5_c
+    try_compile(${success} SOURCES "${_HDF5_TEST_DIR}/${_HDF5_TEST_SRC}"
+      COPY_FILE ${_HDF5_TEST_DIR}/compiler_has_h5_c
     )
   endif()
-  if(${success})
-    file(STRINGS ${scratch_directory}/compiler_has_h5_c INFO_STRINGS
+  if(${success} AND EXISTS ${_HDF5_TEST_DIR}/compiler_has_h5_c)
+    file(STRINGS ${_HDF5_TEST_DIR}/compiler_has_h5_c INFO_STRINGS
       REGEX "^INFO:"
     )
     string(REGEX MATCH "^INFO:([0-9]+\\.[0-9]+\\.[0-9]+)(-patch([0-9]+))?"
@@ -262,11 +261,9 @@ function(_HDF5_test_regular_compiler_C success version is_parallel)
 endfunction()
 
 function(_HDF5_test_regular_compiler_CXX success version is_parallel)
-  set(scratch_directory ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/hdf5)
   if(NOT ${success} OR
-     NOT EXISTS ${scratch_directory}/compiler_has_h5_cxx)
-    set(test_file ${scratch_directory}/cmake_hdf5_test.cxx)
-    file(WRITE ${test_file}
+     NOT EXISTS ${_HDF5_TEST_DIR}/compiler_has_h5_cxx)
+    file(WRITE "${_HDF5_TEST_DIR}/${_HDF5_TEST_SRC}"
       "#include <H5Cpp.h>\n"
       "#ifndef H5_NO_NAMESPACE\n"
       "using namespace H5;\n"
@@ -284,12 +281,12 @@ function(_HDF5_test_regular_compiler_CXX success version is_parallel)
       "  H5File file(\"foo.h5\", H5F_ACC_TRUNC);\n"
       "  return 0;\n"
       "}")
-    try_compile(${success} ${scratch_directory} ${test_file}
-      COPY_FILE ${scratch_directory}/compiler_has_h5_cxx
+    try_compile(${success} SOURCES "${_HDF5_TEST_DIR}/${_HDF5_TEST_SRC}"
+      COPY_FILE ${_HDF5_TEST_DIR}/compiler_has_h5_cxx
     )
   endif()
-  if(${success})
-    file(STRINGS ${scratch_directory}/compiler_has_h5_cxx INFO_STRINGS
+  if(${success} AND EXISTS ${_HDF5_TEST_DIR}/compiler_has_h5_cxx)
+    file(STRINGS ${_HDF5_TEST_DIR}/compiler_has_h5_cxx INFO_STRINGS
       REGEX "^INFO:"
     )
     string(REGEX MATCH "^INFO:([0-9]+\\.[0-9]+\\.[0-9]+)(-patch([0-9]+))?"
@@ -311,27 +308,29 @@ endfunction()
 
 function(_HDF5_test_regular_compiler_Fortran success is_parallel)
   if(NOT ${success})
-    set(scratch_directory
-      ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/hdf5)
-    set(test_file ${scratch_directory}/cmake_hdf5_test.f90)
-    file(WRITE ${test_file}
+    file(WRITE "${_HDF5_TEST_DIR}/${_HDF5_TEST_SRC}"
       "program hdf5_hello\n"
       "  use hdf5\n"
-      "  use h5lt\n"
-      "  use h5ds\n"
       "  integer error\n"
       "  call h5open_f(error)\n"
       "  call h5close_f(error)\n"
       "end\n")
-    try_compile(${success} ${scratch_directory} ${test_file})
+    try_compile(${success} SOURCES "${_HDF5_TEST_DIR}/${_HDF5_TEST_SRC}")
     if(${success})
       execute_process(COMMAND ${CMAKE_Fortran_COMPILER} -showconfig
         OUTPUT_VARIABLE config_output
         ERROR_VARIABLE config_error
         RESULT_VARIABLE config_result
         )
-      if(config_output MATCHES "Parallel HDF5: yes")
-        set(${is_parallel} TRUE PARENT_SCOPE)
+      if(config_output MATCHES "Parallel HDF5: ([A-Za-z0-9]+)")
+        # The value may be anything used when HDF5 was configured,
+        # so see if CMake interprets it as "true".
+        set(parallelHDF5 "${CMAKE_MATCH_1}")
+        if(parallelHDF5)
+          set(${is_parallel} TRUE PARENT_SCOPE)
+        else()
+          set(${is_parallel} FALSE PARENT_SCOPE)
+        endif()
       else()
         set(${is_parallel} FALSE PARENT_SCOPE)
       endif()
@@ -348,38 +347,38 @@ function( _HDF5_invoke_compiler language output_var return_value_var version_var
   else()
     set(lib_type_args -shlib)
   endif()
-  set(scratch_dir ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/hdf5)
-  if("${language}" STREQUAL "C")
-    set(test_file ${scratch_dir}/cmake_hdf5_test.c)
-  elseif("${language}" STREQUAL "CXX")
-    set(test_file ${scratch_dir}/cmake_hdf5_test.cxx)
-  elseif("${language}" STREQUAL "Fortran")
-    set(test_file ${scratch_dir}/cmake_hdf5_test.f90)
-  endif()
   # Verify that the compiler wrapper can actually compile: sometimes the compiler
   # wrapper exists, but not the compiler.  E.g. Miniconda / Anaconda Python
   execute_process(
-    COMMAND ${HDF5_${language}_COMPILER_EXECUTABLE} ${test_file}
-    WORKING_DIRECTORY ${scratch_dir}
+    COMMAND ${HDF5_${language}_COMPILER_EXECUTABLE} "${_HDF5_TEST_SRC}"
+    WORKING_DIRECTORY ${_HDF5_TEST_DIR}
     OUTPUT_VARIABLE output
     ERROR_VARIABLE output
     RESULT_VARIABLE return_value
     )
-  if(return_value AND NOT HDF5_FIND_QUIETLY)
-    message(STATUS
-      "HDF5 ${language} compiler wrapper is unable to compile a minimal HDF5 program.")
+  if(NOT return_value EQUAL 0)
+    message(CONFIGURE_LOG
+      "HDF5 ${language} compiler wrapper is unable to compile a minimal HDF5 program.\n\n${output}")
+    if(NOT HDF5_FIND_QUIETLY)
+      message(STATUS
+        "HDF5 ${language} compiler wrapper is unable to compile a minimal HDF5 program.")
+    endif()
   else()
     execute_process(
-      COMMAND ${HDF5_${language}_COMPILER_EXECUTABLE} -show ${lib_type_args} ${test_file}
-      WORKING_DIRECTORY ${scratch_dir}
+      COMMAND ${HDF5_${language}_COMPILER_EXECUTABLE} -show ${lib_type_args} "${_HDF5_TEST_SRC}"
+      WORKING_DIRECTORY ${_HDF5_TEST_DIR}
       OUTPUT_VARIABLE output
       ERROR_VARIABLE output
       RESULT_VARIABLE return_value
       OUTPUT_STRIP_TRAILING_WHITESPACE
       )
-    if(return_value AND NOT HDF5_FIND_QUIETLY)
-      message(STATUS
-        "Unable to determine HDF5 ${language} flags from HDF5 wrapper.")
+    if(NOT return_value EQUAL 0)
+      message(CONFIGURE_LOG
+        "Unable to determine HDF5 ${language} flags from HDF5 wrapper.\n\n${output}")
+      if(NOT HDF5_FIND_QUIETLY)
+        message(STATUS
+          "Unable to determine HDF5 ${language} flags from HDF5 wrapper.")
+      endif()
     endif()
     execute_process(
       COMMAND ${HDF5_${language}_COMPILER_EXECUTABLE} -showconfig
@@ -388,17 +387,26 @@ function( _HDF5_invoke_compiler language output_var return_value_var version_var
       RESULT_VARIABLE return_value
       OUTPUT_STRIP_TRAILING_WHITESPACE
       )
-    if(return_value AND NOT HDF5_FIND_QUIETLY)
-      message(STATUS
-        "Unable to determine HDF5 ${language} version_var from HDF5 wrapper.")
+    if(NOT return_value EQUAL 0)
+      message(CONFIGURE_LOG
+        "Unable to determine HDF5 ${language} version_var from HDF5 wrapper.\n\n${output}")
+      if(NOT HDF5_FIND_QUIETLY)
+        message(STATUS
+          "Unable to determine HDF5 ${language} version_var from HDF5 wrapper.")
+      endif()
     endif()
     string(REGEX MATCH "HDF5 Version: ([a-zA-Z0-9\\.\\-]*)" version "${config_output}")
     if(version)
       string(REPLACE "HDF5 Version: " "" version "${version}")
       string(REPLACE "-patch" "." version "${version}")
     endif()
-    if(config_output MATCHES "Parallel HDF5: yes")
-      set(is_parallel TRUE)
+    if(config_output MATCHES "Parallel HDF5: ([A-Za-z0-9]+)")
+      # The value may be anything used when HDF5 was configured,
+      # so see if CMake interprets it as "true".
+      set(parallelHDF5 "${CMAKE_MATCH_1}")
+      if(parallelHDF5)
+        set(is_parallel TRUE)
+      endif()
     endif()
   endif()
   foreach(var output return_value version is_parallel)
@@ -560,7 +568,7 @@ if(NOT HDF5_FOUND AND NOT HDF5_NO_FIND_PACKAGE_CONFIG_FILE)
                 set(HDF5_${_lang}_FOUND TRUE)
             endif()
             if(HDF5_FIND_HL)
-                get_target_property(_lang_hl_location ${HDF5_${_lang}_HL_TARGET}${_suffix} IMPORTED_IMPLIB_${_hdf5_imported_conf} )
+                get_target_property(_hdf5_lang_hl_location ${HDF5_${_lang}_HL_TARGET}${_suffix} IMPORTED_IMPLIB_${_hdf5_imported_conf} )
                 if (NOT _hdf5_lang_hl_location)
                     get_target_property(_hdf5_lang_hl_location ${HDF5_${_lang}_HL_TARGET}${_suffix} LOCATION_${_hdf5_imported_conf})
                     if (NOT _hdf5_hl_lang_location)
@@ -583,21 +591,32 @@ endif()
 
 if(NOT HDF5_FOUND)
   set(_HDF5_NEED_TO_SEARCH FALSE)
+  set(_HDF5_TEST_DIR ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/hdf5)
   set(HDF5_COMPILER_NO_INTERROGATE TRUE)
   # Only search for languages we've enabled
   foreach(_lang IN LISTS HDF5_LANGUAGE_BINDINGS)
+    set(HDF5_${_lang}_LIBRARIES)
+    set(HDF5_${_lang}_HL_LIBRARIES)
+
     # First check to see if our regular compiler is one of wrappers
     if(_lang STREQUAL "C")
+      set(_HDF5_TEST_SRC cmake_hdf5_test.c)
+      if(CMAKE_CXX_COMPILER_LOADED AND NOT CMAKE_C_COMPILER_LOADED)
+        # CXX project without C enabled
+        set(_HDF5_TEST_SRC cmake_hdf5_test.cxx)
+      endif()
       _HDF5_test_regular_compiler_C(
         HDF5_${_lang}_COMPILER_NO_INTERROGATE
         HDF5_${_lang}_VERSION
         HDF5_${_lang}_IS_PARALLEL)
     elseif(_lang STREQUAL "CXX")
+      set(_HDF5_TEST_SRC cmake_hdf5_test.cxx)
       _HDF5_test_regular_compiler_CXX(
         HDF5_${_lang}_COMPILER_NO_INTERROGATE
         HDF5_${_lang}_VERSION
         HDF5_${_lang}_IS_PARALLEL)
     elseif(_lang STREQUAL "Fortran")
+      set(_HDF5_TEST_SRC cmake_hdf5_test.f90)
       _HDF5_test_regular_compiler_Fortran(
         HDF5_${_lang}_COMPILER_NO_INTERROGATE
         HDF5_${_lang}_IS_PARALLEL)
@@ -743,6 +762,8 @@ if(NOT HDF5_FOUND)
       endif()
     endif()
   endforeach()
+  unset(_HDF5_TEST_DIR)
+  unset(_HDF5_TEST_SRC)
   unset(_lib)
 else()
   set(_HDF5_NEED_TO_SEARCH TRUE)
@@ -811,25 +832,11 @@ if( NOT HDF5_FOUND )
     endif()
 
     foreach(_lang IN LISTS HDF5_LANGUAGE_BINDINGS)
-        # find the HDF5 include directories
-        if("${_lang}" STREQUAL "Fortran")
-            set(HDF5_INCLUDE_FILENAME hdf5.mod HDF5.mod)
-        elseif("${_lang}" STREQUAL "CXX")
-            set(HDF5_INCLUDE_FILENAME H5Cpp.h)
-        else()
-            set(HDF5_INCLUDE_FILENAME hdf5.h)
-        endif()
+        set(HDF5_${_lang}_LIBRARIES)
+        set(HDF5_${_lang}_HL_LIBRARIES)
 
-        find_path(HDF5_${_lang}_INCLUDE_DIR ${HDF5_INCLUDE_FILENAME}
-            HINTS ${HDF5_ROOT}
-            PATHS $ENV{HOME}/.local/include
-            PATH_SUFFIXES include Include ${_inc_suffixes} ${_lib_suffixes}
-            ${_HDF5_SEARCH_OPTS}
-        )
-        mark_as_advanced(HDF5_${_lang}_INCLUDE_DIR)
-        # set the _DIRS variable as this is what the user will normally use
-        set(HDF5_${_lang}_INCLUDE_DIRS ${HDF5_${_lang}_INCLUDE_DIR})
-        list(APPEND HDF5_INCLUDE_DIRS ${HDF5_${_lang}_INCLUDE_DIR})
+        # The "main" library.
+        set(_hdf5_main_library "")
 
         # find the HDF5 libraries
         foreach(LIB IN LISTS HDF5_${_lang}_LIBRARY_NAMES)
@@ -861,6 +868,15 @@ if( NOT HDF5_FOUND )
                 ${_HDF5_SEARCH_OPTS}
             )
 
+            # Set the "main" library if not already set.
+            if (NOT _hdf5_main_library)
+              if (HDF5_${LIB}_LIBRARY_RELEASE)
+                set(_hdf5_main_library "${HDF5_${LIB}_LIBRARY_RELEASE}")
+              elseif (HDF5_${LIB}_LIBRARY_DEBUG)
+                set(_hdf5_main_library "${HDF5_${LIB}_LIBRARY_DEBUG}")
+              endif ()
+            endif ()
+
             select_library_configurations( HDF5_${LIB} )
             list(APPEND HDF5_${_lang}_LIBRARIES ${HDF5_${LIB}_LIBRARY})
         endforeach()
@@ -871,6 +887,43 @@ if( NOT HDF5_FOUND )
         # Append the libraries for this language binding to the list of all
         # required libraries.
         list(APPEND HDF5_LIBRARIES ${HDF5_${_lang}_LIBRARIES})
+
+        # find the HDF5 include directories
+        set(_hdf5_inc_extra_paths)
+        set(_hdf5_inc_extra_suffixes)
+        if("${_lang}" STREQUAL "Fortran")
+            set(HDF5_INCLUDE_FILENAME hdf5.mod HDF5.mod)
+
+            # Add library-based search paths for Fortran modules.
+            if (NOT _hdf5_main_library STREQUAL "")
+              # gfortran module directory
+              if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU" OR CMAKE_Fortran_COMPILER_ID STREQUAL "LCC")
+                get_filename_component(_hdf5_library_dir "${_hdf5_main_library}" DIRECTORY)
+                list(APPEND _hdf5_inc_extra_paths "${_hdf5_library_dir}")
+                unset(_hdf5_library_dir)
+                list(APPEND _hdf5_inc_extra_suffixes gfortran/modules)
+              endif ()
+            endif ()
+        elseif("${_lang}" STREQUAL "CXX")
+            set(HDF5_INCLUDE_FILENAME H5Cpp.h)
+        else()
+            set(HDF5_INCLUDE_FILENAME hdf5.h)
+        endif()
+
+        unset(_hdf5_main_library)
+
+        find_path(HDF5_${_lang}_INCLUDE_DIR ${HDF5_INCLUDE_FILENAME}
+            HINTS ${HDF5_ROOT}
+            PATHS $ENV{HOME}/.local/include ${_hdf5_inc_extra_paths}
+            PATH_SUFFIXES include Include ${_inc_suffixes} ${_lib_suffixes} ${_hdf5_inc_extra_suffixes}
+            ${_HDF5_SEARCH_OPTS}
+        )
+        mark_as_advanced(HDF5_${_lang}_INCLUDE_DIR)
+        unset(_hdf5_inc_extra_paths)
+        unset(_hdf5_inc_extra_suffixes)
+        # set the _DIRS variable as this is what the user will normally use
+        set(HDF5_${_lang}_INCLUDE_DIRS ${HDF5_${_lang}_INCLUDE_DIR})
+        list(APPEND HDF5_INCLUDE_DIRS ${HDF5_${_lang}_INCLUDE_DIR})
 
         if(HDF5_FIND_HL)
             foreach(LIB IN LISTS HDF5_${_lang}_HL_LIBRARY_NAMES)
@@ -1015,8 +1068,12 @@ if (HDF5_FOUND)
       else()
         if (DEFINED "HDF5_${hdf5_target_name}_LIBRARY")
           set(_hdf5_location "${HDF5_${hdf5_target_name}_LIBRARY}")
+          set(_hdf5_location_release "${HDF5_${hdf5_target_name}_LIBRARY_RELEASE}")
+          set(_hdf5_location_debug "${HDF5_${hdf5_target_name}_LIBRARY_DEBUG}")
         elseif (DEFINED "HDF5_${hdf5_lang}_LIBRARY")
           set(_hdf5_location "${HDF5_${hdf5_lang}_LIBRARY}")
+          set(_hdf5_location_release "${HDF5_${hdf5_lang}_LIBRARY_RELEASE}")
+          set(_hdf5_location_debug "${HDF5_${hdf5_lang}_LIBRARY_DEBUG}")
         elseif (DEFINED "HDF5_${hdf5_lang}_LIBRARY_${hdf5_target_name}")
           set(_hdf5_location "${HDF5_${hdf5_lang}_LIBRARY_${hdf5_target_name}}")
         else ()
@@ -1031,10 +1088,24 @@ if (HDF5_FOUND)
          set(HDF5_${hdf5_lang}_INCLUDE_DIRS ${HDF5_INCLUDE_DIRS})
         endif ()
         set_target_properties("hdf5::${hdf5_target_name}" PROPERTIES
-          IMPORTED_LOCATION "${_hdf5_location}"
-          IMPORTED_IMPLIB "${_hdf5_location}"
           INTERFACE_INCLUDE_DIRECTORIES "${HDF5_${hdf5_lang}_INCLUDE_DIRS}"
           INTERFACE_COMPILE_DEFINITIONS "${_hdf5_definitions}")
+        if (_hdf5_location_release)
+          set_property(TARGET "hdf5::${hdf5_target_name}" APPEND PROPERTY
+            IMPORTED_CONFIGURATIONS RELEASE)
+          set_property(TARGET "hdf5::${hdf5_target_name}" PROPERTY
+            IMPORTED_LOCATION_RELEASE "${_hdf5_location_release}")
+        endif()
+        if (_hdf5_location_debug)
+          set_property(TARGET "hdf5::${hdf5_target_name}" APPEND PROPERTY
+            IMPORTED_CONFIGURATIONS DEBUG)
+          set_property(TARGET "hdf5::${hdf5_target_name}" PROPERTY
+            IMPORTED_LOCATION_DEBUG "${_hdf5_location_debug}")
+        endif()
+        if (NOT _hdf5_location_release AND NOT _hdf5_location_debug)
+          set_property(TARGET "hdf5::${hdf5_target_name}" PROPERTY
+            IMPORTED_LOCATION "${_hdf5_location}")
+        endif()
         if (_hdf5_libtype STREQUAL "SHARED")
           set_property(TARGET "hdf5::${hdf5_target_name}" APPEND
             PROPERTY
@@ -1047,6 +1118,8 @@ if (HDF5_FOUND)
         unset(_hdf5_definitions)
         unset(_hdf5_libtype)
         unset(_hdf5_location)
+        unset(_hdf5_location_release)
+        unset(_hdf5_location_debug)
       endif ()
     endif ()
 
@@ -1076,8 +1149,12 @@ if (HDF5_FOUND)
       else()
         if (DEFINED "HDF5_${hdf5_target_name}_LIBRARY")
           set(_hdf5_location "${HDF5_${hdf5_target_name}_LIBRARY}")
+          set(_hdf5_location_release "${HDF5_${hdf5_target_name}_LIBRARY_RELEASE}")
+          set(_hdf5_location_debug "${HDF5_${hdf5_target_name}_LIBRARY_DEBUG}")
         elseif (DEFINED "HDF5_${hdf5_lang}_HL_LIBRARY")
           set(_hdf5_location "${HDF5_${hdf5_lang}_HL_LIBRARY}")
+          set(_hdf5_location_release "${HDF5_${hdf5_lang}_HL_LIBRARY_RELEASE}")
+          set(_hdf5_location_debug "${HDF5_${hdf5_lang}_HL_LIBRARY_DEBUG}")
         elseif (DEFINED "HDF5_${hdf5_lang}_LIBRARY_${hdf5_target_name}")
           set(_hdf5_location "${HDF5_${hdf5_lang}_LIBRARY_${hdf5_target_name}}")
         elseif (hdf5_alt_target_name AND DEFINED "HDF5_${hdf5_lang}_LIBRARY_${hdf5_alt_target_name}")
@@ -1091,10 +1168,24 @@ if (HDF5_FOUND)
         add_library("hdf5::${hdf5_target_name}" UNKNOWN IMPORTED)
         string(REPLACE "-D" "" _hdf5_definitions "${HDF5_${hdf5_lang}_HL_DEFINITIONS}")
         set_target_properties("hdf5::${hdf5_target_name}" PROPERTIES
-          IMPORTED_LOCATION "${_hdf5_location}"
-          IMPORTED_IMPLIB "${_hdf5_location}"
           INTERFACE_INCLUDE_DIRECTORIES "${HDF5_${hdf5_lang}_HL_INCLUDE_DIRS}"
           INTERFACE_COMPILE_DEFINITIONS "${_hdf5_definitions}")
+        if (_hdf5_location_release)
+          set_property(TARGET "hdf5::${hdf5_target_name}" APPEND PROPERTY
+            IMPORTED_CONFIGURATIONS RELEASE)
+          set_property(TARGET "hdf5::${hdf5_target_name}" PROPERTY
+            IMPORTED_LOCATION_RELEASE "${_hdf5_location_release}")
+        endif()
+        if (_hdf5_location_debug)
+          set_property(TARGET "hdf5::${hdf5_target_name}" APPEND PROPERTY
+            IMPORTED_CONFIGURATIONS DEBUG)
+          set_property(TARGET "hdf5::${hdf5_target_name}" PROPERTY
+            IMPORTED_LOCATION_DEBUG "${_hdf5_location_debug}")
+        endif()
+        if (NOT _hdf5_location_release AND NOT _hdf5_location_debug)
+          set_property(TARGET "hdf5::${hdf5_target_name}" PROPERTY
+            IMPORTED_LOCATION "${_hdf5_location}")
+        endif()
         if (_hdf5_libtype STREQUAL "SHARED")
           set_property(TARGET "hdf5::${hdf5_target_name}" APPEND
             PROPERTY

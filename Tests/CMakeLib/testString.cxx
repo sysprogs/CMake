@@ -1,14 +1,12 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
    file Copyright.txt or https://cmake.org/licensing for details.  */
 
-#include <cstddef> // IWYU pragma: keep
 #include <cstring>
 #include <iostream>
 #include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <utility>
 
 #include <cm/string_view>
@@ -326,12 +324,14 @@ static bool testConstructMove()
   std::cout << "testConstructMove()\n";
   cm::String s1 = std::string("abc");
   cm::String s2 = std::move(s1);
+#ifndef __clang_analyzer__ /* cplusplus.Move */
   ASSERT_TRUE(s1.data() == nullptr);
   ASSERT_TRUE(s1.size() == 0);
   ASSERT_TRUE(s2.size() == 3);
   ASSERT_TRUE(std::strncmp(s2.data(), "abc", 3) == 0);
   ASSERT_TRUE(s1.is_stable());
   ASSERT_TRUE(s2.is_stable());
+#endif
   return true;
 }
 
@@ -356,12 +356,14 @@ static bool testAssignMove()
   cm::String s1 = std::string("abc");
   cm::String s2;
   s2 = std::move(s1);
+#ifndef __clang_analyzer__ /* cplusplus.Move */
   ASSERT_TRUE(s1.data() == nullptr);
   ASSERT_TRUE(s1.size() == 0);
   ASSERT_TRUE(s2.size() == 3);
   ASSERT_TRUE(std::strncmp(s2.data(), "abc", 3) == 0);
   ASSERT_TRUE(s1.is_stable());
   ASSERT_TRUE(s2.is_stable());
+#endif
   return true;
 }
 
@@ -1159,7 +1161,7 @@ static bool testStability()
   return true;
 }
 
-int testString(int /*unused*/, char* /*unused*/ [])
+int testString(int /*unused*/, char* /*unused*/[])
 {
   if (!testConstructDefault()) {
     return 1;

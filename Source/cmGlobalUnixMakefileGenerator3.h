@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "cmBuildOptions.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalCommonGenerator.h"
 #include "cmGlobalGeneratorFactory.h"
@@ -23,7 +24,6 @@ class cmLocalUnixMakefileGenerator3;
 class cmMakefile;
 class cmMakefileTargetGenerator;
 class cmake;
-struct cmDocumentationEntry;
 
 /** \class cmGlobalUnixMakefileGenerator3
  * \brief Write a Unix makefiles.
@@ -99,8 +99,14 @@ public:
    */
   bool SupportsCustomCommandDepfile() const override { return true; }
 
+  /**
+   * Utilized to determine if this generator
+   * supports linker dependency file.
+   */
+  bool SupportsLinkerDependencyFile() const override { return true; }
+
   /** Get the documentation entry for this generator.  */
-  static void GetDocumentation(cmDocumentationEntry& entry);
+  static cmDocumentationEntry GetDocumentation();
 
   std::unique_ptr<cmLocalGenerator> CreateLocalGenerator(
     cmMakefile* mf) override;
@@ -113,6 +119,8 @@ public:
                       bool optional) override;
 
   void Configure() override;
+
+  bool IsGNUMakeJobServerAware() const override { return true; }
 
   /**
    * Generate the all required files for building this project/tree. This
@@ -163,7 +171,8 @@ public:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 
@@ -172,7 +181,8 @@ public:
 
   void AddCXXCompileCommand(const std::string& sourceFile,
                             const std::string& workingDirectory,
-                            const std::string& compileCommand);
+                            const std::string& compileCommand,
+                            const std::string& objPath);
 
   /** Does the make tool tolerate .NOTPARALLEL? */
   virtual bool AllowNotParallel() const { return true; }
@@ -198,13 +208,16 @@ protected:
   void WriteMainCMakefile();
 
   void WriteConvenienceRules2(std::ostream& ruleFileStream,
-                              cmLocalUnixMakefileGenerator3&);
+                              cmLocalUnixMakefileGenerator3& rootLG,
+                              cmLocalUnixMakefileGenerator3& lg);
 
   void WriteDirectoryRule2(std::ostream& ruleFileStream,
+                           cmLocalUnixMakefileGenerator3& rootLG,
                            DirectoryTarget const& dt, const char* pass,
                            bool check_all, bool check_relink,
                            std::vector<std::string> const& commands = {});
   void WriteDirectoryRules2(std::ostream& ruleFileStream,
+                            cmLocalUnixMakefileGenerator3& rootLG,
                             DirectoryTarget const& dt);
 
   void AppendGlobalTargetDepends(std::vector<std::string>& depends,
@@ -228,7 +241,6 @@ protected:
   {
     return "package_source";
   }
-  const char* GetEditCacheTargetName() const override { return "edit_cache"; }
   const char* GetRebuildCacheTargetName() const override
   {
     return "rebuild_cache";
@@ -278,7 +290,6 @@ protected:
 
 private:
   const char* GetBuildIgnoreErrorsFlag() const override { return "-i"; }
-  std::string GetEditCacheCommand() const override;
 
   std::map<cmStateSnapshot, std::set<cmGeneratorTarget const*>,
            cmStateSnapshot::StrictWeakOrder>

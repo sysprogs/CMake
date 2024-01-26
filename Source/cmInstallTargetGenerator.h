@@ -11,7 +11,6 @@
 #include "cmInstallGenerator.h"
 #include "cmInstallType.h"
 #include "cmListFileCache.h"
-#include "cmScriptGenerator.h"
 
 class cmGeneratorTarget;
 class cmLocalGenerator;
@@ -39,7 +38,10 @@ public:
     NamelinkModeSkip
   };
   void SetNamelinkMode(NamelinkModeType mode) { this->NamelinkMode = mode; }
-  NamelinkModeType GetNamelinkMode() const { return this->NamelinkMode; }
+  void SetImportlinkMode(NamelinkModeType mode)
+  {
+    this->ImportlinkMode = mode;
+  }
 
   std::string GetInstallFilename(const std::string& config) const;
 
@@ -51,7 +53,8 @@ public:
     NameNormal,
     NameImplib,
     NameSO,
-    NameReal
+    NameReal,
+    NameImplibReal
   };
 
   static std::string GetInstallFilename(const cmGeneratorTarget* target,
@@ -82,6 +85,7 @@ public:
     // Prefix for all files in To.
     std::string ToDir;
 
+    NamelinkModeType NamelinkMode = NamelinkModeNone;
     bool NoTweak = false;
     bool UseSourcePermissions = false;
     cmInstallType Type = cmInstallType();
@@ -93,15 +97,6 @@ public:
 protected:
   void GenerateScriptForConfig(std::ostream& os, const std::string& config,
                                Indent indent) override;
-  using TweakMethod = void (cmInstallTargetGenerator::*)(std::ostream&, Indent,
-                                                         const std::string&,
-                                                         const std::string&);
-  void AddTweak(std::ostream& os, Indent indent, const std::string& config,
-                std::string const& file, TweakMethod tweak);
-  void AddTweak(std::ostream& os, Indent indent, const std::string& config,
-                std::string const& dir, std::vector<std::string> const& files,
-                TweakMethod tweak);
-  std::string GetDestDirPath(std::string const& file);
   void PreReplacementTweaks(std::ostream& os, Indent indent,
                             const std::string& config,
                             std::string const& file);
@@ -127,9 +122,10 @@ protected:
   void IssueCMP0095Warning(const std::string& unescapedRpath);
 
   std::string const TargetName;
-  cmGeneratorTarget* Target;
+  cmGeneratorTarget* Target = nullptr;
   std::string const FilePermissions;
   NamelinkModeType NamelinkMode;
+  NamelinkModeType ImportlinkMode;
   bool const ImportLibrary;
   bool const Optional;
 };

@@ -14,14 +14,15 @@
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmProperty.h"
 #include "cmSourceFile.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmake.h"
 
 /*
@@ -43,7 +44,8 @@ cmExtraSublimeTextGenerator::GetFactory()
 {
   static cmExternalMakefileProjectGeneratorSimpleFactory<
     cmExtraSublimeTextGenerator>
-    factory("Sublime Text 2", "Generates Sublime Text 2 project files.");
+    factory("Sublime Text 2",
+            "Generates Sublime Text 2 project files (deprecated).");
 
   if (factory.GetSupportedGlobalGenerators().empty()) {
 #if defined(_WIN32)
@@ -137,7 +139,7 @@ void cmExtraSublimeTextGenerator::CreateNewProjectFile(
   // End of build_systems
   fout << "\n\t]";
   std::string systemName = mf->GetSafeDefinition("CMAKE_SYSTEM_NAME");
-  std::vector<std::string> tokens = cmExpandedList(this->EnvSettings);
+  cmList tokens{ this->EnvSettings };
 
   if (!this->EnvSettings.empty()) {
     fout << ",";
@@ -364,12 +366,12 @@ std::string cmExtraSublimeTextGenerator::ComputeFlagsForObject(
                                                     language);
 
   const std::string COMPILE_FLAGS("COMPILE_FLAGS");
-  if (cmProp cflags = source->GetProperty(COMPILE_FLAGS)) {
+  if (cmValue cflags = source->GetProperty(COMPILE_FLAGS)) {
     lg->AppendFlags(flags, genexInterpreter.Evaluate(*cflags, COMPILE_FLAGS));
   }
 
   const std::string COMPILE_OPTIONS("COMPILE_OPTIONS");
-  if (cmProp coptions = source->GetProperty(COMPILE_OPTIONS)) {
+  if (cmValue coptions = source->GetProperty(COMPILE_OPTIONS)) {
     lg->AppendCompileOptions(
       flags, genexInterpreter.Evaluate(*coptions, COMPILE_OPTIONS));
   }
@@ -393,14 +395,14 @@ std::string cmExtraSublimeTextGenerator::ComputeDefines(
   // Add preprocessor definitions for this target and configuration.
   lg->GetTargetDefines(target, config, language, defines);
   const std::string COMPILE_DEFINITIONS("COMPILE_DEFINITIONS");
-  if (cmProp compile_defs = source->GetProperty(COMPILE_DEFINITIONS)) {
+  if (cmValue compile_defs = source->GetProperty(COMPILE_DEFINITIONS)) {
     lg->AppendDefines(
       defines, genexInterpreter.Evaluate(*compile_defs, COMPILE_DEFINITIONS));
   }
 
   std::string defPropName =
     cmStrCat("COMPILE_DEFINITIONS_", cmSystemTools::UpperCase(config));
-  if (cmProp config_compile_defs = source->GetProperty(defPropName)) {
+  if (cmValue config_compile_defs = source->GetProperty(defPropName)) {
     lg->AppendDefines(
       defines,
       genexInterpreter.Evaluate(*config_compile_defs, COMPILE_DEFINITIONS));
@@ -425,7 +427,7 @@ std::string cmExtraSublimeTextGenerator::ComputeIncludes(
 
   // Add include directories for this source file
   const std::string INCLUDE_DIRECTORIES("INCLUDE_DIRECTORIES");
-  if (cmProp cincludes = source->GetProperty(INCLUDE_DIRECTORIES)) {
+  if (cmValue cincludes = source->GetProperty(INCLUDE_DIRECTORIES)) {
     lg->AppendIncludeDirectories(
       includes, genexInterpreter.Evaluate(*cincludes, INCLUDE_DIRECTORIES),
       *source);
@@ -435,7 +437,7 @@ std::string cmExtraSublimeTextGenerator::ComputeIncludes(
   lg->GetIncludeDirectories(includes, target, language, config);
 
   std::string includesString =
-    lg->GetIncludeFlags(includes, target, language, true, false, config);
+    lg->GetIncludeFlags(includes, target, language, config, false);
 
   return includesString;
 }
@@ -444,7 +446,7 @@ bool cmExtraSublimeTextGenerator::Open(const std::string& bindir,
                                        const std::string& projectName,
                                        bool dryRun)
 {
-  cmProp sublExecutable =
+  cmValue sublExecutable =
     this->GlobalGenerator->GetCMakeInstance()->GetCacheDefinition(
       "CMAKE_SUBLIMETEXT_EXECUTABLE");
   if (!sublExecutable) {

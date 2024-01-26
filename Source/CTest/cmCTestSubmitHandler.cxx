@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <sstream>
 
+#include <cm/iomanip>
 #include <cmext/algorithm>
 
 #include <cm3p/curl/curl.h>
@@ -21,10 +22,11 @@
 #include "cmCurl.h"
 #include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
-#include "cmProperty.h"
+#include "cmList.h"
 #include "cmState.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmXMLParser.h"
 #include "cmake.h"
 
@@ -55,7 +57,7 @@ private:
   {
     std::string val;
     if (!this->CurrentValue.empty()) {
-      val.assign(&this->CurrentValue[0], this->CurrentValue.size());
+      val.assign(this->CurrentValue.data(), this->CurrentValue.size());
     }
     return val;
   }
@@ -123,7 +125,7 @@ void cmCTestSubmitHandler::Initialize()
 {
   // We submit all available parts by default.
   for (cmCTest::Part p = cmCTest::PartStart; p != cmCTest::PartCount;
-       p = cmCTest::Part(p + 1)) {
+       p = static_cast<cmCTest::Part>(p + 1)) {
     this->SubmitPart[p] = true;
   }
   this->HasWarnings = false;
@@ -141,7 +143,6 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
   const std::string& remoteprefix, const std::string& url)
 {
   CURL* curl;
-  CURLcode res;
   FILE* ftpfile;
   char error_buffer[1024];
   // Set Content-Type to satisfy fussy modsecurity rules.
@@ -159,7 +160,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
   /* In windows, this will init the winsock stuff */
   ::curl_global_init(CURL_GLOBAL_ALL);
   std::string curlopt(this->CTest->GetCTestConfiguration("CurlOptions"));
-  std::vector<std::string> args = cmExpandedList(curlopt);
+  cmList args{ curlopt };
   bool verifyPeerOff = false;
   bool verifyHostOff = false;
   for (std::string const& arg : args) {
@@ -209,18 +210,17 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
       if (this->CTest->ShouldUseHTTP10()) {
         curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
       }
-      // enable HTTP ERROR parsing
-      curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
       /* enable uploading */
       curl_easy_setopt(curl, CURLOPT_UPLOAD, 1);
 
       // if there is little to no activity for too long stop submitting
       ::curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1);
-      ::curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME,
-                         SUBMIT_TIMEOUT_IN_SECONDS_DEFAULT);
+      auto submitInactivityTimeout = this->GetSubmitInactivityTimeout();
+      if (submitInactivityTimeout != 0) {
+        ::curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME,
+                           submitInactivityTimeout);
+      }
 
-      /* HTTP PUT please */
-      ::curl_easy_setopt(curl, CURLOPT_PUT, 1);
       ::curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
 
       ::curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -261,7 +261,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
         cmCTestScriptHandler* ch = this->CTest->GetScriptHandler();
         cmake* cm = ch->GetCMake();
         if (cm) {
-          cmProp subproject = cm->GetState()->GetGlobalProperty("SubProject");
+          cmValue subproject = cm->GetState()->GetGlobalProperty("SubProject");
           if (subproject) {
             upload_as += "&subproject=";
             upload_as += ctest_curl.Escape(*subproject);
@@ -283,10 +283,10 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
       upload_as += "&MD5=";
 
       if (cmIsOn(this->GetOption("InternalTest"))) {
-        upload_as += "bad_md5sum";
+        upload_as += "ffffffffffffffffffffffffffffffff";
       } else {
-        upload_as +=
-          cmSystemTools::ComputeFileHash(local_file, cmCryptoHash::AlgoMD5);
+        cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
+        upload_as += hasher.HashFile(local_file);
       }
 
       if (!cmSystemTools::FileExists(local_file)) {
@@ -308,6 +308,9 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
 
       // specify target
       ::curl_easy_setopt(curl, CURLOPT_URL, upload_as.c_str());
+
+      // follow redirects
+      ::curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 
       // CURLAUTH_BASIC is default, and here we allow additional methods,
       // including more secure ones
@@ -335,7 +338,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
       ::curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &chunkDebug);
 
       // Now run off and do what you've been told!
-      res = ::curl_easy_perform(curl);
+      ::curl_easy_perform(curl);
 
       if (!chunk.empty()) {
         cmCTestOptionalLog(this->CTest, DEBUG,
@@ -356,13 +359,13 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
 
       // If curl failed for any reason, or checksum fails, wait and retry
       //
-      if (res != CURLE_OK || this->HasErrors) {
-        std::string retryDelay = this->GetOption("RetryDelay") == nullptr
-          ? ""
-          : this->GetOption("RetryDelay");
-        std::string retryCount = this->GetOption("RetryCount") == nullptr
-          ? ""
-          : this->GetOption("RetryCount");
+      long response_code;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+      bool successful_submission = response_code == 200;
+
+      if (!successful_submission || this->HasErrors) {
+        std::string retryDelay = *this->GetOption("RetryDelay");
+        std::string retryCount = *this->GetOption("RetryCount");
 
         auto delay = cmDuration(
           retryDelay.empty()
@@ -398,7 +401,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
           chunkDebug.clear();
           this->HasErrors = false;
 
-          res = ::curl_easy_perform(curl);
+          ::curl_easy_perform(curl);
 
           if (!chunk.empty()) {
             cmCTestOptionalLog(this->CTest, DEBUG,
@@ -409,14 +412,16 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
             this->ParseResponse(chunk);
           }
 
-          if (res == CURLE_OK && !this->HasErrors) {
+          curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+          if (response_code == 200 && !this->HasErrors) {
+            successful_submission = true;
             break;
           }
         }
       }
 
       fclose(ftpfile);
-      if (res) {
+      if (!successful_submission) {
         cmCTestLog(this->CTest, ERROR_MESSAGE,
                    "   Error when uploading file: " << local_file
                                                     << std::endl);
@@ -501,9 +506,12 @@ int cmCTestSubmitHandler::HandleCDashUploadFile(std::string const& file,
   cmCTestCurl curl(this->CTest);
   curl.SetQuiet(this->Quiet);
   std::string curlopt(this->CTest->GetCTestConfiguration("CurlOptions"));
-  std::vector<std::string> args = cmExpandedList(curlopt);
+  cmList args{ curlopt };
   curl.SetCurlOptions(args);
-  curl.SetTimeOutSeconds(SUBMIT_TIMEOUT_IN_SECONDS_DEFAULT);
+  auto submitInactivityTimeout = this->GetSubmitInactivityTimeout();
+  if (submitInactivityTimeout != 0) {
+    curl.SetTimeOutSeconds(submitInactivityTimeout);
+  }
   curl.SetHttpHeaders(this->HttpHeaders);
   std::string url = this->CTest->GetSubmitURL();
   if (!cmHasLiteralPrefix(url, "http://") &&
@@ -522,12 +530,8 @@ int cmCTestSubmitHandler::HandleCDashUploadFile(std::string const& file,
   bool internalTest = cmIsOn(this->GetOption("InternalTest"));
 
   // Get RETRY_COUNT and RETRY_DELAY values if they were set.
-  std::string retryDelayString = this->GetOption("RetryDelay") == nullptr
-    ? ""
-    : this->GetOption("RetryDelay");
-  std::string retryCountString = this->GetOption("RetryCount") == nullptr
-    ? ""
-    : this->GetOption("RetryCount");
+  std::string retryDelayString = *this->GetOption("RetryDelay");
+  std::string retryCountString = *this->GetOption("RetryCount");
   auto retryDelay = std::chrono::seconds(0);
   if (!retryDelayString.empty()) {
     unsigned long retryDelayValue = 0;
@@ -548,15 +552,15 @@ int cmCTestSubmitHandler::HandleCDashUploadFile(std::string const& file,
     }
   }
 
-  std::string md5sum =
-    cmSystemTools::ComputeFileHash(file, cmCryptoHash::AlgoMD5);
+  cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
+  std::string md5sum = hasher.HashFile(file);
   // 1. request the buildid and check to see if the file
   //    has already been uploaded
   // TODO I added support for subproject. You would need to add
   // a "&subproject=subprojectname" to the first POST.
   cmCTestScriptHandler* ch = this->CTest->GetScriptHandler();
   cmake* cm = ch->GetCMake();
-  cmProp subproject = cm->GetState()->GetGlobalProperty("SubProject");
+  cmValue subproject = cm->GetState()->GetGlobalProperty("SubProject");
   // TODO: Encode values for a URL instead of trusting caller.
   std::ostringstream str;
   if (subproject) {
@@ -716,10 +720,10 @@ int cmCTestSubmitHandler::HandleCDashUploadFile(std::string const& file,
 
 int cmCTestSubmitHandler::ProcessHandler()
 {
-  const char* cdashUploadFile = this->GetOption("CDashUploadFile");
-  const char* cdashUploadType = this->GetOption("CDashUploadType");
+  cmValue cdashUploadFile = this->GetOption("CDashUploadFile");
+  cmValue cdashUploadType = this->GetOption("CDashUploadType");
   if (cdashUploadFile && cdashUploadType) {
-    return this->HandleCDashUploadFile(cdashUploadFile, cdashUploadType);
+    return this->HandleCDashUploadFile(*cdashUploadFile, *cdashUploadType);
   }
 
   const std::string& buildDirectory =
@@ -731,15 +735,15 @@ int cmCTestSubmitHandler::ProcessHandler()
     return -1;
   }
 
-  if (getenv("HTTP_PROXY")) {
+  if (char const* proxy = getenv("HTTP_PROXY")) {
     this->HTTPProxyType = 1;
-    this->HTTPProxy = getenv("HTTP_PROXY");
+    this->HTTPProxy = proxy;
     if (getenv("HTTP_PROXY_PORT")) {
       this->HTTPProxy += ":";
       this->HTTPProxy += getenv("HTTP_PROXY_PORT");
     }
-    if (getenv("HTTP_PROXY_TYPE")) {
-      std::string type = getenv("HTTP_PROXY_TYPE");
+    if (char const* proxy_type = getenv("HTTP_PROXY_TYPE")) {
+      std::string type = proxy_type;
       // HTTP/SOCKS4/SOCKS5
       if (type == "HTTP") {
         this->HTTPProxyType = 1;
@@ -804,13 +808,14 @@ int cmCTestSubmitHandler::ProcessHandler()
     }
   }
   this->CTest->AddIfExists(cmCTest::PartMemCheck, "DynamicAnalysis.xml");
+  this->CTest->AddIfExists(cmCTest::PartMemCheck, "DynamicAnalysis-Test.xml");
   this->CTest->AddIfExists(cmCTest::PartMemCheck, "Purify.xml");
   this->CTest->AddIfExists(cmCTest::PartNotes, "Notes.xml");
   this->CTest->AddIfExists(cmCTest::PartUpload, "Upload.xml");
 
   // Query parts for files to submit.
   for (cmCTest::Part p = cmCTest::PartStart; p != cmCTest::PartCount;
-       p = cmCTest::Part(p + 1)) {
+       p = static_cast<cmCTest::Part>(p + 1)) {
     // Skip parts we are not submitting.
     if (!this->SubmitPart[p]) {
       continue;
@@ -894,10 +899,29 @@ void cmCTestSubmitHandler::SelectParts(std::set<cmCTest::Part> const& parts)
 {
   // Check whether each part is selected.
   for (cmCTest::Part p = cmCTest::PartStart; p != cmCTest::PartCount;
-       p = cmCTest::Part(p + 1)) {
-    this->SubmitPart[p] =
-      (std::set<cmCTest::Part>::const_iterator(parts.find(p)) != parts.end());
+       p = static_cast<cmCTest::Part>(p + 1)) {
+    this->SubmitPart[p] = parts.find(p) != parts.end();
   }
+}
+
+int cmCTestSubmitHandler::GetSubmitInactivityTimeout()
+{
+  int submitInactivityTimeout = SUBMIT_TIMEOUT_IN_SECONDS_DEFAULT;
+  std::string const& timeoutStr =
+    this->CTest->GetCTestConfiguration("SubmitInactivityTimeout");
+  if (!timeoutStr.empty()) {
+    unsigned long timeout;
+    if (cmStrToULong(timeoutStr, &timeout)) {
+      submitInactivityTimeout = static_cast<int>(timeout);
+    } else {
+      cmCTestLog(this->CTest, ERROR_MESSAGE,
+                 "SubmitInactivityTimeout is invalid: "
+                   << cm::quoted(timeoutStr) << "."
+                   << " Using a default value of "
+                   << SUBMIT_TIMEOUT_IN_SECONDS_DEFAULT << "." << std::endl);
+    }
+  }
+  return submitInactivityTimeout;
 }
 
 void cmCTestSubmitHandler::SelectFiles(std::set<std::string> const& files)

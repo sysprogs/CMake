@@ -12,10 +12,11 @@
 #include <vector>
 
 #include "cmListFileCache.h"
+#include "cmLocalGenerator.h"
 
+class cmake;
 class cmCompiledGeneratorExpression;
 class cmGeneratorTarget;
-class cmLocalGenerator;
 struct cmGeneratorExpressionContext;
 struct cmGeneratorExpressionDAGChecker;
 struct cmGeneratorExpressionEvaluator;
@@ -33,7 +34,8 @@ class cmGeneratorExpression
 {
 public:
   /** Construct. */
-  cmGeneratorExpression(cmListFileBacktrace backtrace = cmListFileBacktrace());
+  cmGeneratorExpression(cmake& cmakeInstance,
+                        cmListFileBacktrace backtrace = cmListFileBacktrace());
   ~cmGeneratorExpression();
 
   cmGeneratorExpression(cmGeneratorExpression const&) = delete;
@@ -82,6 +84,7 @@ public:
                                    const std::string& replacement);
 
 private:
+  cmake& CMakeInstance;
   cmListFileBacktrace Backtrace;
 };
 
@@ -152,7 +155,8 @@ private:
     cmGeneratorExpressionContext& context,
     cmGeneratorExpressionDAGChecker* dagChecker) const;
 
-  cmCompiledGeneratorExpression(cmListFileBacktrace backtrace,
+  cmCompiledGeneratorExpression(cmake& cmakeInstance,
+                                cmListFileBacktrace backtrace,
                                 std::string input);
 
   friend class cmGeneratorExpression;
@@ -161,8 +165,8 @@ private:
   std::vector<std::unique_ptr<cmGeneratorExpressionEvaluator>> Evaluators;
   const std::string Input;
   bool NeedsEvaluation;
-  bool EvaluateForBuildsystem;
-  bool Quiet;
+  bool EvaluateForBuildsystem = false;
+  bool Quiet = false;
 
   mutable std::set<cmGeneratorTarget*> DependTargets;
   mutable std::set<cmGeneratorTarget const*> AllTargetsSeen;
@@ -171,9 +175,9 @@ private:
                    std::map<std::string, std::string>>
     MaxLanguageStandard;
   mutable std::string Output;
-  mutable bool HadContextSensitiveCondition;
-  mutable bool HadHeadSensitiveCondition;
-  mutable bool HadLinkLanguageSensitiveCondition;
+  mutable bool HadContextSensitiveCondition = false;
+  mutable bool HadHeadSensitiveCondition = false;
+  mutable bool HadLinkLanguageSensitiveCondition = false;
   mutable std::set<cmGeneratorTarget const*> SourceSensitiveTargets;
 };
 
@@ -184,7 +188,8 @@ public:
                                    std::string config,
                                    cmGeneratorTarget const* headTarget,
                                    std::string language = std::string())
-    : LocalGenerator(localGenerator)
+    : GeneratorExpression(*localGenerator->GetCMakeInstance())
+    , LocalGenerator(localGenerator)
     , Config(std::move(config))
     , HeadTarget(headTarget)
     , Language(std::move(language))

@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <iterator>
+#include <ratio>
 #include <sstream>
 #include <utility>
 
@@ -305,7 +306,7 @@ int cmCTestMemCheckHandler::GetDefectCount() const
   return this->DefectCount;
 }
 
-void cmCTestMemCheckHandler::GenerateDartOutput(cmXMLWriter& xml)
+void cmCTestMemCheckHandler::GenerateCTestXML(cmXMLWriter& xml)
 {
   if (!this->CTest->GetProduceXML()) {
     return;
@@ -371,7 +372,8 @@ void cmCTestMemCheckHandler::GenerateDartOutput(cmXMLWriter& xml)
     }
     this->CleanTestOutput(
       memcheckstr,
-      static_cast<size_t>(this->CustomMaximumFailedTestOutputSize));
+      static_cast<size_t>(this->CustomMaximumFailedTestOutputSize),
+      this->TestOutputTruncation);
     this->WriteTestResultHeader(xml, result);
     xml.StartElement("Results");
     int memoryErrors = 0;
@@ -960,15 +962,15 @@ bool cmCTestMemCheckHandler::ProcessMemCheckValgrindOutput(
     "== .*[0-9,]+ bytes in [0-9,]+ blocks are still reachable"
     " in loss record [0-9,]+ of [0-9,]+");
   cmsys::RegularExpression vgUMC(
-    "== .*Conditional jump or move depends on uninitialised value\\(s\\)");
+    "== .*Conditional jump or move depends on uninitiali[sz]ed value\\(s\\)");
   cmsys::RegularExpression vgUMR1(
-    "== .*Use of uninitialised value of size [0-9,]+");
+    "== .*Use of uninitiali[sz]ed value of size [0-9,]+");
   cmsys::RegularExpression vgUMR2("== .*Invalid read of size [0-9,]+");
   cmsys::RegularExpression vgUMR3("== .*Jump to the invalid address ");
   cmsys::RegularExpression vgUMR4(
     "== .*Syscall param .* contains "
-    "uninitialised or unaddressable byte\\(s\\)");
-  cmsys::RegularExpression vgUMR5("== .*Syscall param .* uninitialised");
+    "uninitiali[sz]ed or unaddressable byte\\(s\\)");
+  cmsys::RegularExpression vgUMR5("== .*Syscall param .* uninitiali[sz]ed");
   cmsys::RegularExpression vgIPW("== .*Invalid write of size [0-9,]+");
   cmsys::RegularExpression vgABR("== .*pthread_mutex_unlock: mutex is "
                                  "locked by a different thread");
@@ -1176,6 +1178,13 @@ bool cmCTestMemCheckHandler::ProcessMemCheckCudaOutput(
     // generic error: ignore ERROR SUMMARY, CUDA-MEMCHECK and others
     "== ([A-Z][a-z].*)"
   };
+  // matchers for messages that aren't defects, but caught by above matchers
+  std::vector<cmsys::RegularExpression> false_positive_matchers{
+    "== Error: No attachable process found.*timed-out",
+    "== Default timeout can be adjusted with --launch-timeout",
+    "== Error: Target application terminated before first instrumented API",
+    "== Tracking kernels launched by child processes requires"
+  };
 
   std::vector<std::string::size_type> nonMemcheckOutput;
   auto sttime = std::chrono::steady_clock::now();
@@ -1195,18 +1204,25 @@ bool cmCTestMemCheckHandler::ProcessMemCheckCudaOutput(
       if (leakExpr.find(line)) {
         failure = static_cast<int>(this->FindOrAddWarning("Memory leak"));
       } else {
-        for (auto& matcher : matchers) {
-          if (matcher.find(line)) {
+        auto match_predicate =
+          [&line](cmsys::RegularExpression& matcher) -> bool {
+          return matcher.find(line);
+        };
+        auto const pos_matcher =
+          std::find_if(matchers.begin(), matchers.end(), match_predicate);
+        if (pos_matcher != matchers.end()) {
+          if (!std::any_of(false_positive_matchers.begin(),
+                           false_positive_matchers.end(), match_predicate)) {
             failure =
-              static_cast<int>(this->FindOrAddWarning(matcher.match(1)));
-            break;
+              static_cast<int>(this->FindOrAddWarning(pos_matcher->match(1)));
           }
         }
       }
 
       if (failure >= 0) {
         ostr << "<b>" << this->ResultStrings[failure] << "</b> ";
-        if (results.empty() || unsigned(failure) > results.size() - 1) {
+        if (results.empty() ||
+            static_cast<unsigned>(failure) > results.size() - 1) {
           results.push_back(1);
         } else {
           results[failure]++;

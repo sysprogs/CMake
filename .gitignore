@@ -1,15 +1,36 @@
-# Exclude MacOS Finder files.
+/CMakeUserPresets.json
+
+# Common build directories
+/build*/
+
+# CI jobs that run in symlinked trees produce these artifacts.
+/real_work/
+/work
+
+# MacOS Finder files.
 .DS_Store
 
-*.user*
-
+# Python compile output.
 *.pyc
-Testing
-CMakeUserPresets.json
 
-# Visual Studio work directory
-.vs/
+# See Utilities/Sphinx/tutorial_archive.cmake
+/Help/_generated
+
+# CLion work directory
+/.idea/
+# CLion build directories
+/cmake-build-*/
+
+# QtCreator files.
+/CMakeLists.txt.user*
 
 # Visual Studio Code
 .vscode/
 build
+/.vscode/
+/.cache/
+
+# Visual Studio work directory
+/.vs/
+# Visual Studio build directory
+/out/

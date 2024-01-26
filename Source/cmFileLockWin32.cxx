@@ -36,9 +36,9 @@ cmFileLockResult cmFileLock::OpenFile()
 {
   const DWORD access = GENERIC_READ | GENERIC_WRITE;
   const DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
-  const PSECURITY_ATTRIBUTES security = NULL;
+  const PSECURITY_ATTRIBUTES security = nullptr;
   const DWORD attr = 0;
-  const HANDLE templ = NULL;
+  const HANDLE templ = nullptr;
   this->File = CreateFileW(
     cmSystemTools::ConvertToWindowsExtendedPath(this->Filename).c_str(),
     access, shareMode, security, OPEN_EXISTING, attr, templ);
@@ -78,7 +78,7 @@ cmFileLockResult cmFileLock::LockWithTimeout(unsigned long seconds)
   }
 }
 
-BOOL cmFileLock::LockFile(DWORD flags)
+int cmFileLock::LockFile(int flags)
 {
   const DWORD reserved = 0;
   const unsigned long len = static_cast<unsigned long>(-1);

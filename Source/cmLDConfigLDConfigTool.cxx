@@ -9,11 +9,12 @@
 
 #include "cmsys/RegularExpression.hxx"
 
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmRuntimeDependencyArchive.h"
-#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmUVProcessChain.h"
+#include "cmUVStream.h"
 
 cmLDConfigLDConfigTool::cmLDConfigLDConfigTool(
   cmRuntimeDependencyArchive* archive)
@@ -34,7 +35,7 @@ bool cmLDConfigLDConfigTool::GetLDConfigPaths(std::vector<std::string>& paths)
     }
   }
 
-  std::vector<std::string> ldConfigCommand = cmExpandedList(ldConfigPath);
+  cmList ldConfigCommand{ ldConfigPath };
   ldConfigCommand.emplace_back("-v");
   ldConfigCommand.emplace_back("-N"); // Don't rebuild the cache.
   ldConfigCommand.emplace_back("-X"); // Don't update links.
@@ -43,14 +44,15 @@ bool cmLDConfigLDConfigTool::GetLDConfigPaths(std::vector<std::string>& paths)
   builder.SetBuiltinStream(cmUVProcessChainBuilder::Stream_OUTPUT)
     .AddCommand(ldConfigCommand);
   auto process = builder.Start();
-  if (!process.Valid()) {
+  if (!process.Valid() || process.GetStatus(0).SpawnResult != 0) {
     this->Archive->SetError("Failed to start ldconfig process");
     return false;
   }
 
   std::string line;
   static const cmsys::RegularExpression regex("^([^\t:]*):");
-  while (std::getline(*process.OutputStream(), line)) {
+  cmUVPipeIStream output(process.GetLoop(), process.OutputStream());
+  while (std::getline(output, line)) {
     cmsys::RegularExpressionMatch match;
     if (regex.find(line.c_str(), match)) {
       paths.push_back(match.match(1));
@@ -61,8 +63,7 @@ bool cmLDConfigLDConfigTool::GetLDConfigPaths(std::vector<std::string>& paths)
     this->Archive->SetError("Failed to wait on ldconfig process");
     return false;
   }
-  auto status = process.GetStatus();
-  if (!status[0] || status[0]->ExitStatus != 0) {
+  if (process.GetStatus(0).ExitStatus != 0) {
     this->Archive->SetError("Failed to run ldconfig");
     return false;
   }

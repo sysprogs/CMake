@@ -18,6 +18,7 @@ set(__pch_header_OBJCXX "objective-c++-header")
 macro(__compiler_gnu lang)
   # Feature flags.
   set(CMAKE_${lang}_VERBOSE_FLAG "-v")
+  set(CMAKE_${lang}_COMPILE_OPTIONS_WARNING_AS_ERROR "-Werror")
   set(CMAKE_${lang}_COMPILE_OPTIONS_PIC "-fPIC")
   set (_CMAKE_${lang}_PIE_MAY_BE_SUPPORTED_BY_LINKER NO)
   if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.4)
@@ -51,6 +52,52 @@ macro(__compiler_gnu lang)
     set(CMAKE_DEPFILE_FLAGS_${lang} "-MD -MT <DEP_TARGET> -MF <DEP_FILE>")
   endif()
 
+  # define flags for linker depfile generation
+  set(CMAKE_${lang}_LINKER_DEPFILE_FLAGS "LINKER:--dependency-file,<DEP_FILE>")
+  set(CMAKE_${lang}_LINKER_DEPFILE_FORMAT gcc)
+
+  if(NOT DEFINED CMAKE_${lang}_LINKER_DEPFILE_SUPPORTED)
+    ## Ensure ninja tool is recent enough...
+    if(CMAKE_GENERATOR MATCHES "^Ninja")
+      # Ninja 1.10 or upper is required
+      execute_process(COMMAND "${CMAKE_MAKE_PROGRAM}" --version
+        OUTPUT_VARIABLE _ninja_version
+        ERROR_VARIABLE _ninja_version)
+      if (_ninja_version MATCHES "[0-9]+(\\.[0-9]+)*")
+        set (_ninja_version "${CMAKE_MATCH_0}")
+      endif()
+      if (_ninja_version VERSION_LESS "1.10")
+        set(CMAKE_${lang}_LINKER_DEPFILE_SUPPORTED FALSE)
+      endif()
+      unset(_ninja_version)
+    endif()
+
+    if (NOT DEFINED CMAKE_${lang}_LINKER_DEPFILE_SUPPORTED)
+      ## check if this feature is supported by the linker
+      execute_process(COMMAND "${CMAKE_${lang}_COMPILER}" -Wl,--help
+        OUTPUT_VARIABLE _linker_capabilities
+        ERROR_VARIABLE _linker_capabilities)
+      if(_linker_capabilities MATCHES "--dependency-file")
+        set(CMAKE_${lang}_LINKER_DEPFILE_SUPPORTED TRUE)
+      else()
+        set(CMAKE_${lang}_LINKER_DEPFILE_SUPPORTED FALSE)
+      endif()
+      unset(_linker_capabilities)
+    endif()
+  endif()
+  if (CMAKE_${lang}_LINKER_DEPFILE_SUPPORTED)
+    set(CMAKE_${lang}_LINK_DEPENDS_USE_LINKER TRUE)
+  else()
+    unset(CMAKE_${lang}_LINK_DEPENDS_USE_LINKER)
+  endif()
+
+  # For now, due to GNU binutils ld bug when LTO is enabled (see GNU bug
+    # `30568 <https://sourceware.org/bugzilla/show_bug.cgi?id=30568>`_),
+  # deactivate this feature.
+  if (NOT DEFINED CMAKE_LINK_DEPENDS_USE_LINKER)
+    set(CMAKE_LINK_DEPENDS_USE_LINKER FALSE)
+  endif()
+
   # Initial configuration flags.
   string(APPEND CMAKE_${lang}_FLAGS_INIT " ")
   string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -g")
@@ -71,7 +118,25 @@ macro(__compiler_gnu lang)
   # * https://gcc.gnu.org/onlinedocs/gcc-4.5.4/gcc/Option-Summary.html (yes)
   if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 4.5)
     set(_CMAKE_${lang}_IPO_MAY_BE_SUPPORTED_BY_COMPILER YES)
-    set(__lto_flags -flto)
+
+    set(__lto_flags "")
+
+    # '-flto=auto' introduced since GCC 10.1:
+    # * https://gcc.gnu.org/onlinedocs/gcc-9.5.0/gcc/Optimize-Options.html#Optimize-Options (no)
+    # * https://gcc.gnu.org/onlinedocs/gcc-10.1.0/gcc/Optimize-Options.html#Optimize-Options (yes)
+    # Since GCC 12.1, the abundance of a parameter produces a warning if compiling multiple targets.
+    # FIXME: What version of GCC for Windows added support for -flto=auto?  10.3 does not have it.
+    if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 11.0)
+      list(APPEND __lto_flags -flto=auto)
+    elseif(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 10.1)
+      if (CMAKE_HOST_WIN32)
+        list(APPEND __lto_flags -flto=1)
+      else()
+        list(APPEND __lto_flags -flto=auto)
+      endif()
+    else()
+      list(APPEND __lto_flags -flto)
+    endif()
 
     if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 4.7)
       # '-ffat-lto-objects' introduced since GCC 4.7:
@@ -102,13 +167,15 @@ macro(__compiler_gnu lang)
     )
   endif()
 
-  set(CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "${CMAKE_${lang}_COMPILER}")
-  if(CMAKE_${lang}_COMPILER_ARG1)
-    separate_arguments(_COMPILER_ARGS NATIVE_COMMAND "${CMAKE_${lang}_COMPILER_ARG1}")
-    list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND ${_COMPILER_ARGS})
-    unset(_COMPILER_ARGS)
+  if("${lang}" STREQUAL "CXX")
+    set(CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "${CMAKE_${lang}_COMPILER}")
+    if(CMAKE_${lang}_COMPILER_ARG1)
+      separate_arguments(_COMPILER_ARGS NATIVE_COMMAND "${CMAKE_${lang}_COMPILER_ARG1}")
+      list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND ${_COMPILER_ARGS})
+      unset(_COMPILER_ARGS)
+    endif()
+    list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "-dM" "-E" "-c" "${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp")
   endif()
-  list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "-dM" "-E" "-c" "${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp")
 
   if(NOT "x${lang}" STREQUAL "xFortran")
     set(CMAKE_PCH_EXTENSION .gch)
@@ -118,5 +185,12 @@ macro(__compiler_gnu lang)
     set(CMAKE_${lang}_COMPILE_OPTIONS_INVALID_PCH -Winvalid-pch)
     set(CMAKE_${lang}_COMPILE_OPTIONS_USE_PCH -include <PCH_HEADER>)
     set(CMAKE_${lang}_COMPILE_OPTIONS_CREATE_PCH -x ${__pch_header_${lang}} -include <PCH_HEADER>)
+  endif()
+
+  # '-fdiagnostics-color=always' introduced since GCC 4.9
+  # https://gcc.gnu.org/gcc-4.9/changes.html
+  if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 4.9)
+    set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS "-fdiagnostics-color=always")
+    set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS_OFF "-fno-diagnostics-color")
   endif()
 endmacro()

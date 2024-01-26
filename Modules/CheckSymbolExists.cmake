@@ -24,29 +24,24 @@ available and assumed to work.  If the header files declare the symbol
 as a function or variable then the symbol must also be available for
 linking (so intrinsics may not be detected).
 If the symbol is a type, enum value, or intrinsic it will not be recognized
-(consider using :module:`CheckTypeSize` or :module:`CheckCSourceCompiles`).
+(consider using :module:`CheckTypeSize` or :module:`CheckSourceCompiles`).
 If the check needs to be done in C++, consider using
 :module:`CheckCXXSymbolExists` instead.
 
 The following variables may be set before calling this macro to modify
 the way the check is run:
 
-``CMAKE_REQUIRED_FLAGS``
-  string of compile command line flags.
-``CMAKE_REQUIRED_DEFINITIONS``
-  a :ref:`;-list <CMake Language Lists>` of macros to define (-DFOO=bar).
-``CMAKE_REQUIRED_INCLUDES``
-  a :ref:`;-list <CMake Language Lists>` of header search paths to pass to
-  the compiler.
-``CMAKE_REQUIRED_LINK_OPTIONS``
-  .. versionadded:: 3.14
-    a :ref:`;-list <CMake Language Lists>` of options to add to the link command.
-``CMAKE_REQUIRED_LIBRARIES``
-  a :ref:`;-list <CMake Language Lists>` of libraries to add to the link
-  command. See policy :policy:`CMP0075`.
-``CMAKE_REQUIRED_QUIET``
-  .. versionadded:: 3.1
-    execute quietly without messages.
+.. include:: /module/CMAKE_REQUIRED_FLAGS.txt
+
+.. include:: /module/CMAKE_REQUIRED_DEFINITIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_INCLUDES.txt
+
+.. include:: /module/CMAKE_REQUIRED_LINK_OPTIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_LIBRARIES.txt
+
+.. include:: /module/CMAKE_REQUIRED_QUIET.txt
 
 For example:
 
@@ -62,22 +57,37 @@ For example:
 
 include_guard(GLOBAL)
 
-cmake_policy(PUSH)
+block(SCOPE_FOR POLICIES)
 cmake_policy(SET CMP0054 NEW) # if() quoted variables not dereferenced
 
 macro(CHECK_SYMBOL_EXISTS SYMBOL FILES VARIABLE)
   if(CMAKE_C_COMPILER_LOADED)
-    __CHECK_SYMBOL_EXISTS_IMPL("${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckSymbolExists.c" "${SYMBOL}" "${FILES}" "${VARIABLE}" )
+    __CHECK_SYMBOL_EXISTS_FILTER_FLAGS(C)
+    __CHECK_SYMBOL_EXISTS_IMPL(CheckSymbolExists.c "${SYMBOL}" "${FILES}" "${VARIABLE}" )
+    __CHECK_SYMBOL_EXISTS_RESTORE_FLAGS(C)
   elseif(CMAKE_CXX_COMPILER_LOADED)
-    __CHECK_SYMBOL_EXISTS_IMPL("${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckSymbolExists.cxx" "${SYMBOL}" "${FILES}" "${VARIABLE}" )
+    __CHECK_SYMBOL_EXISTS_FILTER_FLAGS(CXX)
+    __CHECK_SYMBOL_EXISTS_IMPL(CheckSymbolExists.cxx "${SYMBOL}" "${FILES}" "${VARIABLE}" )
+    __CHECK_SYMBOL_EXISTS_RESTORE_FLAGS(CXX)
   else()
     message(FATAL_ERROR "CHECK_SYMBOL_EXISTS needs either C or CXX language enabled")
   endif()
 endmacro()
 
+macro(__CHECK_SYMBOL_EXISTS_FILTER_FLAGS LANG)
+    set(__CMAKE_${LANG}_FLAGS_SAVED "${CMAKE_${LANG}_FLAGS}")
+    string(REGEX REPLACE "(^| )-Werror([= ][^ ]*)?( |$)" " " CMAKE_${LANG}_FLAGS "${CMAKE_${LANG}_FLAGS}")
+    string(REGEX REPLACE "(^| )-pedantic-errors( |$)" " " CMAKE_${LANG}_FLAGS "${CMAKE_${LANG}_FLAGS}")
+endmacro()
+
+macro(__CHECK_SYMBOL_EXISTS_RESTORE_FLAGS LANG)
+    set(CMAKE_${LANG}_FLAGS "${__CMAKE_${LANG}_FLAGS_SAVED}")
+    unset(__CMAKE_${LANG}_FLAGS_SAVED)
+endmacro()
+
 macro(__CHECK_SYMBOL_EXISTS_IMPL SOURCEFILE SYMBOL FILES VARIABLE)
   if(NOT DEFINED "${VARIABLE}" OR "x${${VARIABLE}}" STREQUAL "x${VARIABLE}")
-    set(CMAKE_CONFIGURABLE_FILE_CONTENT "/* */\n")
+    set(_CSE_SOURCE "/* */\n")
     set(MACRO_CHECK_SYMBOL_EXISTS_FLAGS ${CMAKE_REQUIRED_FLAGS})
     if(CMAKE_REQUIRED_LINK_OPTIONS)
       set(CHECK_SYMBOL_EXISTS_LINK_OPTIONS
@@ -98,17 +108,17 @@ macro(__CHECK_SYMBOL_EXISTS_IMPL SOURCEFILE SYMBOL FILES VARIABLE)
       set(CMAKE_SYMBOL_EXISTS_INCLUDES)
     endif()
     foreach(FILE ${FILES})
-      string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT
+      string(APPEND _CSE_SOURCE
         "#include <${FILE}>\n")
     endforeach()
-    string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT "
+    string(APPEND _CSE_SOURCE "
 int main(int argc, char** argv)
 {
   (void)argv;")
     set(_CSE_CHECK_NON_MACRO "return ((int*)(&${SYMBOL}))[argc];")
     if("${SYMBOL}" MATCHES "^[a-zA-Z_][a-zA-Z0-9_]*$")
       # The SYMBOL has a legal macro name.  Test whether it exists as a macro.
-      string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT "
+      string(APPEND _CSE_SOURCE "
 #ifndef ${SYMBOL}
   ${_CSE_CHECK_NON_MACRO}
 #else
@@ -117,52 +127,38 @@ int main(int argc, char** argv)
 #endif")
     else()
       # The SYMBOL cannot be a macro (e.g., a template function).
-      string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT "
+      string(APPEND _CSE_SOURCE "
   ${_CSE_CHECK_NON_MACRO}")
     endif()
-    string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT "
-}")
+    string(APPEND _CSE_SOURCE "
+}\n")
     unset(_CSE_CHECK_NON_MACRO)
-
-    configure_file("${CMAKE_ROOT}/Modules/CMakeConfigurableFile.in"
-      "${SOURCEFILE}" @ONLY)
 
     if(NOT CMAKE_REQUIRED_QUIET)
       message(CHECK_START "Looking for ${SYMBOL}")
     endif()
     try_compile(${VARIABLE}
-      ${CMAKE_BINARY_DIR}
-      "${SOURCEFILE}"
+      SOURCE_FROM_VAR "${SOURCEFILE}" _CSE_SOURCE
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
       ${CHECK_SYMBOL_EXISTS_LINK_OPTIONS}
       ${CHECK_SYMBOL_EXISTS_LIBS}
       CMAKE_FLAGS
       -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_SYMBOL_EXISTS_FLAGS}
       "${CMAKE_SYMBOL_EXISTS_INCLUDES}"
-      OUTPUT_VARIABLE OUTPUT)
+      )
     if(${VARIABLE})
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_PASS "found")
       endif()
       set(${VARIABLE} 1 CACHE INTERNAL "Have symbol ${SYMBOL}")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Determining if the ${SYMBOL} "
-        "exist passed with the following output:\n"
-        "${OUTPUT}\nFile ${SOURCEFILE}:\n"
-        "${CMAKE_CONFIGURABLE_FILE_CONTENT}\n")
     else()
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_FAIL "not found")
       endif()
       set(${VARIABLE} "" CACHE INTERNAL "Have symbol ${SYMBOL}")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Determining if the ${SYMBOL} "
-        "exist failed with the following output:\n"
-        "${OUTPUT}\nFile ${SOURCEFILE}:\n"
-        "${CMAKE_CONFIGURABLE_FILE_CONTENT}\n")
     endif()
-    unset(CMAKE_CONFIGURABLE_FILE_CONTENT)
+    unset(_CSE_SOURCE)
   endif()
 endmacro()
 
-cmake_policy(POP)
+endblock()

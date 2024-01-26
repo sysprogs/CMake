@@ -2,7 +2,19 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
+#include <iosfwd>
+#include <set>
+#include <string>
+#include <vector>
+
+#include <cm/optional>
+
 #include "cmGlobalVisualStudio71Generator.h"
+
+class cmGeneratorTarget;
+class cmMakefile;
+class cmake;
+struct cmIDEFlagTable;
 
 /** \class cmGlobalVisualStudio8Generator
  * \brief Write a Unix makefiles.
@@ -24,6 +36,10 @@ public:
 
   bool SetGeneratorPlatform(std::string const& p, cmMakefile* mf) override;
 
+  cm::optional<std::string> const& GetTargetFrameworkVersion() const;
+  cm::optional<std::string> const& GetTargetFrameworkIdentifier() const;
+  cm::optional<std::string> const& GetTargetFrameworkTargetsVersion() const;
+
   /**
    * Override Configure and Generate to add the build-system check
    * target.
@@ -43,6 +59,9 @@ public:
 protected:
   cmGlobalVisualStudio8Generator(cmake* cm, const std::string& name,
                                  std::string const& platformInGeneratorName);
+
+  virtual bool ProcessGeneratorPlatformField(std::string const& key,
+                                             std::string const& value);
 
   void AddExtraIDETargets() override;
 
@@ -76,4 +95,11 @@ protected:
 
   std::string Name;
   std::string WindowsCEVersion;
+
+  cm::optional<std::string> DefaultTargetFrameworkVersion;
+  cm::optional<std::string> DefaultTargetFrameworkIdentifier;
+  cm::optional<std::string> DefaultTargetFrameworkTargetsVersion;
+
+private:
+  bool ParseGeneratorPlatform(std::string const& is, cmMakefile* mf);
 };

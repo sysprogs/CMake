@@ -87,6 +87,11 @@ public:
   void AddError(const std::string& message, const char* title) override;
 
   /**
+   * Write files to cache file without reconfiguring.
+   */
+  void Write();
+
+  /**
    * Used to do a configure. If argument is specified, it does only the check
    * and not configure.
    */
@@ -123,6 +128,7 @@ protected:
 
   // Jump to the cache entry whose name matches the string.
   void JumpToCacheEntry(const char* str);
+  void JumpToCacheEntry(const char* str, bool reverse);
 
   // Clear and reset the output log and state
   void ResetOutputs();
@@ -138,7 +144,7 @@ protected:
   // Output produced by the last pass
   std::vector<std::string> Outputs;
   // Did the last pass produced outputs of interest (errors, warnings, ...)
-  bool HasNonStatusOutputs;
+  bool HasNonStatusOutputs = false;
   // Last progress bar
   std::string LastProgress;
 
@@ -155,17 +161,19 @@ protected:
   // Fields displayed. Includes labels, new entry markers, entries
   std::vector<FIELD*> Fields;
   // Number of entries shown (depends on mode -normal or advanced-)
-  size_t NumberOfVisibleEntries;
-  bool AdvancedMode;
+  size_t NumberOfVisibleEntries = 0;
+  bool AdvancedMode = false;
   // Did the iteration converge (no new entries) ?
-  bool OkToGenerate;
+  bool OkToGenerate = false;
   // Number of pages displayed
-  int NumberOfPages;
+  int NumberOfPages = 0;
+  bool IsEmpty = false;
+  std::unique_ptr<cmCursesCacheEntryComposite> EmptyCacheEntry;
 
   int InitialWidth;
   std::unique_ptr<cmake> CMakeInstance;
 
   std::string SearchString;
   std::string OldSearchString;
-  bool SearchMode;
+  bool SearchMode = false;
 };

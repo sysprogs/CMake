@@ -343,6 +343,14 @@ function(FortranCInterface_VERIFY)
     set(_desc "Verifying Fortran/${lang} Compiler Compatibility")
     message(CHECK_START "${_desc}")
 
+    # Perform verification with only one architecture.
+    # FIXME: Add try_compile whole-project option to forward architectures.
+    if(CMAKE_OSX_ARCHITECTURES MATCHES "^([^;]+)(;|$)")
+      set(_FortranCInterface_OSX_ARCH "-DCMAKE_OSX_ARCHITECTURES=${CMAKE_MATCH_1}")
+    else()
+      set(_FortranCInterface_OSX_ARCH "")
+    endif()
+
     cmake_policy(GET CMP0056 _FortranCInterface_CMP0056)
     if(_FortranCInterface_CMP0056 STREQUAL "NEW")
       set(_FortranCInterface_EXE_LINKER_FLAGS "-DCMAKE_EXE_LINKER_FLAGS:STRING=${CMAKE_EXE_LINKER_FLAGS}")
@@ -353,10 +361,10 @@ function(FortranCInterface_VERIFY)
     # Build a sample project which reports symbols.
     set(CMAKE_TRY_COMPILE_CONFIGURATION Release)
     try_compile(FortranCInterface_VERIFY_${lang}_COMPILED
-      ${FortranCInterface_BINARY_DIR}/Verify${lang}
-      ${FortranCInterface_SOURCE_DIR}/Verify
-      VerifyFortranC # project name
-      VerifyFortranC # target name
+      PROJECT VerifyFortranC
+      TARGET VerifyFortranC
+      SOURCE_DIR ${FortranCInterface_SOURCE_DIR}/Verify
+      BINARY_DIR ${FortranCInterface_BINARY_DIR}/Verify${lang}
       CMAKE_FLAGS -DVERIFY_CXX=${verify_cxx}
                   -DCMAKE_VERBOSE_MAKEFILE=ON
                  "-DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}"
@@ -365,6 +373,9 @@ function(FortranCInterface_VERIFY)
                  "-DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}"
                  "-DCMAKE_CXX_FLAGS_RELEASE:STRING=${CMAKE_CXX_FLAGS_RELEASE}"
                  "-DCMAKE_Fortran_FLAGS_RELEASE:STRING=${CMAKE_Fortran_FLAGS_RELEASE}"
+                 "-DFortranCInterface_BINARY_DIR=${FortranCInterface_BINARY_DIR}"
+                 "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}"
+                 ${_FortranCInterface_OSX_ARCH}
                  ${_FortranCInterface_EXE_LINKER_FLAGS}
       OUTPUT_VARIABLE _output)
     file(WRITE "${FortranCInterface_BINARY_DIR}/Verify${lang}/output.txt" "${_output}")
@@ -372,13 +383,9 @@ function(FortranCInterface_VERIFY)
     # Report results.
     if(FortranCInterface_VERIFY_${lang}_COMPILED)
       message(CHECK_PASS "Success")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "${_desc} passed with the following output:\n${_output}\n\n")
       set(FortranCInterface_VERIFIED_${lang} 1 CACHE INTERNAL "Fortran/${lang} compatibility")
     else()
       message(CHECK_FAIL "Failed")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "${_desc} failed with the following output:\n${_output}\n\n")
       set(FortranCInterface_VERIFIED_${lang} 0 CACHE INTERNAL "Fortran/${lang} compatibility")
     endif()
     unset(FortranCInterface_VERIFY_${lang}_COMPILED CACHE)

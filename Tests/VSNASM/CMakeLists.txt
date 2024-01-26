@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.5)
 project(VSNASM C ASM_NASM)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -18,3 +18,5 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/bar baz.asm" "${BAR_ASM_CONTENTS}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(VSNASM main.c foo.asm "${CMAKE_CURRENT_BINARY_DIR}/bar baz.asm")
+target_compile_definitions(VSNASM PRIVATE DEF_FOO)
+target_compile_options(VSNASM PRIVATE "$<$<COMPILE_LANGUAGE:ASM_NASM>:-t>")

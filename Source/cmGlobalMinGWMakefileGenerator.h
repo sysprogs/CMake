@@ -3,8 +3,14 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "cmGlobalGeneratorFactory.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
+
+class cmMakefile;
+class cmake;
 
 /** \class cmGlobalMinGWMakefileGenerator
  * \brief Write a NMake makefiles.
@@ -21,19 +27,12 @@ public:
       new cmGlobalGeneratorSimpleFactory<cmGlobalMinGWMakefileGenerator>());
   }
   //! Get the name for the generator.
-  virtual std::string GetName() const
+  std::string GetName() const override
   {
     return cmGlobalMinGWMakefileGenerator::GetActualName();
   }
   static std::string GetActualName() { return "MinGW Makefiles"; }
 
   /** Get the documentation entry for this generator.  */
-  static void GetDocumentation(cmDocumentationEntry& entry);
-
-  /**
-   * Try to determine system information such as shared library
-   * extension, pthreads, byte order etc.
-   */
-  virtual void EnableLanguage(std::vector<std::string> const& languages,
-                              cmMakefile*, bool optional);
+  static cmDocumentationEntry GetDocumentation();
 };

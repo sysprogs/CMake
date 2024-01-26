@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <memory>
 #include <ostream>
+#include <vector>
 
 #include "cmExportBuildAndroidMKGenerator.h"
 #include "cmExportSet.h"
@@ -34,8 +35,7 @@ void cmExportInstallAndroidMKGenerator::GenerateImportHeaderCode(
   for (size_t n = 0; n < numDotDot; n++) {
     path += "/..";
   }
-  os << "_IMPORT_PREFIX := "
-     << "$(LOCAL_PATH)" << path << "\n\n";
+  os << "_IMPORT_PREFIX := $(LOCAL_PATH)" << path << "\n\n";
   for (std::unique_ptr<cmTargetExport> const& te :
        this->IEGen->GetExportSet()->GetTargetExports()) {
     // Collect import properties for this target.
@@ -86,7 +86,7 @@ void cmExportInstallAndroidMKGenerator::GenerateImportPropertyCode(
 }
 
 void cmExportInstallAndroidMKGenerator::GenerateMissingTargetsCheckCode(
-  std::ostream&, const std::vector<std::string>&)
+  std::ostream&)
 {
 }
 
@@ -132,7 +132,7 @@ void cmExportInstallAndroidMKGenerator::GenerateImportedFileChecksCode(
 }
 
 bool cmExportInstallAndroidMKGenerator::GenerateImportFileConfig(
-  const std::string&, std::vector<std::string>&)
+  const std::string&)
 {
   return true;
 }

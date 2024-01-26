@@ -8,12 +8,29 @@ if(WIN32)
     [[include/obj2\.h]]
     [[include/obj3\.h]]
     [[lib]]
-    [[lib/(lib)?lib1\.(dll\.a|lib)]]
-    [[lib/(lib)?lib2\.(a|lib)]]
+    [[lib/(lib)?lib1\.(dll\.a|lib|l)]]
+    [[lib/(lib)?lib2\.(a|lib|l)]]
     [[lib3]]
-    [[lib3/(lib)?lib3\.(dll\.a|lib)]]
+    [[lib3/(lib)?lib3\.(dll\.a|lib|l)]]
     [[lib4]]
     [[lib4/(lib)?lib4\.dll]]
+    )
+elseif(MSYS)
+  set(_check_files
+    [[bin]]
+    [[bin/exe\.exe]]
+    [[bin/msys-lib1\.dll]]
+    [[include]]
+    [[include/obj1\.h]]
+    [[include/obj2\.h]]
+    [[include/obj3\.h]]
+    [[lib]]
+    [[lib/liblib1\.dll\.a]]
+    [[lib/liblib2\.a]]
+    [[lib3]]
+    [[lib3/liblib3\.dll\.a]]
+    [[lib4]]
+    [[lib4/msys-lib4\.dll]]
     )
 elseif(CYGWIN)
   set(_check_files

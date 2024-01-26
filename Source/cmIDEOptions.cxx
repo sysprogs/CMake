@@ -2,16 +2,17 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmIDEOptions.h"
 
+#include <algorithm>
+#include <cstring>
 #include <iterator>
+#include <utility>
 
 #include <cmext/algorithm>
 
-#include <string.h>
-
 #include "cmsys/String.h"
 
-#include "cmAlgorithms.h"
 #include "cmIDEFlagTable.h"
+#include "cmList.h"
 #include "cmStringAlgorithms.h"
 
 cmIDEOptions::cmIDEOptions()
@@ -20,15 +21,13 @@ cmIDEOptions::cmIDEOptions()
   this->AllowDefine = true;
   this->DoingInclude = false;
   this->AllowSlash = false;
-  this->DoingFollowing = 0;
-  for (int i = 0; i < FlagTableCount; ++i) {
-    this->FlagTable[i] = 0;
+  this->DoingFollowing = nullptr;
+  for (auto& flag : this->FlagTable) {
+    flag = nullptr;
   }
 }
 
-cmIDEOptions::~cmIDEOptions()
-{
-}
+cmIDEOptions::~cmIDEOptions() = default;
 
 void cmIDEOptions::HandleFlag(std::string const& flag)
 {
@@ -49,7 +48,7 @@ void cmIDEOptions::HandleFlag(std::string const& flag)
   // If the last option expected a following value, this is it.
   if (this->DoingFollowing) {
     this->FlagMapUpdate(this->DoingFollowing, flag);
-    this->DoingFollowing = 0;
+    this->DoingFollowing = nullptr;
     return;
   }
 
@@ -248,8 +247,7 @@ bool cmIDEOptions::HasFlag(std::string const& flag) const
 const char* cmIDEOptions::GetFlag(std::string const& flag) const
 {
   // This method works only for single-valued flags!
-  std::map<std::string, FlagValue>::const_iterator i =
-    this->FlagMap.find(flag);
+  auto i = this->FlagMap.find(flag);
   if (i != this->FlagMap.cend() && i->second.size() == 1) {
     return i->second[0].c_str();
   }

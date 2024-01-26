@@ -8,12 +8,15 @@
         "Imported",
         "Interface",
         "Object",
-        "External"
+        "External",
+        "Framework"
     ],
     "directorySources": [
         "^\\.$",
         "^dir$",
-        "^dir/dir$"
+        "^dir/dir$",
+        "^fileset$",
+        "^subdir$"
     ],
     "targetIds": [
         "^ALL_BUILD::@6890427a1f51a3e7e1df$",
@@ -24,6 +27,9 @@
         "^c_shared_lib::@6890427a1f51a3e7e1df$",
         "^c_shared_exe::@6890427a1f51a3e7e1df$",
         "^c_static_lib::@6890427a1f51a3e7e1df$",
-        "^c_static_exe::@6890427a1f51a3e7e1df$"
+        "^c_static_exe::@6890427a1f51a3e7e1df$",
+        "^c_subdir::@6890427a1f51a3e7e1df$",
+        "^c_headers_1::@6b8db101d64c125f29fe$",
+        "^c_headers_2::@6b8db101d64c125f29fe$"
     ]
 }

@@ -7,7 +7,7 @@ if(NOT DEFINED CMAKE_Fortran_COMPILER)
   message(STATUS ${_desc})
   file(REMOVE_RECURSE ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CheckFortran)
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CheckFortran/CMakeLists.txt"
-    "cmake_minimum_required(VERSION 2.4)
+    "cmake_minimum_required(VERSION 3.5)
 project(CheckFortran Fortran)
 file(WRITE \"\${CMAKE_CURRENT_BINARY_DIR}/result.cmake\"
   \"set(CMAKE_Fortran_COMPILER \\\"\${CMAKE_Fortran_COMPILER}\\\")\\n\"
@@ -33,6 +33,7 @@ file(WRITE \"\${CMAKE_CURRENT_BINARY_DIR}/result.cmake\"
     RESULT_VARIABLE result
     )
   include(${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CheckFortran/result.cmake OPTIONAL)
+  # FIXME: Replace with message(CONFIGURE_LOG) when CMake version is high enough.
   if(CMAKE_Fortran_COMPILER AND "${result}" STREQUAL "0")
     file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
       "${_desc} passed with the following output:\n"

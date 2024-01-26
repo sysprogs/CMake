@@ -1,6 +1,11 @@
 cmake_minimum_required (VERSION 3.9)
 project(FortranModules Fortran)
 
+if("${CMAKE_Fortran_COMPILER_ID};${CMAKE_Fortran_SIMULATE_ID}" MATCHES "^Intel(LLVM)?;MSVC$")
+  string(APPEND CMAKE_Fortran_FLAGS_DEBUG " -Z7")
+  string(APPEND CMAKE_Fortran_FLAGS_RELWITHDEBINFO " -Z7")
+endif()
+
 if(NOT DEFINED CMake_TEST_NESTED_MAKE_PROGRAM AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
   set(CMake_TEST_NESTED_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
 endif()
@@ -36,6 +41,16 @@ add_executable(test_module
   test_module_main.f90
   test_module_implementation.f90
   test_module_interface.f90)
+
+add_executable(test_multi_module
+  # Place this first so that we do not get "lucky" and find the module provided
+  # by compiling `test_multi_module.f90` first.
+  test_multi_module_main.f90
+  test_multi_module.f90)
+set_property(TARGET test_multi_module PROPERTY
+  JOB_POOL_COMPILE multi_module_serial)
+set_property(GLOBAL APPEND PROPERTY
+  JOB_POOLS multi_module_serial=1)
 
 add_executable(test_use_in_comment_fixedform
   test_use_in_comment_fixedform.f)
@@ -110,3 +125,21 @@ add_subdirectory(Executable)
 if(CMake_TEST_Fortran_SUBMODULES)
   add_subdirectory(Submodules)
 endif()
+
+add_subdirectory(Issue25112)
+add_subdirectory(Issue25223)
+if( # Intel Fortran VS Integration breaks on custom targets with Fortran sources
+    NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+  add_subdirectory(Issue25252)
+  add_subdirectory(Issue25252-iface-target)
+endif()
+add_subdirectory(Issue25252-iface-sources)
+
+add_subdirectory(Issue25365-target-objects)
+add_subdirectory(Issue25365-target-objects-iface)
+
+# Issue#25425
+add_subdirectory(ModulesViaTargetObjectsSource)
+add_subdirectory(ModulesViaSubdirTargetObjectsSource)
+add_subdirectory(ModulesViaTargetObjectsLink)
+add_subdirectory(ModulesViaSubdirTargetObjectsLink)

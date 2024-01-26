@@ -5,14 +5,16 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <cm/optional>
+
 #include <cm3p/uv.h>
-#include <stddef.h>
-#include <stdint.h>
 
 #include "cmDuration.h"
 #include "cmProcessOutput.h"
@@ -39,6 +41,14 @@ public:
   // Return true if the process starts
   bool StartProcess(uv_loop_t& loop, std::vector<size_t>* affinity);
 
+  enum class TimeoutReason
+  {
+    Normal,
+    StopTime,
+  };
+  void SetTimeoutReason(TimeoutReason r) { this->TimeoutReason_ = r; }
+  TimeoutReason GetTimeoutReason() const { return this->TimeoutReason_; }
+
   enum class State
   {
     Starting,
@@ -52,9 +62,9 @@ public:
   };
 
   State GetProcessStatus();
-  int GetId() { return this->Id; }
+  int GetId() const { return this->Id; }
   void SetId(int id) { this->Id = id; }
-  int64_t GetExitValue() { return this->ExitValue; }
+  int64_t GetExitValue() const { return this->ExitValue; }
   cmDuration GetTotalTime() { return this->TotalTime; }
 
   enum class Exception
@@ -75,8 +85,17 @@ public:
     return std::move(this->Runner);
   }
 
+  enum class Termination
+  {
+    Normal,
+    Custom,
+    Forced,
+  };
+  Termination GetTerminationStyle() const { return this->TerminationStyle; }
+
 private:
-  cmDuration Timeout;
+  cm::optional<cmDuration> Timeout;
+  TimeoutReason TimeoutReason_ = TimeoutReason::Normal;
   std::chrono::steady_clock::time_point StartTime;
   cmDuration TotalTime;
   bool ReadHandleClosed = false;
@@ -111,15 +130,11 @@ private:
   class Buffer : public std::vector<char>
   {
     // Half-open index range of partial line already scanned.
-    size_type First;
-    size_type Last;
+    size_type First = 0;
+    size_type Last = 0;
 
   public:
-    Buffer()
-      : First(0)
-      , Last(0)
-    {
-    }
+    Buffer() = default;
     bool GetLine(std::string& line);
     bool GetLast(std::string& line);
   };
@@ -130,4 +145,5 @@ private:
   std::vector<const char*> ProcessArgs;
   int Id;
   int64_t ExitValue;
+  Termination TerminationStyle = Termination::Normal;
 };

@@ -14,12 +14,13 @@
 #include "cmAddLibraryCommand.h"
 #include "cmAddSubDirectoryCommand.h"
 #include "cmAddTestCommand.h"
+#include "cmBlockCommand.h"
 #include "cmBreakCommand.h"
 #include "cmBuildCommand.h"
+#include "cmCMakeLanguageCommand.h"
 #include "cmCMakeMinimumRequired.h"
 #include "cmCMakePathCommand.h"
 #include "cmCMakePolicyCommand.h"
-#include "cmCommand.h"
 #include "cmConfigureFileCommand.h"
 #include "cmContinueCommand.h"
 #include "cmCreateTestSourceList.h"
@@ -93,10 +94,10 @@
 #  include "cmAuxSourceDirectoryCommand.h"
 #  include "cmBuildNameCommand.h"
 #  include "cmCMakeHostSystemInformationCommand.h"
-#  include "cmCMakeLanguageCommand.h"
 #  include "cmExportCommand.h"
 #  include "cmExportLibraryDependenciesCommand.h"
 #  include "cmFLTKWrapUICommand.h"
+#  include "cmFileAPICommand.h"
 #  include "cmIncludeExternalMSProjectCommand.h"
 #  include "cmInstallProgramsCommand.h"
 #  include "cmLinkLibrariesCommand.h"
@@ -127,12 +128,13 @@ void GetScriptingCommands(cmState* state)
   state->AddFlowControlCommand("macro", cmMacroCommand);
   state->AddFlowControlCommand("return", cmReturnCommand);
   state->AddFlowControlCommand("while", cmWhileCommand);
+  state->AddFlowControlCommand("block", cmBlockCommand);
 
+  state->AddBuiltinCommand("cmake_language", cmCMakeLanguageCommand);
   state->AddBuiltinCommand("cmake_minimum_required", cmCMakeMinimumRequired);
   state->AddBuiltinCommand("cmake_path", cmCMakePathCommand);
   state->AddBuiltinCommand("cmake_policy", cmCMakePolicyCommand);
   state->AddBuiltinCommand("configure_file", cmConfigureFileCommand);
-  state->AddBuiltinCommand("exec_program", cmExecProgramCommand);
   state->AddBuiltinCommand("execute_process", cmExecuteProcessCommand);
   state->AddBuiltinCommand("file", cmFileCommand);
   state->AddBuiltinCommand("find_file", cmFindFile);
@@ -164,45 +166,48 @@ void GetScriptingCommands(cmState* state)
   state->AddBuiltinCommand("string", cmStringCommand);
   state->AddBuiltinCommand("unset", cmUnsetCommand);
 
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "else",
     "An ELSE command was found outside of a proper "
     "IF ENDIF structure. Or its arguments did not match "
     "the opening IF command.");
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "elseif",
     "An ELSEIF command was found outside of a proper "
     "IF ENDIF structure.");
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "endforeach",
     "An ENDFOREACH command was found outside of a proper "
     "FOREACH ENDFOREACH structure. Or its arguments did "
     "not match the opening FOREACH command.");
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "endfunction",
     "An ENDFUNCTION command was found outside of a proper "
     "FUNCTION ENDFUNCTION structure. Or its arguments did not "
     "match the opening FUNCTION command.");
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "endif",
     "An ENDIF command was found outside of a proper "
     "IF ENDIF structure. Or its arguments did not match "
     "the opening IF command.");
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "endmacro",
     "An ENDMACRO command was found outside of a proper "
     "MACRO ENDMACRO structure. Or its arguments did not "
     "match the opening MACRO command.");
-  state->AddUnexpectedCommand(
+  state->AddUnexpectedFlowControlCommand(
     "endwhile",
     "An ENDWHILE command was found outside of a proper "
     "WHILE ENDWHILE structure. Or its arguments did not "
     "match the opening WHILE command.");
+  state->AddUnexpectedFlowControlCommand(
+    "endblock",
+    "An ENDBLOCK command was found outside of a proper "
+    "BLOCK ENDBLOCK structure.");
 
 #if !defined(CMAKE_BOOTSTRAP)
   state->AddBuiltinCommand("cmake_host_system_information",
                            cmCMakeHostSystemInformationCommand);
-  state->AddBuiltinCommand("cmake_language", cmCMakeLanguageCommand);
   state->AddBuiltinCommand("load_cache", cmLoadCacheCommand);
   state->AddBuiltinCommand("remove", cmRemoveCommand);
   state->AddBuiltinCommand("variable_watch", cmVariableWatchCommand);
@@ -214,12 +219,19 @@ void GetScriptingCommands(cmState* state)
   state->AddDisallowedCommand(
     "use_mangled_mesa", cmUseMangledMesaCommand, cmPolicies::CMP0030,
     "The use_mangled_mesa command should not be called; see CMP0030.");
+  state->AddDisallowedCommand("exec_program", cmExecProgramCommand,
+                              cmPolicies::CMP0153,
+                              "The exec_program command should not be called; "
+                              "see CMP0153. Use execute_process() instead.",
+                              "Use execute_process() instead.");
 
 #endif
 }
 
 void GetProjectCommands(cmState* state)
 {
+  state->AddBuiltinCommand("add_compile_definitions",
+                           cmAddCompileDefinitionsCommand);
   state->AddBuiltinCommand("add_custom_command", cmAddCustomCommandCommand);
   state->AddBuiltinCommand("add_custom_target", cmAddCustomTargetCommand);
   state->AddBuiltinCommand("add_definitions", cmAddDefinitionsCommand);
@@ -264,15 +276,12 @@ void GetProjectCommands(cmState* state)
                            cmTargetLinkLibrariesCommand);
   state->AddBuiltinCommand("target_link_options", cmTargetLinkOptionsCommand);
   state->AddBuiltinCommand("target_sources", cmTargetSourcesCommand);
-  state->AddBuiltinCommand("try_compile",
-                           cm::make_unique<cmTryCompileCommand>());
-  state->AddBuiltinCommand("try_run", cm::make_unique<cmTryRunCommand>());
+  state->AddBuiltinCommand("try_compile", cmTryCompileCommand);
+  state->AddBuiltinCommand("try_run", cmTryRunCommand);
   state->AddBuiltinCommand("target_precompile_headers",
                            cmTargetPrecompileHeadersCommand);
 
 #if !defined(CMAKE_BOOTSTRAP)
-  state->AddBuiltinCommand("add_compile_definitions",
-                           cmAddCompileDefinitionsCommand);
   state->AddBuiltinCommand("add_compile_options", cmAddCompileOptionsCommand);
   state->AddBuiltinCommand("aux_source_directory",
                            cmAuxSourceDirectoryCommand);
@@ -289,6 +298,7 @@ void GetProjectCommands(cmState* state)
   state->AddBuiltinCommand("qt_wrap_ui", cmQTWrapUICommand);
   state->AddBuiltinCommand("remove_definitions", cmRemoveDefinitionsCommand);
   state->AddBuiltinCommand("source_group", cmSourceGroupCommand);
+  state->AddBuiltinCommand("cmake_file_api", cmFileAPICommand);
 
   state->AddDisallowedCommand(
     "export_library_dependencies", cmExportLibraryDependenciesCommand,
@@ -329,6 +339,7 @@ void GetProjectCommandsInScriptMode(cmState* state)
   CM_UNEXPECTED_PROJECT_COMMAND("add_test");
   CM_UNEXPECTED_PROJECT_COMMAND("aux_source_directory");
   CM_UNEXPECTED_PROJECT_COMMAND("build_command");
+  CM_UNEXPECTED_PROJECT_COMMAND("cmake_file_api");
   CM_UNEXPECTED_PROJECT_COMMAND("create_test_sourcelist");
   CM_UNEXPECTED_PROJECT_COMMAND("define_property");
   CM_UNEXPECTED_PROJECT_COMMAND("enable_language");

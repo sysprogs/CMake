@@ -12,6 +12,9 @@ if(__UNIX_PATHS_INCLUDED)
 endif()
 set(__UNIX_PATHS_INCLUDED 1)
 
+# Since CMake 3.27, the Platform/<os>-Initialize modules set UNIX
+# if the corresponding Platform/<os> modules includes UnixPaths.
+# Retain the setting here to support externally-maintained platform modules.
 set(UNIX 1)
 
 # also add the install directory of the running cmake to the search directories
@@ -44,6 +47,7 @@ if (NOT CMAKE_FIND_NO_INSTALL_PREFIX)
     )
   endif()
 endif()
+_cmake_record_install_prefix()
 
 # Non "standard" but common install prefixes
 list(APPEND CMAKE_SYSTEM_PREFIX_PATH

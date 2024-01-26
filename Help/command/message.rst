@@ -14,6 +14,8 @@ Synopsis
   `Reporting checks`_
     message(<checkState> "message text" ...)
 
+  `Configure Log`_
+    message(CONFIGURE_LOG <text>...)
 
 General messages
 ^^^^^^^^^^^^^^^^
@@ -31,6 +33,9 @@ influences the way the message is handled:
 
 ``FATAL_ERROR``
   CMake Error, stop processing and generation.
+
+  The :manual:`cmake(1)` executable will return a non-zero
+  :ref:`exit code <CMake Exit Code>`.
 
 ``SEND_ERROR``
   CMake Error, continue processing, but skip generation.
@@ -80,8 +85,9 @@ are sent to stderr and are not prefixed with hyphens.  The
 :manual:`CMake GUI <cmake-gui(1)>` displays all messages in its log area.
 The :manual:`curses interface <ccmake(1)>` shows ``STATUS`` to ``TRACE``
 messages one at a time on a status line and other messages in an
-interactive pop-up box.  The ``--log-level`` command-line option to each of
-these tools can be used to control which messages will be shown.
+interactive pop-up box.  The :option:`--log-level <cmake --log-level>`
+command-line option to each of these tools can be used to control which
+messages will be shown.
 
 .. versionadded:: 3.17
   To make a log level persist between CMake runs, the
@@ -101,7 +107,7 @@ these tools can be used to control which messages will be shown.
   list variable to a dot-separated string.  The message context will always
   appear before any indenting content but after any automatically added leading
   hyphens. By default, message context is not shown, it has to be explicitly
-  enabled by giving the :manual:`cmake <cmake(1)>` ``--log-context``
+  enabled by giving the :option:`cmake --log-context`
   command-line option or by setting the :variable:`CMAKE_MESSAGE_CONTEXT_SHOW`
   variable to true.  See the :variable:`CMAKE_MESSAGE_CONTEXT` documentation for
   usage examples.
@@ -189,3 +195,56 @@ Output from the above would appear something like the following::
   --   Finding partB
   --   Finding partB - not found
   -- Finding my things - missing components: B
+
+Configure Log
+^^^^^^^^^^^^^
+
+.. versionadded:: 3.26
+
+.. code-block:: cmake
+
+  message(CONFIGURE_LOG <text>...)
+
+Record a :ref:`configure-log message event <message configure-log event>`
+with the specified ``<text>``.  By convention, if the text contains more
+than one line, the first line should be a summary of the event.
+
+This mode is intended to record the details of a system inspection check
+or other one-time operation guarded by a cache entry, but that is not
+performed using :command:`try_compile` or :command:`try_run`, which
+automatically log their details.  Projects should avoid calling it every
+time CMake runs.  For example:
+
+.. code-block:: cmake
+
+  if (NOT DEFINED MY_CHECK_RESULT)
+    # Print check summary in configure output.
+    message(CHECK_START "My Check")
+
+    # ... perform system inspection, e.g., with execute_process ...
+
+    # Cache the result so we do not run the check again.
+    set(MY_CHECK_RESULT "${MY_CHECK_RESULT}" CACHE INTERNAL "My Check")
+
+    # Record the check details in the cmake-configure-log.
+    message(CONFIGURE_LOG
+      "My Check Result: ${MY_CHECK_RESULT}\n"
+      "${details}"
+    )
+
+    # Print check result in configure output.
+    if(MY_CHECK_RESULT)
+      message(CHECK_PASS "passed")
+    else()
+      message(CHECK_FAIL "failed")
+    endif()
+  endif()
+
+If no project is currently being configured, such as in
+:ref:`cmake -P <Script Processing Mode>` script mode,
+this command does nothing.
+
+See Also
+^^^^^^^^
+
+* :command:`cmake_language(GET_MESSAGE_LOG_LEVEL)`

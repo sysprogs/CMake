@@ -7,21 +7,27 @@ try_compile
 
 Try building some code.
 
+.. _`Try Compiling Whole Projects`:
+
 Try Compiling Whole Projects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: cmake
 
-  try_compile(<resultVar> <bindir> <srcdir>
-              <projectName> [<targetName>] [CMAKE_FLAGS <flags>...]
+  try_compile(<compileResultVar> PROJECT <projectName>
+              SOURCE_DIR <srcdir>
+              [BINARY_DIR <bindir>]
+              [TARGET <targetName>]
+              [LOG_DESCRIPTION <text>]
+              [NO_CACHE]
+              [NO_LOG]
+              [CMAKE_FLAGS <flags>...]
               [OUTPUT_VARIABLE <var>])
 
-Try building a project.  The success or failure of the ``try_compile``,
-i.e. ``TRUE`` or ``FALSE`` respectively, is returned in ``<resultVar>``.
+.. versionadded:: 3.25
 
-.. versionadded:: 3.14
-  The name of the ``<resultVar>`` is defined by the user.  Previously, it had
-  a fixed name ``RESULT_VAR``.
+Try building a project.  Build success returns ``TRUE`` and build failure
+returns ``FALSE`` in ``<compileResultVar>``.
 
 In this form, ``<srcdir>`` should contain a complete CMake project with a
 ``CMakeLists.txt`` file and all sources.  The ``<bindir>`` and ``<srcdir>``
@@ -29,12 +35,44 @@ will not be deleted after this command is run.  Specify ``<targetName>`` to
 build a specific target instead of the ``all`` or ``ALL_BUILD`` target.  See
 below for the meaning of other options.
 
+.. versionchanged:: 3.24
+  CMake variables describing platform settings, and those listed by the
+  :variable:`CMAKE_TRY_COMPILE_PLATFORM_VARIABLES` variable, are propagated
+  into the project's build configuration.  See policy :policy:`CMP0137`.
+  Previously this was only done by the
+  :ref:`source file <Try Compiling Source Files>` signature.
+
+.. versionadded:: 3.26
+  This command records a
+  :ref:`configure-log try_compile event <try_compile configure-log event>`
+  if the ``NO_LOG`` option is not specified.
+
+This command supports an alternate signature for CMake older than 3.25.
+The signature above is recommended for clarity.
+
+.. code-block:: cmake
+
+  try_compile(<compileResultVar> <bindir> <srcdir>
+              <projectName> [<targetName>]
+              [CMAKE_FLAGS <flags>...]
+              [OUTPUT_VARIABLE <var>])
+
+.. _`Try Compiling Source Files`:
+
 Try Compiling Source Files
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: cmake
 
-  try_compile(<resultVar> <bindir> <srcfile|SOURCES srcfile...>
+  try_compile(<compileResultVar>
+              [SOURCES_TYPE <type>]
+              <SOURCES <srcfile...>                 |
+               SOURCE_FROM_CONTENT <name> <content> |
+               SOURCE_FROM_VAR <name> <var>         |
+               SOURCE_FROM_FILE <name> <path>       >...
+              [LOG_DESCRIPTION <text>]
+              [NO_CACHE]
+              [NO_LOG]
               [CMAKE_FLAGS <flags>...]
               [COMPILE_DEFINITIONS <defs>...]
               [LINK_OPTIONS <options>...]
@@ -46,19 +84,19 @@ Try Compiling Source Files
               [<LANG>_EXTENSIONS <bool>]
               )
 
+.. versionadded:: 3.25
+
 Try building an executable or static library from one or more source files
 (which one is determined by the :variable:`CMAKE_TRY_COMPILE_TARGET_TYPE`
-variable).  The success or failure of the ``try_compile``, i.e. ``TRUE`` or
-``FALSE`` respectively, is returned in ``<resultVar>``.
+variable). Build success returns ``TRUE`` and build failure returns ``FALSE``
+in ``<compileResultVar>``.
 
-.. versionadded:: 3.14
-  The name of the ``<resultVar>`` is defined by the user.  Previously, it had
-  a fixed name ``RESULT_VAR``.
+In this form, one or more source files must be provided. Additionally, one of
+``SOURCES`` and/or ``SOURCE_FROM_*`` must precede other keywords.
 
-In this form, one or more source files must be provided.  If
-:variable:`CMAKE_TRY_COMPILE_TARGET_TYPE` is unset or is set to ``EXECUTABLE``,
-the sources must include a definition for ``main`` and CMake will create a
-``CMakeLists.txt`` file to build the source(s) as an executable.
+If :variable:`CMAKE_TRY_COMPILE_TARGET_TYPE` is unset or is set to
+``EXECUTABLE``, the sources must include a definition for ``main`` and CMake
+will create a ``CMakeLists.txt`` file to build the source(s) as an executable.
 If :variable:`CMAKE_TRY_COMPILE_TARGET_TYPE` is set to ``STATIC_LIBRARY``,
 a static library will be built instead and no definition for ``main`` is
 required.  For an executable, the generated ``CMakeLists.txt`` file would
@@ -73,11 +111,49 @@ contain something like the following:
   target_link_options(cmTryCompileExec PRIVATE <LINK_OPTIONS from caller>)
   target_link_libraries(cmTryCompileExec ${LINK_LIBRARIES})
 
-The options are:
+CMake automatically generates, for each ``try_compile`` operation, a
+unique directory under ``${CMAKE_BINARY_DIR}/CMakeFiles/CMakeScratch``
+with an unspecified name.  These directories are cleaned automatically unless
+:option:`--debug-trycompile <cmake --debug-trycompile>` is passed to :program:`cmake`.
+Such directories from previous runs are also unconditionally cleaned at the
+beginning of any :program:`cmake` execution.
+
+This command supports an alternate signature for CMake older than 3.25.
+The signature above is recommended for clarity.
+
+.. code-block:: cmake
+
+  try_compile(<compileResultVar> <bindir> <srcfile|SOURCES srcfile...>
+              [CMAKE_FLAGS <flags>...]
+              [COMPILE_DEFINITIONS <defs>...]
+              [LINK_OPTIONS <options>...]
+              [LINK_LIBRARIES <libs>...]
+              [OUTPUT_VARIABLE <var>]
+              [COPY_FILE <fileName> [COPY_FILE_ERROR <var>]]
+              [<LANG>_STANDARD <std>]
+              [<LANG>_STANDARD_REQUIRED <bool>]
+              [<LANG>_EXTENSIONS <bool>]
+              )
+
+In this version, ``try_compile`` will use ``<bindir>/CMakeFiles/CMakeTmp`` for
+its operation, and all such files will be cleaned automatically.
+For debugging, :option:`--debug-trycompile <cmake --debug-trycompile>` can be
+passed to :program:`cmake` to avoid this clean.  However, multiple sequential
+``try_compile`` operations, if given the same ``<bindir>``, will reuse this
+single output directory, such that you can only debug one such ``try_compile``
+call at a time.  Use of the newer signature is recommended to simplify
+debugging of multiple ``try_compile`` operations.
+
+.. _`try_compile Options`:
+
+Options
+^^^^^^^
+
+The options for the above signatures are:
 
 ``CMAKE_FLAGS <flags>...``
-  Specify flags of the form ``-DVAR:TYPE=VALUE`` to be passed to
-  the ``cmake`` command-line used to drive the test build.
+  Specify flags of the form :option:`-DVAR:TYPE=VALUE <cmake -D>` to be passed
+  to the :manual:`cmake(1)` command-line used to drive the test build.
   The above example shows how values for variables
   ``INCLUDE_DIRECTORIES``, ``LINK_DIRECTORIES``, and ``LINK_LIBRARIES``
   are used.
@@ -108,8 +184,89 @@ The options are:
   set the :prop_tgt:`STATIC_LIBRARY_OPTIONS` target property in the generated
   project, depending on the :variable:`CMAKE_TRY_COMPILE_TARGET_TYPE` variable.
 
+``LOG_DESCRIPTION <text>``
+  .. versionadded:: 3.26
+
+  Specify a non-empty text description of the purpose of the check.
+  This is recorded in the :manual:`cmake-configure-log(7)` entry.
+
+``NO_CACHE``
+  .. versionadded:: 3.25
+
+  The result will be stored in a normal variable rather than a cache entry.
+
+  The result variable is normally cached so that a simple pattern can be used
+  to avoid repeating the test on subsequent executions of CMake:
+
+  .. code-block:: cmake
+
+    if(NOT DEFINED RESULTVAR)
+      # ...(check-specific setup code)...
+      try_compile(RESULTVAR ...)
+      # ...(check-specific logging and cleanup code)...
+    endif()
+
+  If the guard variable and result variable are not the same (for example, if
+  the test is part of a larger inspection), ``NO_CACHE`` may be useful to avoid
+  leaking the intermediate result variable into the cache.
+
+``NO_LOG``
+  .. versionadded:: 3.26
+
+  Do not record a :manual:`cmake-configure-log(7)` entry for this call.
+
 ``OUTPUT_VARIABLE <var>``
   Store the output from the build process in the given variable.
+
+``SOURCE_FROM_CONTENT <name> <content>``
+  .. versionadded:: 3.25
+
+  Write ``<content>`` to a file named ``<name>`` in the operation directory.
+  This can be used to bypass the need to separately write a source file when
+  the contents of the file are dynamically specified. The specified ``<name>``
+  is not allowed to contain path components.
+
+  ``SOURCE_FROM_CONTENT`` may be specified multiple times.
+
+``SOURCE_FROM_FILE <name> <path>``
+  .. versionadded:: 3.25
+
+  Copy ``<path>`` to a file named ``<name>`` in the operation directory. This
+  can be used to consolidate files into the operation directory, which may be
+  useful if a source which already exists (i.e. as a stand-alone file in a
+  project's source repository) needs to refer to other file(s) created by
+  ``SOURCE_FROM_*``. (Otherwise, ``SOURCES`` is usually more convenient.) The
+  specified ``<name>`` is not allowed to contain path components.
+
+``SOURCE_FROM_VAR <name> <var>``
+  .. versionadded:: 3.25
+
+  Write the contents of ``<var>`` to a file named ``<name>`` in the operation
+  directory. This is the same as ``SOURCE_FROM_CONTENT``, but takes the
+  contents from the specified CMake variable, rather than directly, which may
+  be useful when passing arguments through a function which wraps
+  ``try_compile``. The specified ``<name>`` is not allowed to contain path
+  components.
+
+  ``SOURCE_FROM_VAR`` may be specified multiple times.
+
+``SOURCES_TYPE <type>``
+  .. versionadded:: 3.28
+
+  Sources may be classified using the ``SOURCES_TYPE`` argument. Once
+  specified, all subsequent sources specified will be treated as that type
+  until another ``SOURCES_TYPE`` is given. Available types are:
+
+  ``NORMAL``
+    Sources are not added to any ``FILE_SET`` in the generated project.
+
+  ``CXX_MODULE``
+    .. versionadded:: 3.28
+
+    Sources are added to a ``FILE_SET`` of type ``CXX_MODULES`` in the
+    generated project.
+
+  The default type of sources is ``NORMAL``.
 
 ``<LANG>_STANDARD <std>``
   .. versionadded:: 3.8
@@ -133,17 +290,6 @@ The options are:
   :prop_tgt:`OBJC_EXTENSIONS`, :prop_tgt:`OBJCXX_EXTENSIONS`,
   or :prop_tgt:`CUDA_EXTENSIONS` target property of the generated project.
 
-In this version all files in ``<bindir>/CMakeFiles/CMakeTmp`` will be
-cleaned automatically.  For debugging, ``--debug-trycompile`` can be
-passed to ``cmake`` to avoid this clean.  However, multiple sequential
-``try_compile`` operations reuse this single output directory.  If you use
-``--debug-trycompile``, you can only debug one ``try_compile`` call at a time.
-The recommended procedure is to protect all ``try_compile`` calls in your
-project by ``if(NOT DEFINED <resultVar>)`` logic, configure with cmake
-all the way through once, then delete the cache entry associated with
-the try_compile call of interest, and then re-run cmake again with
-``--debug-trycompile``.
-
 Other Behavior Settings
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -158,6 +304,7 @@ Other Behavior Settings
   * :variable:`CMAKE_LINK_SEARCH_END_STATIC`
   * :variable:`CMAKE_MSVC_RUNTIME_LIBRARY`
   * :variable:`CMAKE_POSITION_INDEPENDENT_CODE`
+  * :variable:`CMAKE_WATCOM_RUNTIME_LIBRARY`
 
   If :policy:`CMP0056` is set to ``NEW``, then
   :variable:`CMAKE_EXE_LINKER_FLAGS` is passed in as well.
@@ -166,13 +313,18 @@ Other Behavior Settings
   If :policy:`CMP0083` is set to ``NEW``, then in order to obtain correct
   behavior at link time, the ``check_pie_supported()`` command from the
   :module:`CheckPIESupported` module must be called before using the
-  :command:`try_compile` command.
+  ``try_compile`` command.
 
 The current settings of :policy:`CMP0065` and :policy:`CMP0083` are propagated
 through to the generated test project.
 
-Set the :variable:`CMAKE_TRY_COMPILE_CONFIGURATION` variable to choose
-a build configuration.
+Set variable :variable:`CMAKE_TRY_COMPILE_CONFIGURATION` to choose a build
+configuration:
+
+* For multi-config generators, this selects which configuration to build.
+
+* For single-config generators, this sets :variable:`CMAKE_BUILD_TYPE` in
+  the test project.
 
 .. versionadded:: 3.6
   Set the :variable:`CMAKE_TRY_COMPILE_TARGET_TYPE` variable to specify
@@ -210,5 +362,20 @@ a build configuration.
   the generated project (unless overridden by an explicit option).
 
 .. versionchanged:: 3.14
-  For the :generator:`Green Hills MULTI` generator the GHS toolset and target
-  system customization cache variables are also propagated into the test project.
+  For the :generator:`Green Hills MULTI` generator, the GHS toolset and target
+  system customization cache variables are also propagated into the test
+  project.
+
+.. versionadded:: 3.24
+  The :variable:`CMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES` variable may be
+  set to disable passing platform variables into the test project.
+
+.. versionadded:: 3.25
+  If :policy:`CMP0141` is set to ``NEW``, one can use
+  :variable:`CMAKE_MSVC_DEBUG_INFORMATION_FORMAT` to specify the MSVC debug
+  information format.
+
+See Also
+^^^^^^^^
+
+* :command:`try_run`

@@ -2,11 +2,23 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <set>
+#include <string>
+#include <vector>
+
+#include <cm/optional>
+#include <cm/string_view>
 
 #include "cmGlobalVisualStudio8Generator.h"
-#include "cmVisualStudio10ToolsetOptions.h"
+
+class cmGeneratorTarget;
+class cmLocalGenerator;
+class cmMakefile;
+class cmSourceFile;
+class cmake;
+struct cmIDEFlagTable;
 
 /** \class cmGlobalVisualStudio10Generator
  * \brief Write a Unix makefiles.
@@ -16,19 +28,17 @@
 class cmGlobalVisualStudio10Generator : public cmGlobalVisualStudio8Generator
 {
 public:
-  static std::unique_ptr<cmGlobalGeneratorFactory> NewFactory();
-
-  bool MatchesGeneratorName(const std::string& name) const override;
+  bool IsVisualStudioAtLeast10() const override { return true; }
 
   bool SetSystemName(std::string const& s, cmMakefile* mf) override;
-  bool SetGeneratorPlatform(std::string const& p, cmMakefile* mf) override;
   bool SetGeneratorToolset(std::string const& ts, bool build,
                            cmMakefile* mf) override;
 
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 
@@ -76,6 +86,13 @@ public:
   const char* GetPlatformToolsetCudaCustomDir() const;
   std::string const& GetPlatformToolsetCudaCustomDirString() const;
 
+  /** The nvcc subdirectory of a custom cuda install directory */
+  std::string const& GetPlatformToolsetCudaNvccSubdirString() const;
+
+  /** The visual studio integration subdirectory of a custom cuda install
+   * directory */
+  std::string const& GetPlatformToolsetCudaVSIntegrationSubdirString() const;
+
   /** Return whether we need to use No/Debug instead of false/true
       for GenerateDebugInformation.  */
   bool GetPlatformToolsetNeedsDebugEnum() const
@@ -108,7 +125,6 @@ public:
   bool TargetsAndroid() const { return this->SystemIsAndroid; }
 
   const char* GetCMakeCFGIntDir() const override { return "$(Configuration)"; }
-  bool Find64BitTools(cmMakefile* mf);
 
   /** Generate an <output>.rule file path for a given command output.  */
   std::string GenerateRuleFile(std::string const& output) const override;
@@ -119,13 +135,21 @@ public:
   std::string Encoding() override;
   const char* GetToolsVersion() const;
 
+  virtual cm::optional<std::string> GetVSInstanceVersion() const { return {}; }
+
   bool GetSupportsUnityBuilds() const { return this->SupportsUnityBuilds; }
+
+  virtual cm::optional<std::string> FindMSBuildCommandEarly(cmMakefile* mf);
 
   bool FindMakeProgram(cmMakefile* mf) override;
 
   bool IsIPOSupported() const override { return true; }
 
   virtual bool IsStdOutEncodingSupported() const { return false; }
+
+  virtual bool IsUtf8EncodingSupported() const { return false; }
+
+  virtual bool IsScanDependenciesSupported() const { return false; }
 
   static std::string GetInstalledNsightTegraVersion();
 
@@ -141,8 +165,12 @@ public:
   cmIDEFlagTable const* GetLinkFlagTable() const;
   cmIDEFlagTable const* GetCudaFlagTable() const;
   cmIDEFlagTable const* GetCudaHostFlagTable() const;
+  cmIDEFlagTable const* GetMarmasmFlagTable() const;
   cmIDEFlagTable const* GetMasmFlagTable() const;
   cmIDEFlagTable const* GetNasmFlagTable() const;
+
+  bool IsMsBuildRestoreSupported() const;
+  bool IsBuildInParallelSupported() const;
 
 protected:
   cmGlobalVisualStudio10Generator(cmake* cm, const std::string& name,
@@ -157,6 +185,10 @@ protected:
   virtual bool InitializeTegraAndroid(cmMakefile* mf);
   virtual bool InitializeAndroid(cmMakefile* mf);
 
+  bool InitializePlatform(cmMakefile* mf) override;
+  virtual bool InitializePlatformWindows(cmMakefile* mf);
+  virtual bool VerifyNoGeneratorPlatformVersion(cmMakefile* mf) const;
+
   virtual bool ProcessGeneratorToolsetField(std::string const& key,
                                             std::string const& value);
 
@@ -169,15 +201,15 @@ protected:
     None,
     Default,
     PropsExist,
-    PropsMissing
+    PropsMissing,
+    PropsIndeterminate
   };
   virtual AuxToolset FindAuxToolset(std::string& version,
                                     std::string& props) const;
 
   std::string const& GetMSBuildCommand();
 
-  cmIDEFlagTable const* LoadFlagTable(std::string const& optionsName,
-                                      std::string const& toolsetName,
+  cmIDEFlagTable const* LoadFlagTable(std::string const& toolSpecificName,
                                       std::string const& defaultName,
                                       std::string const& table) const;
 
@@ -187,6 +219,8 @@ protected:
   std::string GeneratorToolsetCustomVCTargetsDir;
   std::string GeneratorToolsetCuda;
   std::string GeneratorToolsetCudaCustomDir;
+  std::string GeneratorToolsetCudaNvccSubdir;
+  std::string GeneratorToolsetCudaVSIntegrationSubdir;
   std::string DefaultPlatformToolset;
   std::string DefaultPlatformToolsetHostArchitecture;
   std::string DefaultAndroidToolset;
@@ -200,6 +234,7 @@ protected:
   std::string DefaultLinkFlagTableName;
   std::string DefaultCudaFlagTableName;
   std::string DefaultCudaHostFlagTableName;
+  std::string DefaultMarmasmFlagTableName;
   std::string DefaultMasmFlagTableName;
   std::string DefaultNasmFlagTableName;
   std::string DefaultRCFlagTableName;
@@ -208,29 +243,20 @@ protected:
   bool SystemIsWindowsPhone = false;
   bool SystemIsWindowsStore = false;
   bool SystemIsAndroid = false;
+  bool MSBuildCommandInitialized = false;
 
 private:
-  class Factory;
-  friend class Factory;
-
   struct LongestSourcePath
   {
-    LongestSourcePath()
-      : Length(0)
-      , Target(0)
-      , SourceFile(0)
-    {
-    }
-    size_t Length;
-    cmGeneratorTarget* Target;
-    cmSourceFile const* SourceFile;
+    LongestSourcePath() = default;
+    size_t Length = 0;
+    cmGeneratorTarget* Target = nullptr;
+    cmSourceFile const* SourceFile = nullptr;
     std::string SourceRel;
   };
   LongestSourcePath LongestSource;
 
   std::string MSBuildCommand;
-  bool MSBuildCommandInitialized;
-  cmVisualStudio10ToolsetOptions ToolsetOptions;
   std::set<std::string> AndroidExecutableWarnings;
   virtual std::string FindMSBuildCommand();
   std::string FindDevEnvCommand() override;
@@ -238,15 +264,28 @@ private:
 
   std::string GeneratorToolsetVersion;
 
-  bool PlatformToolsetNeedsDebugEnum;
+  bool PlatformToolsetNeedsDebugEnum = false;
 
   bool ParseGeneratorToolset(std::string const& ts, cmMakefile* mf);
+
+  std::string GetClFlagTableName() const;
+  std::string GetCSharpFlagTableName() const;
+  std::string GetRcFlagTableName() const;
+  std::string GetLibFlagTableName() const;
+  std::string GetLinkFlagTableName() const;
+  std::string GetMasmFlagTableName() const;
+  std::string CanonicalToolsetName(std::string const& toolset) const;
+
+  cm::optional<std::string> FindFlagTable(cm::string_view toolsetName,
+                                          cm::string_view table) const;
+
+  std::string CustomFlagTableDir;
 
   std::string CustomVCTargetsPath;
   std::string VCTargetsPath;
   bool FindVCTargetsPath(cmMakefile* mf);
 
-  bool CudaEnabled;
+  bool CudaEnabled = false;
 
   // We do not use the reload macros for VS >= 10.
   std::string GetUserMacrosDirectory() override { return ""; }

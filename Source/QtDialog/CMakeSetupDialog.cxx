@@ -32,6 +32,7 @@
 
 #include "QCMake.h"
 #include "QCMakeCacheView.h"
+#include "QCMakeSizeType.h"
 
 #include "cmSystemTools.h"
 #include "cmVersion.h"
@@ -42,7 +43,7 @@
 #include "RegexExplorer.h"
 #include "WarningMessagesDialog.h"
 
-void OpenReferenceManual()
+void OpenReferenceManual(const QString& filename)
 {
   QString urlFormat("https://cmake.org/cmake/help/v%1.%2/");
   QUrl url(urlFormat.arg(QString::number(cmVersion::GetMajorVersion()),
@@ -50,8 +51,8 @@ void OpenReferenceManual()
 
   if (!cmSystemTools::GetHTMLDoc().empty()) {
     url = QUrl::fromLocalFile(
-      QDir(QString::fromLocal8Bit(cmSystemTools::GetHTMLDoc().data()))
-        .filePath("index.html"));
+      QDir(QString::fromStdString(cmSystemTools::GetHTMLDoc()))
+        .filePath(filename));
   }
 
   QDesktopServices::openUrl(url);
@@ -178,7 +179,11 @@ CMakeSetupDialog::CMakeSetupDialog()
                    &CMakeSetupDialog::doOutputErrorNext);
   a->setShortcut(QKeySequence(Qt::Key_F8));
   auto* s = new QShortcut(this);
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
   s->setKey(QKeySequence(Qt::CTRL + Qt::Key_Period));
+#else
+  s->setKey(QKeySequence(Qt::CTRL | Qt::Key_Period));
+#endif
   QObject::connect(s, &QShortcut::activated, this,
                    &CMakeSetupDialog::doOutputErrorNext); // in Eclipse
 
@@ -208,7 +213,8 @@ CMakeSetupDialog::CMakeSetupDialog()
   QObject::connect(a, &QAction::triggered, this, &CMakeSetupDialog::doHelp);
   a->setShortcut(QKeySequence::HelpContents);
   a = HelpMenu->addAction(tr("CMake Reference Manual"));
-  QObject::connect(a, &QAction::triggered, this, OpenReferenceManual);
+  QObject::connect(a, &QAction::triggered, this,
+                   [] { OpenReferenceManual("index.html"); });
   a = HelpMenu->addAction(tr("About"));
   QObject::connect(a, &QAction::triggered, this, &CMakeSetupDialog::doAbout);
 
@@ -222,7 +228,8 @@ CMakeSetupDialog::CMakeSetupDialog()
   this->SourceDirectory->setCompleter(new QCMakeFileCompleter(this, true));
 
   // fixed pitch font in output window
-  QFont outputFont("Courier");
+  QFont outputFont("Courier New");
+  outputFont.setStyleHint(QFont::Monospace);
   this->Output->setFont(outputFont);
   this->ErrorFormat.setForeground(QBrush(Qt::red));
 
@@ -725,13 +732,12 @@ void CMakeSetupDialog::updatePreset(const QString& name)
   }
 }
 
-void CMakeSetupDialog::showPresetLoadError(
-  const QString& dir, cmCMakePresetsFile::ReadFileResult result)
+void CMakeSetupDialog::showPresetLoadError(const QString& dir,
+                                           const QString& message)
 {
   QMessageBox::warning(
     this, "Error Reading CMake Presets",
-    QString::fromLocal8Bit("Could not read presets from %1: %2")
-      .arg(dir, cmCMakePresetsFile::ResultToString(result)));
+    QString("Could not read presets from %1: %2").arg(dir, message));
 }
 
 void CMakeSetupDialog::doBinaryBrowse()
@@ -1114,12 +1120,12 @@ void CMakeSetupDialog::saveBuildPaths(const QStringList& paths)
   QSettings settings;
   settings.beginGroup("Settings/StartPath");
 
-  int num = paths.count();
+  cm_qsizetype num = paths.count();
   if (num > 10) {
     num = 10;
   }
 
-  for (int i = 0; i < num; i++) {
+  for (cm_qsizetype i = 0; i < num; i++) {
     settings.setValue(QString("WhereBuild%1").arg(i), paths[i]);
   }
 }
@@ -1339,7 +1345,8 @@ void CMakeSetupDialog::showUserChanges()
 void CMakeSetupDialog::setSearchFilter(const QString& str)
 {
   this->CacheValues->selectionModel()->clear();
-  this->CacheValues->setSearchFilter(str);
+  const bool valid = this->CacheValues->setSearchFilter(str);
+  QtCMake::setSearchFilterColor(this->Search, valid);
 }
 
 void CMakeSetupDialog::doOutputContextMenu(QPoint pt)

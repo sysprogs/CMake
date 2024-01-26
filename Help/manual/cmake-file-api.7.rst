@@ -23,6 +23,12 @@ of files within the API directory.  API file layout versioning is
 orthogonal to the versioning of `Object Kinds`_ used in replies.
 This version of CMake supports only one API version, `API v1`_.
 
+.. versionadded:: 3.27
+  Projects may also submit queries for the current run using the
+  :command:`cmake_file_api` command.
+
+.. _`file-api v1`:
+
 API v1
 ======
 
@@ -258,8 +264,8 @@ The members are:
 
   ``paths``
     A JSON object specifying paths to things that come with CMake.
-    It has members for ``cmake``, ``ctest``, and ``cpack`` whose values
-    are JSON strings specifying the absolute path to each tool,
+    It has members for :program:`cmake`, :program:`ctest`, and :program:`cpack`
+    whose values are JSON strings specifying the absolute path to each tool,
     represented with forward slashes.  It also has a ``root`` member for
     the absolute path to the directory containing CMake resources like the
     ``Modules/`` directory (see :variable:`CMAKE_ROOT`).
@@ -371,7 +377,7 @@ v1 Reply Files
 Reply files containing specific `Object Kinds`_ are written by CMake.
 The names of these files are unspecified and must not be interpreted
 by clients.  Clients must first read the `v1 Reply Index File`_ and
-and follow references to the names of the desired response objects.
+follow references to the names of the desired response objects.
 
 Reply files (including the index file) will never be replaced by
 files of the same name but different content.  This allows a client
@@ -425,7 +431,7 @@ Version 1 does not exist to avoid confusion with that from
 
   {
     "kind": "codemodel",
-    "version": { "major": 2, "minor": 2 },
+    "version": { "major": 2, "minor": 6 },
     "paths": {
       "source": "/path/to/top-level-source-dir",
       "build": "/path/to/top-level-build-dir"
@@ -443,7 +449,8 @@ Version 1 does not exist to avoid confusion with that from
             "hasInstallRule": true,
             "minimumCMakeVersion": {
               "string": "3.14"
-            }
+            },
+            "jsonFile": "<file>"
           },
           {
             "source": "sub",
@@ -453,7 +460,8 @@ Version 1 does not exist to avoid confusion with that from
             "targetIndexes": [ 1 ],
             "minimumCMakeVersion": {
               "string": "3.14"
-            }
+            },
+            "jsonFile": "<file>"
           }
         ],
         "projects": [
@@ -569,6 +577,13 @@ The members specific to ``codemodel`` objects are:
       :command:`install` rules, i.e. whether a ``make install``
       or equivalent rule is available.
 
+    ``jsonFile``
+      A JSON string specifying a path relative to the codemodel file
+      to another JSON file containing a
+      `"codemodel" version 2 "directory" object`_.
+
+      This field was added in codemodel version 2.3.
+
   ``projects``
     A JSON array of entries corresponding to the top-level project
     and sub-projects defined in the build system.  Each (sub-)project
@@ -632,6 +647,260 @@ The members specific to ``codemodel`` objects are:
       A JSON string specifying a path relative to the codemodel file
       to another JSON file containing a
       `"codemodel" version 2 "target" object`_.
+
+"codemodel" version 2 "directory" object
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A codemodel "directory" object is referenced by a `"codemodel" version 2`_
+object's ``directories`` array.  Each "directory" object is a JSON object
+with members:
+
+``paths``
+  A JSON object containing members:
+
+  ``source``
+    A string specifying the path to the source directory, represented
+    with forward slashes.  If the directory is inside the top-level
+    source directory then the path is specified relative to that
+    directory (with ``.`` for the top-level source directory itself).
+    Otherwise the path is absolute.
+
+  ``build``
+    A string specifying the path to the build directory, represented
+    with forward slashes.  If the directory is inside the top-level
+    build directory then the path is specified relative to that
+    directory (with ``.`` for the top-level build directory itself).
+    Otherwise the path is absolute.
+
+``installers``
+  A JSON array of entries corresponding to :command:`install` rules.
+  Each entry is a JSON object containing members:
+
+  ``component``
+    A string specifying the component selected by the corresponding
+    :command:`install` command invocation.
+
+  ``destination``
+    Optional member that is present for specific ``type`` values below.
+    The value is a string specifying the install destination path.
+    The path may be absolute or relative to the install prefix.
+
+  ``paths``
+    Optional member that is present for specific ``type`` values below.
+    The value is a JSON array of entries corresponding to the paths
+    (files or directories) to be installed.  Each entry is one of:
+
+    * A string specifying the path from which a file or directory
+      is to be installed.  The portion of the path not preceded by
+      a ``/`` also specifies the path (name) to which the file
+      or directory is to be installed under the destination.
+
+    * A JSON object with members:
+
+      ``from``
+        A string specifying the path from which a file or directory
+        is to be installed.
+
+      ``to``
+        A string specifying the path to which the file or directory
+        is to be installed under the destination.
+
+    In both cases the paths are represented with forward slashes.  If
+    the "from" path is inside the top-level directory documented by the
+    corresponding ``type`` value, then the path is specified relative
+    to that directory.  Otherwise the path is absolute.
+
+  ``type``
+    A string specifying the type of installation rule.  The value is one
+    of the following, with some variants providing additional members:
+
+    ``file``
+      An :command:`install(FILES)` or :command:`install(PROGRAMS)` call.
+      The ``destination`` and ``paths`` members are populated, with paths
+      under the top-level *source* directory expressed relative to it.
+      The ``isOptional`` member may exist.
+      This type has no additional members.
+
+    ``directory``
+      An :command:`install(DIRECTORY)` call.
+      The ``destination`` and ``paths`` members are populated, with paths
+      under the top-level *source* directory expressed relative to it.
+      The ``isOptional`` member may exist.
+      This type has no additional members.
+
+    ``target``
+      An :command:`install(TARGETS)` call.
+      The ``destination`` and ``paths`` members are populated, with paths
+      under the top-level *build* directory expressed relative to it.
+      The ``isOptional`` member may exist.
+      This type has additional members ``targetId``, ``targetIndex``,
+      ``targetIsImportLibrary``, and ``targetInstallNamelink``.
+
+    ``export``
+      An :command:`install(EXPORT)` call.
+      The ``destination`` and ``paths`` members are populated, with paths
+      under the top-level *build* directory expressed relative to it.
+      The ``paths`` entries refer to files generated automatically by
+      CMake for installation, and their actual values are considered
+      private implementation details.
+      This type has additional members ``exportName`` and ``exportTargets``.
+
+    ``script``
+      An :command:`install(SCRIPT)` call.
+      This type has additional member ``scriptFile``.
+
+    ``code``
+      An :command:`install(CODE)` call.
+      This type has no additional members.
+
+    ``importedRuntimeArtifacts``
+      An :command:`install(IMPORTED_RUNTIME_ARTIFACTS)` call.
+      The ``destination`` member is populated. The ``isOptional`` member may
+      exist. This type has no additional members.
+
+    ``runtimeDependencySet``
+      An :command:`install(RUNTIME_DEPENDENCY_SET)` call or an
+      :command:`install(TARGETS)` call with ``RUNTIME_DEPENDENCIES``. The
+      ``destination`` member is populated. This type has additional members
+      ``runtimeDependencySetName`` and ``runtimeDependencySetType``.
+
+    ``fileSet``
+      An :command:`install(TARGETS)` call with ``FILE_SET``.
+      The ``destination`` and ``paths`` members are populated.
+      The ``isOptional`` member may exist.
+      This type has additional members ``fileSetName``, ``fileSetType``,
+      ``fileSetDirectories``, and ``fileSetTarget``.
+
+      This type was added in codemodel version 2.4.
+
+  ``isExcludeFromAll``
+    Optional member that is present with boolean value ``true`` when
+    :command:`install` is called with the ``EXCLUDE_FROM_ALL`` option.
+
+  ``isForAllComponents``
+    Optional member that is present with boolean value ``true`` when
+    :command:`install(SCRIPT|CODE)` is called with the
+    ``ALL_COMPONENTS`` option.
+
+  ``isOptional``
+    Optional member that is present with boolean value ``true`` when
+    :command:`install` is called with the ``OPTIONAL`` option.
+    This is allowed when ``type`` is ``file``, ``directory``, or ``target``.
+
+  ``targetId``
+    Optional member that is present when ``type`` is ``target``.
+    The value is a string uniquely identifying the target to be installed.
+    This matches the ``id`` member of the target in the main
+    "codemodel" object's ``targets`` array.
+
+  ``targetIndex``
+    Optional member that is present when ``type`` is ``target``.
+    The value is an unsigned integer 0-based index into the main "codemodel"
+    object's ``targets`` array for the target to be installed.
+
+  ``targetIsImportLibrary``
+    Optional member that is present when ``type`` is ``target`` and
+    the installer is for a Windows DLL import library file or for an
+    AIX linker import file.  If present, it has boolean value ``true``.
+
+  ``targetInstallNamelink``
+    Optional member that is present when ``type`` is ``target`` and
+    the installer corresponds to a target that may use symbolic links
+    to implement the :prop_tgt:`VERSION` and :prop_tgt:`SOVERSION`
+    target properties.
+    The value is a string indicating how the installer is supposed to
+    handle the symlinks: ``skip`` means the installer should skip the
+    symlinks and install only the real file, and ``only`` means the
+    installer should install only the symlinks and not the real file.
+    In all cases the ``paths`` member lists what it actually installs.
+
+  ``exportName``
+    Optional member that is present when ``type`` is ``export``.
+    The value is a string specifying the name of the export.
+
+  ``exportTargets``
+    Optional member that is present when ``type`` is ``export``.
+    The value is a JSON array of entries corresponding to the targets
+    included in the export.  Each entry is a JSON object with members:
+
+    ``id``
+      A string uniquely identifying the target.  This matches
+      the ``id`` member of the target in the main "codemodel"
+      object's ``targets`` array.
+
+    ``index``
+      An unsigned integer 0-based index into the main "codemodel"
+      object's ``targets`` array for the target.
+
+  ``runtimeDependencySetName``
+    Optional member that is present when ``type`` is ``runtimeDependencySet``
+    and the installer was created by an
+    :command:`install(RUNTIME_DEPENDENCY_SET)` call. The value is a string
+    specifying the name of the runtime dependency set that was installed.
+
+  ``runtimeDependencySetType``
+    Optional member that is present when ``type`` is ``runtimeDependencySet``.
+    The value is a string with one of the following values:
+
+    ``library``
+      Indicates that this installer installs dependencies that are not macOS
+      frameworks.
+
+    ``framework``
+      Indicates that this installer installs dependencies that are macOS
+      frameworks.
+
+  ``fileSetName``
+    Optional member that is present when ``type`` is ``fileSet``. The value is
+    a string with the name of the file set.
+
+    This field was added in codemodel version 2.4.
+
+  ``fileSetType``
+    Optional member that is present when ``type`` is ``fileSet``. The value is
+    a string with the type of the file set.
+
+    This field was added in codemodel version 2.4.
+
+  ``fileSetDirectories``
+    Optional member that is present when ``type`` is ``fileSet``. The value
+    is a list of strings with the file set's base directories (determined by
+    genex-evaluation of :prop_tgt:`HEADER_DIRS` or
+    :prop_tgt:`HEADER_DIRS_<NAME>`).
+
+    This field was added in codemodel version 2.4.
+
+  ``fileSetTarget``
+    Optional member that is present when ``type`` is ``fileSet``. The value
+    is a JSON object with members:
+
+    ``id``
+      A string uniquely identifying the target.  This matches
+      the ``id`` member of the target in the main "codemodel"
+      object's ``targets`` array.
+
+    ``index``
+      An unsigned integer 0-based index into the main "codemodel"
+      object's ``targets`` array for the target.
+
+    This field was added in codemodel version 2.4.
+
+  ``scriptFile``
+    Optional member that is present when ``type`` is ``script``.
+    The value is a string specifying the path to the script file on disk,
+    represented with forward slashes.  If the file is inside the top-level
+    source directory then the path is specified relative to that directory.
+    Otherwise the path is absolute.
+
+  ``backtrace``
+    Optional member that is present when a CMake language backtrace to
+    the :command:`install` or other command invocation that added this
+    installer is available.  The value is an unsigned integer 0-based
+    index into the ``backtraceGraph`` member's ``nodes`` array.
+
+``backtraceGraph``
+  A `"codemodel" version 2 "backtrace graph"`_ whose nodes are referenced
+  from ``backtrace`` members elsewhere in this "directory" object.
 
 "codemodel" version 2 "target" object
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -808,6 +1077,29 @@ with members:
     available.  The value is an unsigned integer 0-based index into
     the ``backtraceGraph`` member's ``nodes`` array.
 
+``fileSets``
+  A JSON array of entries corresponding to the target's file sets. Each entry
+  is a JSON object with members:
+
+  ``name``
+    A string specifying the name of the file set.
+
+  ``type``
+    A string specifying the type of the file set.  See
+    :command:`target_sources` supported file set types.
+
+  ``visibility``
+    A string specifying the visibility of the file set; one of ``PUBLIC``,
+    ``PRIVATE``, or ``INTERFACE``.
+
+  ``baseDirectories``
+    A JSON array of strings, each specifying a base directory containing
+    sources in the file set.  If the directory is inside the top-level source
+    directory then the path is specified relative to that directory.
+    Otherwise the path is absolute.
+
+  This field was added in codemodel version 2.5.
+
 ``sources``
   A JSON array of entries corresponding to the target's source files.
   Each entry is a JSON object with members:
@@ -832,6 +1124,13 @@ with members:
   ``isGenerated``
     Optional member that is present with boolean value ``true`` if
     the source is :prop_sf:`GENERATED`.
+
+  ``fileSetIndex``
+    Optional member that is present when the source is part of a file set.
+    The value is an unsigned integer 0-based index into the ``fileSets``
+    array.
+
+    This field was added in codemodel version 2.5.
 
   ``backtrace``
     Optional member that is present when a CMake language backtrace to
@@ -920,6 +1219,28 @@ with members:
       an unsigned integer 0-based index into the ``backtraceGraph``
       member's ``nodes`` array.
 
+  ``frameworks``
+    Optional member that is present when, on Apple platforms, there are
+    frameworks. The value is a JSON array with an entry for each directory.
+    Each entry is a JSON object with members:
+
+    ``path``
+      A string specifying the path to the framework directory,
+      represented with forward slashes.
+
+    ``isSystem``
+      Optional member that is present with boolean value ``true`` if
+      the framework is marked as a system one.
+
+    ``backtrace``
+      Optional member that is present when a CMake language backtrace to
+      the :command:`target_link_libraries` or other command invocation
+      that added this framework is available.  The value is
+      an unsigned integer 0-based index into the ``backtraceGraph``
+      member's ``nodes`` array.
+
+    This field was added in codemodel version 2.6.
+
   ``precompileHeaders``
     Optional member that is present when :command:`target_precompile_headers`
     or other command invocations set :prop_tgt:`PRECOMPILE_HEADERS` on the
@@ -964,40 +1285,87 @@ with members:
       with forward slashes.
 
 ``backtraceGraph``
-  A JSON object describing the graph of backtraces whose nodes are
-  referenced from ``backtrace`` members elsewhere.  The members are:
+  A `"codemodel" version 2 "backtrace graph"`_ whose nodes are referenced
+  from ``backtrace`` members elsewhere in this "target" object.
 
-  ``nodes``
-    A JSON array listing nodes in the backtrace graph.  Each entry
-    is a JSON object with members:
+"codemodel" version 2 "backtrace graph"
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    ``file``
-      An unsigned integer 0-based index into the backtrace ``files`` array.
+The ``backtraceGraph`` member of a `"codemodel" version 2 "directory" object`_,
+or `"codemodel" version 2 "target" object`_ is a JSON object describing a
+graph of backtraces.  Its nodes are referenced from ``backtrace`` members
+elsewhere in the containing object.  The backtrace graph object members are:
 
-    ``line``
-      An optional member present when the node represents a line within
-      the file.  The value is an unsigned integer 1-based line number.
+``nodes``
+  A JSON array listing nodes in the backtrace graph.  Each entry
+  is a JSON object with members:
 
-    ``command``
-      An optional member present when the node represents a command
-      invocation within the file.  The value is an unsigned integer
-      0-based index into the backtrace ``commands`` array.
+  ``file``
+    An unsigned integer 0-based index into the backtrace ``files`` array.
 
-    ``parent``
-      An optional member present when the node is not the bottom of
-      the call stack.  The value is an unsigned integer 0-based index
-      of another entry in the backtrace ``nodes`` array.
+  ``line``
+    An optional member present when the node represents a line within
+    the file.  The value is an unsigned integer 1-based line number.
 
-  ``commands``
-    A JSON array listing command names referenced by backtrace nodes.
-    Each entry is a string specifying a command name.
+  ``command``
+    An optional member present when the node represents a command
+    invocation within the file.  The value is an unsigned integer
+    0-based index into the backtrace ``commands`` array.
 
-  ``files``
-    A JSON array listing CMake language files referenced by backtrace nodes.
-    Each entry is a string specifying the path to a file, represented
-    with forward slashes.  If the file is inside the top-level source
-    directory then the path is specified relative to that directory.
-    Otherwise the path is absolute.
+  ``parent``
+    An optional member present when the node is not the bottom of
+    the call stack.  The value is an unsigned integer 0-based index
+    of another entry in the backtrace ``nodes`` array.
+
+``commands``
+  A JSON array listing command names referenced by backtrace nodes.
+  Each entry is a string specifying a command name.
+
+``files``
+  A JSON array listing CMake language files referenced by backtrace nodes.
+  Each entry is a string specifying the path to a file, represented
+  with forward slashes.  If the file is inside the top-level source
+  directory then the path is specified relative to that directory.
+  Otherwise the path is absolute.
+
+.. _`file-api configureLog`:
+
+Object Kind "configureLog"
+--------------------------
+
+The ``configureLog`` object kind describes the location and contents of
+a :manual:`cmake-configure-log(7)` file.
+
+There is only one ``configureLog`` object major version, version 1.
+
+"configureLog" version 1
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``configureLog`` object version 1 is a JSON object:
+
+.. code-block:: json
+
+  {
+    "kind": "configureLog",
+    "version": { "major": 1, "minor": 0 },
+    "path": "/path/to/top-level-build-dir/CMakeFiles/CMakeConfigureLog.yaml",
+    "eventKindNames": [ "try_compile-v1", "try_run-v1" ]
+  }
+
+The members specific to ``configureLog`` objects are:
+
+``path``
+  A string specifying the path to the configure log file.
+  Clients must read the log file from this path, which may be
+  different than the path documented by :manual:`cmake-configure-log(7)`.
+  The log file may not exist if no events are logged.
+
+``eventKindNames``
+  A JSON array whose entries are each a JSON string naming one
+  of the :manual:`cmake-configure-log(7)` versioned event kinds.
+  At most one version of each configure log event kind will be listed.
+  Although the configure log may contain other (versioned) event kinds,
+  clients must ignore those that are not listed in this field.
 
 Object Kind "cache"
 -------------------
@@ -1244,7 +1612,7 @@ The members specific to ``toolchains`` objects are:
 
   ``language``
     A JSON string specifying the toolchain language, like C or CXX. Language
-    names are the same as langauge names that can be passed to the
+    names are the same as language names that can be passed to the
     :command:`project` command. Because CMake only supports a single toolchain
     per language, this field can be used as a key.
 

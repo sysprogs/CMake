@@ -47,8 +47,9 @@ does, and present the user with the presets listed in the file. Users should be
 able to see (and possibly edit) the CMake cache variables, environment
 variables, and command line options that are defined for a given preset. The
 IDE should then construct the list of appropriate :manual:`cmake(1)` command
-line arguments based on these settings, rather than using the ``--preset=``
-option directly. The ``--preset=`` option is intended only as a convenient
+line arguments based on these settings, rather than using the
+:option:`--preset= <cmake --preset>` option directly. The
+:option:`--preset= <cmake --preset>` option is intended only as a convenient
 frontend for command line users, and should not be used by the IDE.
 
 For example, if a preset named ``ninja`` specifies ``Ninja`` as the generator
@@ -64,6 +65,11 @@ run:
 .. code-block:: console
 
   cmake -S /path/to/source -B /path/to/source/build -G Ninja
+
+In cases where a preset contains lots of cache variables, and passing all of
+them as :option:`-D <cmake -D>` flags would cause the command line length limit
+of the platform to be exceeded, the IDE should instead construct a temporary
+cache script and pass it with the :option:`-C <cmake -C>` flag.
 
 While reading, parsing, and evaluating the contents of ``CMakePresets.json`` is
 straightforward, it is not trivial. In addition to the documentation, IDE
@@ -104,8 +110,9 @@ Building
 
 If a Makefile or Ninja generator is used to generate the build tree, it is not
 recommended to invoke ``make`` or ``ninja`` directly. Instead, it is
-recommended that the IDE invoke :manual:`cmake(1)` with the ``--build``
-argument, which will in turn invoke the appropriate build tool.
+recommended that the IDE invoke :manual:`cmake(1)` with the
+:option:`--build <cmake --build>` argument, which will in turn invoke the
+appropriate build tool.
 
 If an IDE project generator is used, such as :generator:`Xcode` or one of the
 Visual Studio generators, and the IDE understands the project format used, the
@@ -124,3 +131,31 @@ obtain this information and use it to present the user with a list of tests.
 
 IDEs should not invoke the ``test`` target of the generated buildsystem.
 Instead, they should invoke :manual:`ctest(1)` directly.
+
+IDEs with CMake integration
+===========================
+
+The following IDEs support CMake natively:
+
+* `CLion`_
+* `KDevelop`_
+* `QtCreator`_
+* `Vim`_ (via a plugin)
+* `Visual Studio`_
+* `VSCode`_ (via a plugin)
+
+.. _CLion: https://www.jetbrains.com/clion/
+.. _KDevelop: https://kdevelop.org/
+.. _QtCreator: https://www.qt.io/product/development-tools
+.. _Vim: https://www.vim.org/
+.. _Visual Studio: https://visualstudio.microsoft.com/
+.. _VSCode: https://code.visualstudio.com/
+
+Additionally, CMake has builtin support for some IDEs:
+
+* :ref:`IDE Build Tool Generators`:
+  Generate IDE native build systems such as Visual Studio or Xcode.
+* :ref:`Extra Generators`:
+  Extend :ref:`Command-Line Build Tool Generators` to generate IDE
+  project files that hook into the command-line build system.
+  Superseded by the :manual:`File API <cmake-file-api(7)>`.

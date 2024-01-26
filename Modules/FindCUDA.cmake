@@ -2,19 +2,24 @@
 FindCUDA
 --------
 
+.. versionchanged:: 3.27
+  This module is available only if policy :policy:`CMP0146` is not set to ``NEW``.
+  Port projects to CMake's first-class ``CUDA`` language support.
+
 .. deprecated:: 3.10
+  Do not use this module in new code.
 
 It is no longer necessary to use this module or call ``find_package(CUDA)``
 for compiling CUDA code. Instead, list ``CUDA`` among the languages named
 in the top-level call to the :command:`project` command, or call the
 :command:`enable_language` command with ``CUDA``.
-Then one can add CUDA (``.cu``) sources to programs directly
-in calls to :command:`add_library` and :command:`add_executable`.
+Then one can add CUDA (``.cu``) sources directly to targets similar to other
+languages.
 
 .. versionadded:: 3.17
-  To find and use the CUDA toolkit libraries the :module:`FindCUDAToolkit`
-  module has superseded this module.  It works whether or not the ``CUDA``
-  language is enabled.
+  To find and use the CUDA toolkit libraries manually, use the
+  :module:`FindCUDAToolkit` module instead.  It works regardless of the
+  ``CUDA`` language being enabled.
 
 Documentation of Deprecated Usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -555,6 +560,23 @@ The script defines the following variables:
 #
 ###############################################################################
 
+cmake_policy(GET CMP0146 _FindCUDA_CMP0146)
+if(_FindCUDA_CMP0146 STREQUAL "NEW")
+  message(FATAL_ERROR "The FindCUDA module has been removed by policy CMP0146.")
+endif()
+
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+  cmake_policy(GET CMP0147 _FindCUDA_CMP0147)
+  if(_FindCUDA_CMP0147 STREQUAL "NEW")
+    message(FATAL_ERROR "The FindCUDA module does not work in Visual Studio with policy CMP0147.")
+  endif()
+endif()
+
+if(_FindCUDA_testing)
+  set(_FindCUDA_included TRUE)
+  return()
+endif()
+
 # FindCUDA.cmake
 
 # This macro helps us find the location of helper files we will need the full path to
@@ -799,7 +821,9 @@ if(NOT "${CUDA_TOOLKIT_ROOT_DIR}" STREQUAL "${CUDA_TOOLKIT_ROOT_DIR_INTERNAL}")
   unset(CUDA_VERSION CACHE)
 endif()
 
-if(NOT "${CUDA_TOOLKIT_TARGET_DIR}" STREQUAL "${CUDA_TOOLKIT_TARGET_DIR_INTERNAL}")
+# If CUDA_TOOLKIT_TARGET_DIR exists, check if it has changed.
+if(DEFINED CUDA_TOOLKIT_TARGET_DIR
+    AND NOT "${CUDA_TOOLKIT_TARGET_DIR}" STREQUAL "${CUDA_TOOLKIT_TARGET_DIR_INTERNAL}")
   cuda_unset_include_and_libraries()
 endif()
 
@@ -926,8 +950,8 @@ mark_as_advanced(CUDA_NVCC_EXECUTABLE)
 if(CUDA_NVCC_EXECUTABLE AND NOT CUDA_VERSION)
   # Compute the version.
   execute_process (COMMAND ${CUDA_NVCC_EXECUTABLE} "--version" OUTPUT_VARIABLE NVCC_OUT)
-  string(REGEX REPLACE ".*release ([0-9]+)\\.([0-9]+).*" "\\1" CUDA_VERSION_MAJOR ${NVCC_OUT})
-  string(REGEX REPLACE ".*release ([0-9]+)\\.([0-9]+).*" "\\2" CUDA_VERSION_MINOR ${NVCC_OUT})
+  string(REGEX REPLACE ".*release ([0-9]+)\\.([0-9]+).*" "\\1" CUDA_VERSION_MAJOR "${NVCC_OUT}")
+  string(REGEX REPLACE ".*release ([0-9]+)\\.([0-9]+).*" "\\2" CUDA_VERSION_MINOR "${NVCC_OUT}")
   set(CUDA_VERSION "${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR}" CACHE STRING "Version of CUDA as computed from nvcc.")
   mark_as_advanced(CUDA_VERSION)
 else()
@@ -1050,6 +1074,7 @@ if(CUDA_USE_STATIC_CUDA_RUNTIME)
     if(NOT APPLE AND NOT (CMAKE_SYSTEM_NAME STREQUAL "QNX"))
       #On Linux, you must link against librt when using the static cuda runtime.
       find_library(CUDA_rt_LIBRARY rt)
+      mark_as_advanced(CUDA_rt_LIBRARY)
       if (NOT CUDA_rt_LIBRARY)
         message(WARNING "Expecting to find librt for libcudart_static, but didn't find it.")
       endif()
@@ -1148,8 +1173,10 @@ if(NOT CUDA_VERSION VERSION_LESS "9.0")
   find_cuda_helper_libs(nppc)
   find_cuda_helper_libs(nppial)
   find_cuda_helper_libs(nppicc)
+  set(CUDA_npp_LIBRARY ${CUDA_nppc_LIBRARY} ${CUDA_nppial_LIBRARY} ${CUDA_nppicc_LIBRARY})
   if(CUDA_VERSION VERSION_LESS "11.0")
     find_cuda_helper_libs(nppicom)
+    list(APPEND CUDA_npp_LIBRARY ${CUDA_nppicom_LIBRARY})
   endif()
   find_cuda_helper_libs(nppidei)
   find_cuda_helper_libs(nppif)
@@ -1159,7 +1186,7 @@ if(NOT CUDA_VERSION VERSION_LESS "9.0")
   find_cuda_helper_libs(nppisu)
   find_cuda_helper_libs(nppitc)
   find_cuda_helper_libs(npps)
-  set(CUDA_npp_LIBRARY "${CUDA_nppc_LIBRARY};${CUDA_nppial_LIBRARY};${CUDA_nppicc_LIBRARY};${CUDA_nppicom_LIBRARY};${CUDA_nppidei_LIBRARY};${CUDA_nppif_LIBRARY};${CUDA_nppig_LIBRARY};${CUDA_nppim_LIBRARY};${CUDA_nppist_LIBRARY};${CUDA_nppisu_LIBRARY};${CUDA_nppitc_LIBRARY};${CUDA_npps_LIBRARY}")
+  list(APPEND CUDA_npp_LIBRARY ${CUDA_nppidei_LIBRARY} ${CUDA_nppif_LIBRARY} ${CUDA_nppig_LIBRARY} ${CUDA_nppim_LIBRARY} ${CUDA_nppist_LIBRARY} ${CUDA_nppisu_LIBRARY} ${CUDA_nppitc_LIBRARY} ${CUDA_npps_LIBRARY})
 elseif(CUDA_VERSION VERSION_GREATER "5.0")
   # In CUDA 5.5 NPP was split into 3 separate libraries.
   find_cuda_helper_libs(nppc)
@@ -1396,7 +1423,7 @@ function(CUDA_COMPUTE_BUILD_PATH path build_path)
   # Only deal with CMake style paths from here on out
   file(TO_CMAKE_PATH "${path}" bpath)
   if (IS_ABSOLUTE "${bpath}")
-    # Absolute paths are generally unnessary, especially if something like
+    # Absolute paths are generally unnecessary, especially if something like
     # file(GLOB_RECURSE) is used to pick up the files.
 
     string(FIND "${bpath}" "${CMAKE_CURRENT_BINARY_DIR}" _binary_dir_pos)
@@ -1915,7 +1942,7 @@ function(CUDA_LINK_SEPARABLE_COMPILATION_OBJECTS output_file cuda_target options
       list(APPEND flags -Xcompiler ${f})
     endforeach()
 
-    # Add our general CUDA_NVCC_FLAGS with the configuration specifig flags
+    # Add our general CUDA_NVCC_FLAGS with the configuration specific flags
     set(nvcc_flags ${CUDA_NVCC_FLAGS} ${config_specific_flags} ${nvcc_flags})
 
     file(RELATIVE_PATH output_file_relative_path "${CMAKE_BINARY_DIR}" "${output_file}")

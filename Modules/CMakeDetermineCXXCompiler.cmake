@@ -58,7 +58,13 @@ else()
 
     # finally list compilers to try
     if(NOT CMAKE_CXX_COMPILER_INIT)
-      set(CMAKE_CXX_COMPILER_LIST CC ${_CMAKE_TOOLCHAIN_PREFIX}c++ ${_CMAKE_TOOLCHAIN_PREFIX}g++ aCC cl bcc xlC icpx icx clang++)
+      set(CMAKE_CXX_COMPILER_LIST CC ${_CMAKE_TOOLCHAIN_PREFIX}c++ ${_CMAKE_TOOLCHAIN_PREFIX}g++ aCC cl bcc xlC)
+      if(NOT CMAKE_HOST_WIN32)
+        # FIXME(#24314): Add support for the GNU-like icpx compiler driver
+        # on Windows, first introduced by Intel oneAPI 2023.0.
+        list(APPEND CMAKE_CXX_COMPILER_LIST icpx)
+      endif()
+      list(APPEND CMAKE_CXX_COMPILER_LIST icx clang++)
     endif()
 
     _cmake_find_compiler(CXX)
@@ -80,6 +86,11 @@ else()
 
     # ARMClang need target options
     "--target=arm-arm-none-eabi -mcpu=cortex-m3"
+
+    # MSVC needs at least one include directory for __has_include to function,
+    # but custom toolchains may run MSVC with no INCLUDE env var and no -I flags.
+    # Also avoid linking so this works with no LIB env var.
+    "-c -I__does_not_exist__"
     )
 endif()
 
@@ -120,11 +131,6 @@ if(NOT CMAKE_CXX_COMPILER_ID_RUN)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_COMPILER_IS_GNUCXX 1)
   endif()
-  if(CMAKE_CXX_PLATFORM_ID MATCHES "MinGW")
-    set(CMAKE_COMPILER_IS_MINGW 1)
-  elseif(CMAKE_CXX_PLATFORM_ID MATCHES "Cygwin")
-    set(CMAKE_COMPILER_IS_CYGWIN 1)
-  endif()
 else()
   if(NOT DEFINED CMAKE_CXX_COMPILER_FRONTEND_VARIANT)
     # Some toolchain files set our internal CMAKE_CXX_COMPILER_ID_RUN
@@ -159,13 +165,13 @@ endif ()
 
 if (NOT _CMAKE_TOOLCHAIN_PREFIX)
 
-  if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU|Clang|QCC")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|QCC|LCC")
     get_filename_component(COMPILER_BASENAME "${CMAKE_CXX_COMPILER}" NAME)
-    if (COMPILER_BASENAME MATCHES "^(.+-)?(clang\\+\\+|[gc]\\+\\+|clang-cl)(-[0-9]+(\\.[0-9]+)*)?(-[^.]+)?(\\.exe)?$")
+    if (COMPILER_BASENAME MATCHES "^(.+-)?(clang\\+\\+|[gc]\\+\\+|clang-cl)(-?[0-9]+(\\.[0-9]+)*)?(-[^.]+)?(\\.exe)?$")
       set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
       set(_CMAKE_TOOLCHAIN_SUFFIX ${CMAKE_MATCH_3})
       set(_CMAKE_COMPILER_SUFFIX ${CMAKE_MATCH_5})
-    elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
       if(CMAKE_CXX_COMPILER_TARGET)
         set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_CXX_COMPILER_TARGET}-)
       endif()
@@ -180,7 +186,7 @@ if (NOT _CMAKE_TOOLCHAIN_PREFIX)
     if ("${_CMAKE_TOOLCHAIN_PREFIX}" MATCHES "(.+-)?llvm-$")
       set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
     endif ()
-  elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "TI")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "TI")
     # TI compilers are named e.g. cl6x, cl470 or armcl.exe
     get_filename_component(COMPILER_BASENAME "${CMAKE_CXX_COMPILER}" NAME)
     if (COMPILER_BASENAME MATCHES "^(.+)?cl([^.]+)?(\\.exe)?$")

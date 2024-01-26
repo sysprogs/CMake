@@ -165,7 +165,7 @@ void cmGeneratorExpressionEvaluationFile::Generate(cmLocalGenerator* lg)
   }
 
   cmListFileBacktrace lfbt = this->OutputFileExpr->GetBacktrace();
-  cmGeneratorExpression contentGE(lfbt);
+  cmGeneratorExpression contentGE(*lg->GetCMakeInstance(), lfbt);
   std::unique_ptr<cmCompiledGeneratorExpression> inputExpression =
     contentGE.Parse(inputContent);
 
@@ -182,7 +182,7 @@ void cmGeneratorExpressionEvaluationFile::Generate(cmLocalGenerator* lg)
     for (std::string const& li : allConfigs) {
       this->Generate(lg, li, le, inputExpression.get(), outputFiles,
                      this->Permissions);
-      if (cmSystemTools::GetFatalErrorOccured()) {
+      if (cmSystemTools::GetFatalErrorOccurred()) {
         return;
       }
     }

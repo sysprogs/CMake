@@ -10,6 +10,7 @@
 
 #include "cmGlobalVisualStudioGenerator.h"
 #include "cmLocalGenerator.h"
+#include "cmVsProjectType.h"
 
 class cmCustomCommand;
 class cmCustomCommandGenerator;
@@ -28,11 +29,12 @@ class cmLocalVisualStudioGenerator : public cmLocalGenerator
 {
 public:
   cmLocalVisualStudioGenerator(cmGlobalGenerator* gg, cmMakefile* mf);
-  virtual ~cmLocalVisualStudioGenerator();
+  ~cmLocalVisualStudioGenerator() override;
 
-  /** Construct a script from the given list of command lines.  */
   std::string ConstructScript(cmCustomCommandGenerator const& ccg,
                               const std::string& newline = "\n");
+  std::string FinishConstructScript(VsProjectType projectType,
+                                    const std::string& newline = "\n");
 
   /** Label to which to jump in a batch file after a failed step in a
       sequence of custom commands. */
@@ -45,7 +47,7 @@ public:
 
   void ComputeObjectFilenames(
     std::map<cmSourceFile const*, std::string>& mapping,
-    cmGeneratorTarget const* = 0) override;
+    cmGeneratorTarget const* = nullptr) override;
 
 protected:
   virtual const char* ReportErrorLabel() const;

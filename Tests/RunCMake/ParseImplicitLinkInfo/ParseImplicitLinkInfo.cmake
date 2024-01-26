@@ -1,6 +1,3 @@
-cmake_minimum_required(VERSION 3.14)
-project(Minimal NONE)
-
 #
 # list of targets to test.  to add a target: put its files in the data
 # subdirectory and add it to this list...  we run each target's
@@ -23,6 +20,9 @@ set(targets
   hand-C-empty hand-CXX-empty
   hand-C-relative hand-CXX-relative
   linux-C-GNU-7.3.0 linux-CXX-GNU-7.3.0 linux-Fortran-GNU-7.3.0
+  linux-C-GNU-10.2.1-static-libgcc
+    linux-CXX-GNU-10.2.1-static-libstdc++
+    linux-Fortran-GNU-10.2.1-static-libgfortran
   linux-C-Intel-18.0.0.20170811 linux-CXX-Intel-18.0.0.20170811
   linux-C-PGI-18.10.1 linux-CXX-PGI-18.10.1
     linux-Fortran-PGI-18.10.1 linux_pgf77-Fortran-PGI-18.10.1
@@ -35,11 +35,15 @@ set(targets
   linux-C-XL-16.1.0.0 linux-CXX-XL-16.1.0.0
   linux-CUDA-NVIDIA-10.1.168-CLANG linux-CUDA-NVIDIA-10.1.168-XLClang-v
     linux-CUDA-NVIDIA-9.2.148-GCC
+  linux-Fortran-LLVMFlang-15.0.0
+  linux-custom_clang-C-Clang-13.0.0 linux-custom_clang-CXX-Clang-13.0.0
   mingw.org-C-GNU-4.9.3 mingw.org-CXX-GNU-4.9.3
   netbsd-C-GNU-4.8.5 netbsd-CXX-GNU-4.8.5
     netbsd_nostdinc-C-GNU-4.8.5 netbsd_nostdinc-CXX-GNU-4.8.5
   openbsd-C-Clang-5.0.1 openbsd-CXX-Clang-5.0.1
   sunos-C-SunPro-5.13.0 sunos-CXX-SunPro-5.13.0 sunos-Fortran-SunPro-8.8.0
+  windows_x86_64-C-Clang-17.0.1-MSVC windows_x86_64-CXX-Clang-17.0.1-MSVC windows_x86_64-Fortran-LLVMFlang-17.0.1-MSVC
+  windows_arm64-C-Clang-17.0.1-MSVC windows_arm64-CXX-Clang-17.0.1-MSVC windows_arm64-Fortran-LLVMFlang-17.0.1-MSVC
   )
 
 if(CMAKE_HOST_WIN32)
@@ -67,7 +71,7 @@ function(load_compiler_info infile lang_var outcmvars_var outstr_var)
   string(REGEX REPLACE "\r?\n" ";" in_lines "${in}")
   foreach(line IN LISTS in_lines)
     # check for special CMAKE variable lines and parse them if found
-    if("${line}" MATCHES "^CMAKE_([_A-Za-z0-9]+)=(.*)$")
+    if("${line}" MATCHES "^CMAKE_([_A-Za-z0-9+]+)=(.*)$")
       if("${CMAKE_MATCH_1}" STREQUAL "LANG")   # handle CMAKE_LANG here
         set(lang "${CMAKE_MATCH_2}")
       else()
@@ -150,6 +154,7 @@ foreach(t ${targets})
 
   cmake_parse_implicit_link_info("${input}" implicit_libs idirs implicit_fwks log
       "${CMAKE_${lang}_IMPLICIT_OBJECT_REGEX}"
+      LANGUAGE ${lang}
       COMPUTE_IMPLICIT_OBJECTS implicit_objs)
 
   set(library_arch)
@@ -162,12 +167,12 @@ foreach(t ${targets})
     if("${state}" STREQUAL "done")
       message("empty parse failed: ${idirs}, log=${log}")
     endif()
-  elseif(NOT "${idirs}" STREQUAL "${idirs_output}")
-    message("${t} parse failed: state=${state}, '${idirs}' does not match '${idirs_output}'")
-  elseif(NOT "${implicit_libs}" STREQUAL "${implicit_lib_output}")
-    message("${t} parse failed: state=${state}, '${implicit_libs}' does not match '${implicit_lib_output}'")
-  elseif((library_arch OR library_arch_output) AND NOT "${library_arch}" STREQUAL "${library_arch_output}")
-    message("${t} parse failed: state=${state}, '${library_arch}' does not match '${library_arch_output}'")
+  elseif(NOT "${idirs}" MATCHES "^${idirs_output}$")
+    message("${t} parse failed: state=${state}, '${idirs}' does not match '^${idirs_output}$'")
+  elseif(NOT "${implicit_libs}" MATCHES "^${implicit_lib_output}$")
+    message("${t} parse failed: state=${state}, '${implicit_libs}' does not match '^${implicit_lib_output}$'")
+  elseif((library_arch OR library_arch_output) AND NOT "${library_arch}" MATCHES "^${library_arch_output}$")
+    message("${t} parse failed: state=${state}, '${library_arch}' does not match '^${library_arch_output}$'")
   endif()
 
   unload_compiler_info("${cmvars}")

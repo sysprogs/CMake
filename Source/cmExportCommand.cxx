@@ -7,12 +7,14 @@
 #include <utility>
 
 #include <cm/memory>
-#include <cmext/algorithm>
+#include <cm/optional>
 #include <cmext/string_view>
 
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmArgumentParser.h"
+#include "cmArgumentParserTypes.h"
+#include "cmCryptoHash.h"
 #include "cmExecutionStatus.h"
 #include "cmExportBuildAndroidMKGenerator.h"
 #include "cmExportBuildFileGenerator.h"
@@ -57,17 +59,20 @@ bool cmExportCommand(std::vector<std::string> const& args,
   struct Arguments
   {
     std::string ExportSetName;
-    std::vector<std::string> Targets;
+    cm::optional<ArgumentParser::MaybeEmpty<std::vector<std::string>>> Targets;
     std::string Namespace;
     std::string Filename;
     std::string AndroidMKFile;
+    std::string CxxModulesDirectory;
     bool Append = false;
     bool ExportOld = false;
   };
 
-  auto parser = cmArgumentParser<Arguments>{}
-                  .Bind("NAMESPACE"_s, &Arguments::Namespace)
-                  .Bind("FILE"_s, &Arguments::Filename);
+  auto parser =
+    cmArgumentParser<Arguments>{}
+      .Bind("NAMESPACE"_s, &Arguments::Namespace)
+      .Bind("FILE"_s, &Arguments::Filename)
+      .Bind("CXX_MODULES_DIRECTORY"_s, &Arguments::CxxModulesDirectory);
 
   if (args[0] == "EXPORT") {
     parser.Bind("EXPORT"_s, &Arguments::ExportSetName);
@@ -79,9 +84,7 @@ bool cmExportCommand(std::vector<std::string> const& args,
   }
 
   std::vector<std::string> unknownArgs;
-  std::vector<std::string> keywordsMissingValue;
-  Arguments const arguments =
-    parser.Parse(args, &unknownArgs, &keywordsMissingValue);
+  Arguments const arguments = parser.Parse(args, &unknownArgs);
 
   if (!unknownArgs.empty()) {
     status.SetError("Unknown argument: \"" + unknownArgs.front() + "\".");
@@ -145,9 +148,8 @@ bool cmExportCommand(std::vector<std::string> const& args,
       return false;
     }
     exportSet = &it->second;
-  } else if (!arguments.Targets.empty() ||
-             cm::contains(keywordsMissingValue, "TARGETS")) {
-    for (std::string const& currentTarget : arguments.Targets) {
+  } else if (arguments.Targets) {
+    for (std::string const& currentTarget : *arguments.Targets) {
       if (mf.IsAlias(currentTarget)) {
         std::ostringstream e;
         e << "given ALIAS target \"" << currentTarget
@@ -214,6 +216,7 @@ bool cmExportCommand(std::vector<std::string> const& args,
   }
   ebfg->SetExportFile(fname.c_str());
   ebfg->SetNamespace(arguments.Namespace);
+  ebfg->SetCxxModuleDirectory(arguments.CxxModulesDirectory);
   ebfg->SetAppendMode(arguments.Append);
   if (exportSet != nullptr) {
     ebfg->SetExportSet(exportSet);
@@ -282,6 +285,7 @@ static bool HandlePackage(std::vector<std::string> const& args,
   // CMP0090 decides both the default and what variable changes it.
   switch (mf.GetPolicyStatus(cmPolicies::CMP0090)) {
     case cmPolicies::WARN:
+      CM_FALLTHROUGH;
     case cmPolicies::OLD:
       // Default is to export, but can be disabled.
       if (mf.IsOn("CMAKE_EXPORT_NO_PACKAGE_REGISTRY")) {
@@ -302,7 +306,8 @@ static bool HandlePackage(std::vector<std::string> const& args,
   // named by a hash of its own content.  This is deterministic and is
   // unique with high probability.
   const std::string& outDir = mf.GetCurrentBinaryDirectory();
-  std::string hash = cmSystemTools::ComputeStringMD5(outDir);
+  cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
+  std::string hash = hasher.HashString(outDir);
   StorePackageRegistry(mf, package, outDir.c_str(), hash.c_str());
 
   return true;
@@ -380,13 +385,11 @@ static void StorePackageRegistry(cmMakefile& mf, std::string const& package,
     if (entry) {
       entry << content << "\n";
     } else {
-      std::ostringstream e;
-      /* clang-format off */
-      e << "Cannot create package registry file:\n"
-        << "  " << fname << "\n"
-        << cmSystemTools::GetLastSystemError() << "\n";
-      /* clang-format on */
-      mf.IssueMessage(MessageType::WARNING, e.str());
+      mf.IssueMessage(MessageType::WARNING,
+                      cmStrCat("Cannot create package registry file:\n"
+                               "  ",
+                               fname, '\n',
+                               cmSystemTools::GetLastSystemError(), '\n'));
     }
   }
 }

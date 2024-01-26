@@ -2,21 +2,25 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmExportTryCompileFileGenerator.h"
 
-#include <map>
 #include <utility>
 
 #include <cm/memory>
 
+#include "cmFileSet.h"
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorExpressionDAGChecker.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
-#include "cmProperty.h"
+#include "cmOutputConverter.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmTarget.h"
+#include "cmValue.h"
+
+class cmTargetExport;
 
 cmExportTryCompileFileGenerator::cmExportTryCompileFileGenerator(
   cmGlobalGenerator* gg, const std::vector<std::string>& targets,
@@ -60,12 +64,12 @@ std::string cmExportTryCompileFileGenerator::FindTargets(
   const std::string& propName, cmGeneratorTarget const* tgt,
   std::string const& language, std::set<cmGeneratorTarget const*>& emitted)
 {
-  cmProp prop = tgt->GetProperty(propName);
+  cmValue prop = tgt->GetProperty(propName);
   if (!prop) {
     return std::string();
   }
 
-  cmGeneratorExpression ge;
+  cmGeneratorExpression ge(*tgt->Makefile->GetCMakeInstance());
 
   std::unique_ptr<cmGeneratorExpressionDAGChecker> parentDagChecker;
   if (propName == "INTERFACE_LINK_OPTIONS") {
@@ -80,7 +84,7 @@ std::string cmExportTryCompileFileGenerator::FindTargets(
   std::unique_ptr<cmCompiledGeneratorExpression> cge = ge.Parse(*prop);
 
   cmTarget dummyHead("try_compile_dummy_exe", cmStateEnums::EXECUTABLE,
-                     cmTarget::VisibilityNormal, tgt->Target->GetMakefile(),
+                     cmTarget::Visibility::Normal, tgt->Target->GetMakefile(),
                      cmTarget::PerConfig::Yes);
 
   cmGeneratorTarget gDummyHead(&dummyHead, tgt->GetLocalGenerator());
@@ -102,10 +106,18 @@ void cmExportTryCompileFileGenerator::PopulateProperties(
   const cmGeneratorTarget* target, ImportPropertyMap& properties,
   std::set<cmGeneratorTarget const*>& emitted)
 {
+  // Look through all non-special properties.
   std::vector<std::string> props = target->GetPropertyKeys();
+  // Include special properties that might be relevant here.
+  props.emplace_back("INTERFACE_LINK_LIBRARIES");
+  props.emplace_back("INTERFACE_LINK_LIBRARIES_DIRECT");
+  props.emplace_back("INTERFACE_LINK_LIBRARIES_DIRECT_EXCLUDE");
   for (std::string const& p : props) {
-
-    properties[p] = *target->GetProperty(p);
+    cmValue v = target->GetProperty(p);
+    if (!v) {
+      continue;
+    }
+    properties[p] = *v;
 
     if (cmHasLiteralPrefix(p, "IMPORTED_LINK_INTERFACE_LIBRARIES") ||
         cmHasLiteralPrefix(p, "IMPORTED_LINK_DEPENDENT_LIBRARIES") ||
@@ -113,7 +125,7 @@ void cmExportTryCompileFileGenerator::PopulateProperties(
       std::string evalResult =
         this->FindTargets(p, target, std::string(), emitted);
 
-      std::vector<std::string> depends = cmExpandedList(evalResult);
+      cmList depends{ evalResult };
       for (std::string const& li : depends) {
         cmGeneratorTarget* tgt =
           target->GetLocalGenerator()->FindGeneratorTargetToUse(li);
@@ -126,7 +138,7 @@ void cmExportTryCompileFileGenerator::PopulateProperties(
 }
 
 std::string cmExportTryCompileFileGenerator::InstallNameDir(
-  cmGeneratorTarget* target, const std::string& config)
+  cmGeneratorTarget const* target, const std::string& config)
 {
   std::string install_name_dir;
 
@@ -136,4 +148,18 @@ std::string cmExportTryCompileFileGenerator::InstallNameDir(
   }
 
   return install_name_dir;
+}
+
+std::string cmExportTryCompileFileGenerator::GetFileSetDirectories(
+  cmGeneratorTarget* /*gte*/, cmFileSet* fileSet, cmTargetExport* /*te*/)
+{
+  return cmOutputConverter::EscapeForCMake(
+    cmList::to_string(fileSet->GetDirectoryEntries()));
+}
+
+std::string cmExportTryCompileFileGenerator::GetFileSetFiles(
+  cmGeneratorTarget* /*gte*/, cmFileSet* fileSet, cmTargetExport* /*te*/)
+{
+  return cmOutputConverter::EscapeForCMake(
+    cmList::to_string(fileSet->GetFileEntries()));
 }

@@ -18,12 +18,12 @@
 #include "cmLocalNinjaGenerator.h"
 #include "cmNinjaTypes.h"
 #include "cmOutputConverter.h"
-#include "cmProperty.h"
 #include "cmSourceFile.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 
 cmNinjaUtilityTargetGenerator::cmNinjaUtilityTargetGenerator(
   cmGeneratorTarget* target)
@@ -73,7 +73,8 @@ void cmNinjaUtilityTargetGenerator::WriteUtilBuildStatements(
   cmNinjaBuild phonyBuild("phony");
   std::vector<std::string> commands;
   cmNinjaDeps deps;
-  cmNinjaDeps util_outputs(1, utilCommandName);
+  cmGlobalNinjaGenerator::CCOutputs util_outputs(gg);
+  util_outputs.ExplicitOuts.emplace_back(utilCommandName);
 
   bool uses_terminal = false;
   {
@@ -86,10 +87,7 @@ void cmNinjaUtilityTargetGenerator::WriteUtilBuildStatements(
         cmCustomCommandGenerator ccg(ci, fileConfig, lg);
         lg->AppendCustomCommandDeps(ccg, deps, fileConfig);
         lg->AppendCustomCommandLines(ccg, commands);
-        std::vector<std::string> const& ccByproducts = ccg.GetByproducts();
-        std::transform(ccByproducts.begin(), ccByproducts.end(),
-                       std::back_inserter(util_outputs),
-                       this->MapToNinjaPath());
+        util_outputs.Add(ccg.GetByproducts());
         if (ci.GetUsesTerminal()) {
           uses_terminal = true;
         }
@@ -124,7 +122,8 @@ void cmNinjaUtilityTargetGenerator::WriteUtilBuildStatements(
   if (genTarget->Target->GetType() != cmStateEnums::GLOBAL_TARGET) {
     lg->AppendTargetOutputs(genTarget, gg->GetByproductsForCleanTarget(),
                             config);
-    std::copy(util_outputs.begin(), util_outputs.end(),
+    std::copy(util_outputs.ExplicitOuts.begin(),
+              util_outputs.ExplicitOuts.end(),
               std::back_inserter(gg->GetByproductsForCleanTarget()));
   }
   lg->AppendTargetDepends(genTarget, deps, config, fileConfig,
@@ -142,7 +141,7 @@ void cmNinjaUtilityTargetGenerator::WriteUtilBuildStatements(
     std::string command = lg->BuildCommandLine(
       commands, config, fileConfig, "utility", this->GeneratorTarget);
     std::string desc;
-    cmProp echoStr = genTarget->GetProperty("EchoString");
+    cmValue echoStr = genTarget->GetProperty("EchoString");
     if (echoStr) {
       desc = *echoStr;
     } else {
@@ -166,10 +165,6 @@ void cmNinjaUtilityTargetGenerator::WriteUtilBuildStatements(
       return;
     }
 
-    for (std::string const& util_output : util_outputs) {
-      gg->SeenCustomCommandOutput(util_output);
-    }
-
     std::string ccConfig;
     if (genTarget->Target->IsPerConfig() &&
         genTarget->GetType() != cmStateEnums::GLOBAL_TARGET) {
@@ -180,7 +175,7 @@ void cmNinjaUtilityTargetGenerator::WriteUtilBuildStatements(
       gg->WriteCustomCommandBuild(
         command, desc, "Utility command for " + this->GetTargetName(),
         /*depfile*/ "", /*job_pool*/ "", uses_terminal,
-        /*restat*/ true, util_outputs, ccConfig, deps);
+        /*restat*/ true, ccConfig, std::move(util_outputs), std::move(deps));
     }
 
     phonyBuild.ExplicitDeps.push_back(utilCommandName);

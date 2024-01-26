@@ -35,20 +35,18 @@ Check if the prototype we expect is correct.
 The following variables may be set before calling this function to modify
 the way the check is run:
 
-``CMAKE_REQUIRED_FLAGS``
-  string of compile command line flags.
-``CMAKE_REQUIRED_DEFINITIONS``
-  list of macros to define (-DFOO=bar).
-``CMAKE_REQUIRED_INCLUDES``
-  list of include directories.
-``CMAKE_REQUIRED_LINK_OPTIONS``
-  .. versionadded:: 3.14
-    list of options to pass to link command.
-``CMAKE_REQUIRED_LIBRARIES``
-  list of libraries to link.
-``CMAKE_REQUIRED_QUIET``
-  .. versionadded:: 3.1
-    execute quietly without messages.
+.. include:: /module/CMAKE_REQUIRED_FLAGS.txt
+
+.. include:: /module/CMAKE_REQUIRED_DEFINITIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_INCLUDES.txt
+
+.. include:: /module/CMAKE_REQUIRED_LINK_OPTIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_LIBRARIES.txt
+
+.. include:: /module/CMAKE_REQUIRED_QUIET.txt
+
 #]=======================================================================]
 
 #
@@ -94,37 +92,28 @@ function(check_prototype_definition _FUNCTION _PROTOTYPE _RETURN _HEADER _VARIAB
     set(CHECK_PROTOTYPE_DEFINITION_PROTO ${_PROTOTYPE})
     set(CHECK_PROTOTYPE_DEFINITION_RETURN ${_RETURN})
 
-    configure_file("${__check_proto_def_dir}/CheckPrototypeDefinition.c.in"
-      "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckPrototypeDefinition.c" @ONLY)
-
-    file(READ ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckPrototypeDefinition.c _SOURCE)
+    file(READ ${__check_proto_def_dir}/CheckPrototypeDefinition.c.in _SOURCE)
+    string(CONFIGURE "${_SOURCE}" _SOURCE @ONLY)
 
     try_compile(${_VARIABLE}
-      ${CMAKE_BINARY_DIR}
-      ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/CheckPrototypeDefinition.c
+      SOURCE_FROM_VAR CheckPrototypeDefinition.c _SOURCE
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
       ${CHECK_PROTOTYPE_DEFINITION_LINK_OPTIONS}
       ${CHECK_PROTOTYPE_DEFINITION_LIBS}
       CMAKE_FLAGS -DCOMPILE_DEFINITIONS:STRING=${CHECK_PROTOTYPE_DEFINITION_FLAGS}
       "${CMAKE_SYMBOL_EXISTS_INCLUDES}"
-      OUTPUT_VARIABLE OUTPUT)
+      )
 
     if (${_VARIABLE})
       set(${_VARIABLE} 1 CACHE INTERNAL "Have correct prototype for ${_FUNCTION}")
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_PASS "True")
       endif()
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Determining if the prototype ${_FUNCTION} exists for ${_VARIABLE} passed with the following output:\n"
-        "${OUTPUT}\n\n")
     else ()
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_FAIL "False")
       endif()
       set(${_VARIABLE} 0 CACHE INTERNAL "Have correct prototype for ${_FUNCTION}")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Determining if the prototype ${_FUNCTION} exists for ${_VARIABLE} failed with the following output:\n"
-        "${OUTPUT}\n\n${_SOURCE}\n\n")
     endif ()
   endif()
 

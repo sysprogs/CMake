@@ -5,6 +5,8 @@
 #include <utility>
 
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
+#include "cmListFileCache.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmStringAlgorithms.h"
@@ -48,7 +50,8 @@ private:
   {
     std::string const& base = this->Makefile->GetCurrentSourceDirectory();
     tgt->AppendProperty("PRECOMPILE_HEADERS",
-                        this->Join(ConvertToAbsoluteContent(content, base)));
+                        this->Join(ConvertToAbsoluteContent(content, base)),
+                        this->Makefile->GetBacktrace());
     return true;
   }
 
@@ -71,7 +74,7 @@ private:
 
   std::string Join(const std::vector<std::string>& content) override
   {
-    return cmJoin(content, ";");
+    return cmList::to_string(content);
   }
 };
 

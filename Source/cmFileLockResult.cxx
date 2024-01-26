@@ -5,7 +5,10 @@
 #include <cerrno>
 #include <cstring>
 
-#define WINMSG_BUF_LEN (1024)
+#ifdef _WIN32
+#  include <windows.h>
+#endif
+
 cmFileLockResult cmFileLockResult::MakeOk()
 {
   return { OK, 0 };
@@ -54,11 +57,12 @@ std::string cmFileLockResult::GetOutputMessage() const
     case SYSTEM:
 #if defined(_WIN32)
     {
+#  define WINMSG_BUF_LEN (1024)
       char winmsg[WINMSG_BUF_LEN];
       DWORD flags = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
-      if (FormatMessageA(flags, NULL, this->ErrorValue,
+      if (FormatMessageA(flags, nullptr, this->ErrorValue,
                          MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                         (LPSTR)winmsg, WINMSG_BUF_LEN, NULL)) {
+                         (LPSTR)winmsg, WINMSG_BUF_LEN, nullptr)) {
         const std::string message = winmsg;
         return message;
       } else {

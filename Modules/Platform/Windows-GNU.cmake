@@ -8,6 +8,27 @@ if(__WINDOWS_GNU)
 endif()
 set(__WINDOWS_GNU 1)
 
+set(MINGW 1)
+
+# On Windows hosts, in MSYSTEM environments, search standard prefixes.
+if(CMAKE_HOST_WIN32)
+  # Bootstrap CMake does not have cmake_host_system_information.
+  if(COMMAND cmake_host_system_information)
+    cmake_host_system_information(RESULT _MSYSTEM_PREFIX QUERY MSYSTEM_PREFIX)
+  elseif(IS_DIRECTORY "$ENV{MSYSTEM_PREFIX}")
+    set(_MSYSTEM_PREFIX "$ENV{MSYSTEM_PREFIX}")
+  endif()
+
+  # Search this MSYSTEM environment's equivalent to /usr/local and /usr.
+  if(_MSYSTEM_PREFIX)
+    list(PREPEND CMAKE_SYSTEM_PREFIX_PATH "${_MSYSTEM_PREFIX}")
+    if(IS_DIRECTORY "${_MSYSTEM_PREFIX}/local")
+      list(PREPEND CMAKE_SYSTEM_PREFIX_PATH "${_MSYSTEM_PREFIX}/local")
+    endif()
+  endif()
+  unset(_MSYSTEM_PREFIX)
+endif()
+
 set(CMAKE_IMPORT_LIBRARY_PREFIX "lib")
 set(CMAKE_SHARED_LIBRARY_PREFIX "lib")
 set(CMAKE_SHARED_MODULE_PREFIX  "lib")
@@ -19,23 +40,18 @@ set(CMAKE_SHARED_LIBRARY_SUFFIX ".dll")
 set(CMAKE_SHARED_MODULE_SUFFIX  ".dll")
 set(CMAKE_STATIC_LIBRARY_SUFFIX ".a")
 
-if(MSYS OR MINGW)
-  set(CMAKE_EXTRA_LINK_EXTENSIONS ".lib") # MinGW can also link to a MS .lib
-endif()
+set(CMAKE_EXTRA_LINK_EXTENSIONS ".lib") # MinGW can also link to a MS .lib
 
-if(MINGW)
-  set(CMAKE_FIND_LIBRARY_PREFIXES "lib" "")
-  set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll.a" ".a" ".lib")
-  set(CMAKE_C_STANDARD_LIBRARIES_INIT "-lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32")
-  set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_C_STANDARD_LIBRARIES_INIT}")
-endif()
+set(CMAKE_FIND_LIBRARY_PREFIXES "lib" "")
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll.a" ".a" ".lib")
+set(CMAKE_C_STANDARD_LIBRARIES_INIT "-lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32")
+set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_C_STANDARD_LIBRARIES_INIT}")
 
 set(CMAKE_DL_LIBS "")
 set(CMAKE_LIBRARY_PATH_FLAG "-L")
 set(CMAKE_LINK_LIBRARY_FLAG "-l")
 set(CMAKE_LINK_DEF_FILE_FLAG "") # Empty string: passing the file is enough
 set(CMAKE_LINK_LIBRARY_SUFFIX "")
-set(CMAKE_CREATE_WIN32_EXE  "-mwindows")
 
 set(CMAKE_GNULD_IMAGE_VERSION
   "-Wl,--major-image-version,<TARGET_VERSION_MAJOR>,--minor-image-version,<TARGET_VERSION_MINOR>")
@@ -47,23 +63,54 @@ if("${_help}" MATCHES "GNU ld .* 2\\.1[1-6]")
   set(__WINDOWS_GNU_LD_RESPONSE 0)
 endif()
 
+
+# Features for LINK_LIBRARY generator expression
+## check linker capabilities
+if(NOT DEFINED _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED)
+  execute_process(COMMAND "${CMAKE_LINKER}" --help
+                  OUTPUT_VARIABLE __linker_help
+                  ERROR_VARIABLE __linker_help)
+  if(__linker_help MATCHES "--push-state" AND __linker_help MATCHES "--pop-state")
+    set(_CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED TRUE CACHE INTERNAL "linker supports push/pop state")
+  else()
+    set(_CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED FALSE CACHE INTERNAL "linker supports push/pop state")
+  endif()
+  unset(__linker_help)
+endif()
+## WHOLE_ARCHIVE: Force loading all members of an archive
+if(_CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED)
+  set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE "LINKER:--push-state,--whole-archive"
+                                             "<LINK_ITEM>"
+                                             "LINKER:--pop-state")
+else()
+  set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE "LINKER:--whole-archive"
+                                             "<LINK_ITEM>"
+                                             "LINKER:--no-whole-archive")
+endif()
+set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE_SUPPORTED TRUE)
+
+# Features for LINK_GROUP generator expression
+## RESCAN: request the linker to rescan static libraries until there is
+## no pending undefined symbols
+set(CMAKE_LINK_GROUP_USING_RESCAN "LINKER:--start-group" "LINKER:--end-group")
+set(CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED TRUE)
+
+
 macro(__windows_compiler_gnu lang)
 
-  if(MSYS OR MINGW)
-    # Create archiving rules to support large object file lists for static libraries.
-    set(CMAKE_${lang}_ARCHIVE_CREATE "<CMAKE_AR> qc <TARGET> <LINK_FLAGS> <OBJECTS>")
-    set(CMAKE_${lang}_ARCHIVE_APPEND "<CMAKE_AR> q <TARGET> <LINK_FLAGS> <OBJECTS>")
-    set(CMAKE_${lang}_ARCHIVE_FINISH "<CMAKE_RANLIB> <TARGET>")
+  # Create archiving rules to support large object file lists for static libraries.
+  set(CMAKE_${lang}_ARCHIVE_CREATE "<CMAKE_AR> qc <TARGET> <LINK_FLAGS> <OBJECTS>")
+  set(CMAKE_${lang}_ARCHIVE_APPEND "<CMAKE_AR> q <TARGET> <LINK_FLAGS> <OBJECTS>")
+  set(CMAKE_${lang}_ARCHIVE_FINISH "<CMAKE_RANLIB> <TARGET>")
 
-    # Initialize C link type selection flags.  These flags are used when
-    # building a shared library, shared module, or executable that links
-    # to other libraries to select whether to use the static or shared
-    # versions of the libraries.
-    foreach(type SHARED_LIBRARY SHARED_MODULE EXE)
-      set(CMAKE_${type}_LINK_STATIC_${lang}_FLAGS "-Wl,-Bstatic")
-      set(CMAKE_${type}_LINK_DYNAMIC_${lang}_FLAGS "-Wl,-Bdynamic")
-    endforeach()
-  endif()
+  # Initialize C link type selection flags.  These flags are used when
+  # building a shared library, shared module, or executable that links
+  # to other libraries to select whether to use the static or shared
+  # versions of the libraries.
+  foreach(type SHARED_LIBRARY SHARED_MODULE EXE)
+    set(CMAKE_${type}_LINK_STATIC_${lang}_FLAGS "-Wl,-Bstatic")
+    set(CMAKE_${type}_LINK_DYNAMIC_${lang}_FLAGS "-Wl,-Bdynamic")
+  endforeach()
 
   # No -fPIC on Windows
   set(CMAKE_${lang}_COMPILE_OPTIONS_PIC "")
@@ -105,6 +152,7 @@ macro(__windows_compiler_gnu lang)
     "<CMAKE_${lang}_COMPILER> <CMAKE_SHARED_LIBRARY_${lang}_FLAGS> <LANGUAGE_COMPILE_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_${lang}_FLAGS> -o <TARGET> -Wl,--out-implib,<TARGET_IMPLIB> ${CMAKE_GNULD_IMAGE_VERSION} <OBJECTS> <LINK_LIBRARIES>")
   set(CMAKE_${lang}_LINK_EXECUTABLE
     "<CMAKE_${lang}_COMPILER> <FLAGS> <CMAKE_${lang}_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> -Wl,--out-implib,<TARGET_IMPLIB> ${CMAKE_GNULD_IMAGE_VERSION} <LINK_LIBRARIES>")
+  set(CMAKE_${lang}_CREATE_WIN32_EXE "-mwindows")
 
   list(APPEND CMAKE_${lang}_ABI_FILES "Platform/Windows-GNU-${lang}-ABI")
 
@@ -121,14 +169,15 @@ macro(__windows_compiler_gnu lang)
         CMAKE_${lang}_${rule} "${CMAKE_${lang}_${rule}}")
       set(CMAKE_${lang}_${rule}
         "<CMAKE_COMMAND> -E rm -f <OBJECT_DIR>/objects.a"
-        "<CMAKE_AR> cr <OBJECT_DIR>/objects.a <OBJECTS>"
+        "<CMAKE_AR> qc <OBJECT_DIR>/objects.a <OBJECTS>"
         "${CMAKE_${lang}_${rule}}"
         )
     endforeach()
   endif()
 
   if(NOT CMAKE_RC_COMPILER_INIT AND NOT CMAKE_GENERATOR_RC)
-    set(CMAKE_RC_COMPILER_INIT ${_CMAKE_TOOLCHAIN_PREFIX}windres)
+    set(_CMAKE_RC_COMPILER_LIST ${_CMAKE_TOOLCHAIN_PREFIX}windres windres)
+    set(_CMAKE_RC_COMPILER_FALLBACK windres)
   endif()
 
   enable_language(RC)
@@ -148,7 +197,7 @@ macro(__windows_compiler_gnu_abi lang)
 
     # Query the VS Installer tool for locations of VS 2017 and above.
     set(_vs_installer_paths "")
-    foreach(vs RANGE 16 15 -1) # change the first number to the largest supported version
+    foreach(vs RANGE 17 15 -1) # change the first number to the largest supported version
       cmake_host_system_information(RESULT _vs_dir QUERY VS_${vs}_DIR)
       if(_vs_dir)
         list(APPEND _vs_installer_paths "${_vs_dir}/VC/Auxiliary/Build")

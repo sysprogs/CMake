@@ -4,8 +4,15 @@
 
 #include <iosfwd>
 #include <memory>
+#include <string>
+#include <vector>
 
-#include "cmGlobalNMakeMakefileGenerator.h"
+#include "cmGlobalGeneratorFactory.h"
+#include "cmGlobalUnixMakefileGenerator3.h"
+
+class cmLocalGenerator;
+class cmMakefile;
+class cmake;
 
 /** \class cmGlobalBorlandMakefileGenerator
  * \brief Write a Borland makefiles.
@@ -30,7 +37,7 @@ public:
   static std::string GetActualName() { return "Borland Makefiles"; }
 
   /** Get the documentation entry for this generator.  */
-  static void GetDocumentation(cmDocumentationEntry& entry);
+  static cmDocumentationEntry GetDocumentation();
 
   //! Create a local generator appropriate to this Global Generator
   std::unique_ptr<cmLocalGenerator> CreateLocalGenerator(
@@ -47,11 +54,14 @@ public:
   bool AllowDeleteOnError() const override { return false; }
   bool CanEscapeOctothorpe() const override { return true; }
 
+  bool IsGNUMakeJobServerAware() const override { return false; }
+
 protected:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 

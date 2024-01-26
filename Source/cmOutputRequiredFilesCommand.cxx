@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <utility>
 
 #include <cm/memory>
@@ -14,12 +15,13 @@
 
 #include "cmExecutionStatus.h"
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
 #include "cmMakefile.h"
-#include "cmProperty.h"
 #include "cmSourceFile.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 
 namespace {
 /** \class cmDependInformation
@@ -118,7 +120,7 @@ public:
     std::set<std::string> uniqueIncludes;
     std::vector<std::string> orderedAndUniqueIncludes;
     for (auto const& target : this->Makefile->GetTargets()) {
-      cmProp incDirProp = target.second.GetProperty("INCLUDE_DIRECTORIES");
+      cmValue incDirProp = target.second.GetProperty("INCLUDE_DIRECTORIES");
       if (!incDirProp) {
         continue;
       }
@@ -126,9 +128,9 @@ public:
       std::string incDirs = cmGeneratorExpression::Preprocess(
         *incDirProp, cmGeneratorExpression::StripAllGeneratorExpressions);
 
-      std::vector<std::string> includes = cmExpandedList(incDirs);
+      cmList includes{ incDirs };
 
-      for (std::string& path : includes) {
+      for (auto& path : includes) {
         this->Makefile->ExpandVariablesInString(path);
         if (uniqueIncludes.insert(path).second) {
           orderedAndUniqueIncludes.push_back(path);
@@ -412,8 +414,7 @@ protected:
         path += "/";
       }
       path += fname;
-      if (cmSystemTools::FileExists(path, true) &&
-          !cmSystemTools::FileIsDirectory(path)) {
+      if (cmSystemTools::FileExists(path, true)) {
         std::string fp = cmSystemTools::CollapseFullPath(path);
         this->DirectoryToFileToPathMap[extraPath][fname] = fp;
         return fp;
@@ -426,8 +427,7 @@ protected:
         path = path + "/";
       }
       path = path + fname;
-      if (cmSystemTools::FileExists(path, true) &&
-          !cmSystemTools::FileIsDirectory(path)) {
+      if (cmSystemTools::FileExists(path, true)) {
         std::string fp = cmSystemTools::CollapseFullPath(path);
         this->DirectoryToFileToPathMap[extraPath][fname] = fp;
         return fp;

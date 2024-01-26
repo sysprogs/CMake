@@ -1,18 +1,19 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
    file Copyright.txt or https://cmake.org/licensing for details.  */
 
-#include <cmConfigure.h> // IWYU pragma: keep
+#include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cm/string_view>
 
 #include "cmStringAlgorithms.h"
 
-int testStringAlgorithms(int /*unused*/, char* /*unused*/ [])
+int testStringAlgorithms(int /*unused*/, char* /*unused*/[])
 {
   int failed = 0;
 
@@ -144,6 +145,28 @@ int testStringAlgorithms(int /*unused*/, char* /*unused*/ [])
     d -= val;
     assert_ok((d < div) && (d > -div), "cmStrCat double");
   }
+  {
+    std::string val;
+    std::string expect;
+    val.reserve(50 * cmStrLen("cmStrCat move ") + 1);
+    auto data = val.data();
+    auto capacity = val.capacity();
+    bool moved = true;
+    for (int i = 0; i < 100; i++) {
+      if (i % 2 == 0) {
+        val = cmStrCat(std::move(val), "move ");
+        expect += "move ";
+      } else {
+        val = cmStrCat("cmStrCat ", std::move(val));
+        expect = "cmStrCat " + std::move(expect);
+      }
+      if (val.data() != data || val.capacity() != capacity) {
+        moved = false;
+      }
+    }
+    assert_ok(moved, "cmStrCat move");
+    assert_string(val, expect, "cmStrCat move");
+  }
 
   // ----------------------------------------------------------------------
   // Test cmWrap
@@ -224,6 +247,41 @@ int testStringAlgorithms(int /*unused*/, char* /*unused*/ [])
               "cmStrToULong rejects a negative number after whitespace.");
     assert_ok(!cmStrToULong("1x", &value),
               "cmStrToULong rejects trailing content.");
+  }
+
+  // ----------------------------------------------------------------------
+  // Test cmStrToLongLong
+  {
+    long long value;
+    assert_ok(cmStrToLongLong("1", &value) && value == 1,
+              "cmStrToLongLong parses a positive decimal integer.");
+    assert_ok(cmStrToLongLong(" 1", &value) && value == 1,
+              "cmStrToLongLong parses a decimal integer after whitespace.");
+
+    assert_ok(cmStrToLongLong("-1", &value) && value == -1,
+              "cmStrToLongLong parses a negative decimal integer.");
+    assert_ok(
+      cmStrToLongLong(" -1", &value) && value == -1,
+      "cmStrToLongLong parses a negative decimal integer after whitespace.");
+
+    assert_ok(!cmStrToLongLong("1x", &value),
+              "cmStrToLongLong rejects trailing content.");
+  }
+
+  // ----------------------------------------------------------------------
+  // Test cmStrToULongLong
+  {
+    unsigned long long value;
+    assert_ok(cmStrToULongLong("1", &value) && value == 1,
+              "cmStrToULongLong parses a decimal integer.");
+    assert_ok(cmStrToULongLong(" 1", &value) && value == 1,
+              "cmStrToULongLong parses a decimal integer after whitespace.");
+    assert_ok(!cmStrToULongLong("-1", &value),
+              "cmStrToULongLong rejects a negative number.");
+    assert_ok(!cmStrToULongLong(" -1", &value),
+              "cmStrToULongLong rejects a negative number after whitespace.");
+    assert_ok(!cmStrToULongLong("1x", &value),
+              "cmStrToULongLong rejects trailing content.");
   }
 
   // ----------------------------------------------------------------------

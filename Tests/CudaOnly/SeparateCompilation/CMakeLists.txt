@@ -15,6 +15,9 @@ get_property(sep_comp TARGET CUDASeparateLibA PROPERTY CUDA_SEPARABLE_COMPILATIO
 if(NOT sep_comp)
   message(FATAL_ERROR "CUDA_SEPARABLE_COMPILATION not initialized")
 endif()
+set_target_properties(CUDASeparateLibA
+                      PROPERTIES
+                      POSITION_INDEPENDENT_CODE ON)
 unset(CMAKE_CUDA_SEPARABLE_COMPILATION)
 
 if(CMAKE_CUDA_SIMULATE_ID STREQUAL "MSVC")
@@ -26,34 +29,24 @@ if(CMAKE_CUDA_SIMULATE_ID STREQUAL "MSVC")
   target_compile_options(CUDASeparateLibA PRIVATE -Xcompiler=-bigobj)
 endif()
 
-#Having file4/file5 in a shared library causes serious problems
-#with the nvcc linker and it will generate bad entries that will
-#cause a segv when trying to run the executable
+#Have file4 and file5 in different shared libraries so that we
+#verify that hidden visibility is passed to the device linker.
+#Otherwise we will get a segv when trying to run the executable
 #
-add_library(CUDASeparateLibB STATIC file4.cu file5.cu)
+add_library(CUDASeparateLibB SHARED file4.cu)
 target_compile_features(CUDASeparateLibB PRIVATE cuda_std_11)
 target_link_libraries(CUDASeparateLibB PRIVATE CUDASeparateLibA)
 
-add_executable(CudaOnlySeparateCompilation main.cu)
-target_link_libraries(CudaOnlySeparateCompilation
-                      PRIVATE CUDASeparateLibB)
-set_target_properties(CudaOnlySeparateCompilation PROPERTIES CUDA_STANDARD 11)
-set_target_properties(CudaOnlySeparateCompilation PROPERTIES CUDA_STANDARD_REQUIRED TRUE)
+add_library(CUDASeparateLibC SHARED file5.cu)
+target_compile_features(CUDASeparateLibC PRIVATE cuda_std_11)
+target_link_libraries(CUDASeparateLibC PRIVATE CUDASeparateLibA)
 
-set_target_properties(CUDASeparateLibA
-                      CUDASeparateLibB
-                      PROPERTIES CUDA_SEPARABLE_COMPILATION ON
-                      POSITION_INDEPENDENT_CODE ON)
+set_target_properties(CUDASeparateLibB
+                      CUDASeparateLibC
+                      PROPERTIES
+                      CUDA_SEPARABLE_COMPILATION ON
+                      POSITION_INDEPENDENT_CODE ON
+                      CUDA_VISIBILITY_PRESET hidden
+                      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/main")
 
-if (CMAKE_GENERATOR MATCHES "^Visual Studio")
-  #Visual Studio CUDA integration will not perform device linking
-  #on a target that itself does not have GenerateRelocatableDeviceCode
-  #enabled.
-  set_target_properties(CudaOnlySeparateCompilation
-                        PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-endif()
-
-if(APPLE)
-  # Help the static cuda runtime find the driver (libcuda.dyllib) at runtime.
-  set_property(TARGET CudaOnlySeparateCompilation PROPERTY BUILD_RPATH ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-endif()
+add_subdirectory(main)

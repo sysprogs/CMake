@@ -17,11 +17,11 @@
 #include "cmCursesStandardIncludes.h"
 #include "cmCursesStringWidget.h"
 #include "cmCursesWidget.h"
-#include "cmProperty.h"
 #include "cmState.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmVersion.h"
 #include "cmake.h"
 
@@ -35,11 +35,6 @@ cmCursesMainForm::cmCursesMainForm(std::vector<std::string> args,
   : Args(std::move(args))
   , InitialWidth(initWidth)
 {
-  this->HasNonStatusOutputs = false;
-  this->NumberOfPages = 0;
-  this->AdvancedMode = false;
-  this->NumberOfVisibleEntries = 0;
-  this->OkToGenerate = false;
   this->HelpMessage.emplace_back(
     "Welcome to ccmake, curses based user interface for CMake.");
   this->HelpMessage.emplace_back();
@@ -54,7 +49,6 @@ cmCursesMainForm::cmCursesMainForm(std::vector<std::string> args,
     cmStrCat(cmSystemTools::GetProgramPath(this->Args[0]), "/cmake");
   this->Args[0] = whereCMake;
   this->CMakeInstance->SetArgs(this->Args);
-  this->SearchMode = false;
 }
 
 cmCursesMainForm::~cmCursesMainForm()
@@ -99,13 +93,14 @@ void cmCursesMainForm::InitializeUI()
 
   int entrywidth = this->InitialWidth - 35;
 
-  if (count == 0) {
-    // If cache is empty, display a label saying so and a
-    // dummy entry widget (does not respond to input)
-    cmCursesCacheEntryComposite comp("EMPTY CACHE", 30, 30);
-    comp.Entry = cm::make_unique<cmCursesDummyWidget>(1, 1, 1, 1);
-    newEntries.emplace_back(std::move(comp));
-  } else {
+  // Add a label to display when cache is empty
+  // dummy entry widget (does not respond to input)
+  this->EmptyCacheEntry =
+    cm::make_unique<cmCursesCacheEntryComposite>("EMPTY CACHE", 30, 30);
+  this->EmptyCacheEntry->Entry =
+    cm::make_unique<cmCursesDummyWidget>(1, 1, 1, 1);
+
+  if (count > 0) {
     // Create the composites.
 
     // First add entries which are new
@@ -162,7 +157,7 @@ void cmCursesMainForm::RePost()
     // If normal mode, count only non-advanced entries
     this->NumberOfVisibleEntries = 0;
     for (cmCursesCacheEntryComposite& entry : this->Entries) {
-      cmProp existingValue =
+      cmValue existingValue =
         this->CMakeInstance->GetState()->GetCacheEntryValue(entry.GetValue());
       bool advanced =
         this->CMakeInstance->GetState()->GetCacheEntryPropertyAsBool(
@@ -183,7 +178,7 @@ void cmCursesMainForm::RePost()
 
   // Assign fields
   for (cmCursesCacheEntryComposite& entry : this->Entries) {
-    cmProp existingValue =
+    cmValue existingValue =
       this->CMakeInstance->GetState()->GetCacheEntryValue(entry.GetValue());
     bool advanced =
       this->CMakeInstance->GetState()->GetCacheEntryPropertyAsBool(
@@ -196,11 +191,11 @@ void cmCursesMainForm::RePost()
     this->Fields.push_back(entry.Entry->Field);
   }
   // if no cache entries there should still be one dummy field
-  if (this->Fields.empty()) {
-    const auto& front = this->Entries.front();
-    this->Fields.push_back(front.Label->Field);
-    this->Fields.push_back(front.IsNewLabel->Field);
-    this->Fields.push_back(front.Entry->Field);
+  this->IsEmpty = this->Fields.empty();
+  if (this->IsEmpty) {
+    this->Fields.push_back(this->EmptyCacheEntry->Label->Field);
+    this->Fields.push_back(this->EmptyCacheEntry->IsNewLabel->Field);
+    this->Fields.push_back(this->EmptyCacheEntry->Entry->Field);
     this->NumberOfVisibleEntries = 1;
   }
   // Has to be null terminated.
@@ -242,7 +237,7 @@ void cmCursesMainForm::Render(int left, int top, int width, int height)
     // If normal, display only non-advanced entries
     this->NumberOfVisibleEntries = 0;
     for (cmCursesCacheEntryComposite& entry : this->Entries) {
-      cmProp existingValue =
+      cmValue existingValue =
         this->CMakeInstance->GetState()->GetCacheEntryValue(entry.GetValue());
       bool advanced =
         this->CMakeInstance->GetState()->GetCacheEntryPropertyAsBool(
@@ -260,7 +255,7 @@ void cmCursesMainForm::Render(int left, int top, int width, int height)
     bool isNewPage;
     int i = 0;
     for (cmCursesCacheEntryComposite& entry : this->Entries) {
-      cmProp existingValue =
+      cmValue existingValue =
         this->CMakeInstance->GetState()->GetCacheEntryValue(entry.GetValue());
       bool advanced =
         this->CMakeInstance->GetState()->GetCacheEntryPropertyAsBool(
@@ -322,22 +317,22 @@ void cmCursesMainForm::PrintKeys(int process /* = 0 */)
       memset(thirdLine, ' ', 68);
     } else {
       if (this->OkToGenerate) {
-        sprintf(firstLine,
-                "      [l] Show log output   [c] Configure"
-                "       [g] Generate        ");
+        snprintf(firstLine, sizeof(firstLine),
+                 "      [l] Show log output   [c] Configure"
+                 "       [g] Generate        ");
       } else {
-        sprintf(firstLine,
-                "      [l] Show log output   [c] Configure"
-                "                           ");
+        snprintf(firstLine, sizeof(firstLine),
+                 "      [l] Show log output   [c] Configure"
+                 "                           ");
       }
       {
         const char* toggleKeyInstruction =
           "      [t] Toggle advanced mode (currently %s)";
-        sprintf(thirdLine, toggleKeyInstruction,
-                this->AdvancedMode ? "on" : "off");
+        snprintf(thirdLine, sizeof(thirdLine), toggleKeyInstruction,
+                 this->AdvancedMode ? "on" : "off");
       }
-      sprintf(secondLine,
-              "      [h] Help              [q] Quit without generating");
+      snprintf(secondLine, sizeof(secondLine),
+               "      [h] Help              [q] Quit without generating");
     }
 
     curses_move(y - 4, 0);
@@ -356,7 +351,8 @@ void cmCursesMainForm::PrintKeys(int process /* = 0 */)
 
   if (cw) {
     char pageLine[512] = "";
-    sprintf(pageLine, "Page %d of %d", cw->GetPage(), this->NumberOfPages);
+    snprintf(pageLine, sizeof(pageLine), "Page %d of %d", cw->GetPage(),
+             this->NumberOfPages);
     curses_move(0, 65 - static_cast<unsigned int>(strlen(pageLine)) - 1);
     printw(fmt_s, pageLine);
   }
@@ -406,9 +402,9 @@ void cmCursesMainForm::UpdateStatusBar(cm::optional<std::string> message)
     // Get the help string of the current entry
     // and add it to the help string
     auto* cmakeState = this->CMakeInstance->GetState();
-    cmProp existingValue = cmakeState->GetCacheEntryValue(labelValue);
+    cmValue existingValue = cmakeState->GetCacheEntryValue(labelValue);
     if (existingValue) {
-      cmProp help =
+      cmValue help =
         cmakeState->GetCacheEntryProperty(labelValue, "HELPSTRING");
       if (help) {
         bar += *help;
@@ -462,6 +458,14 @@ void cmCursesMainForm::UpdateProgress(const std::string& msg, float prog)
   }
 }
 
+void cmCursesMainForm::Write()
+{
+  this->FillCacheManagerFromUI();
+  this->CMakeInstance->SaveCache(
+    this->CMakeInstance->GetHomeOutputDirectory());
+  this->LoadCache(nullptr);
+}
+
 int cmCursesMainForm::Configure(int noconfigure)
 {
   this->ResetOutputs();
@@ -475,10 +479,7 @@ int cmCursesMainForm::Configure(int noconfigure)
   }
 
   // always save the current gui values to disk
-  this->FillCacheManagerFromUI();
-  this->CMakeInstance->SaveCache(
-    this->CMakeInstance->GetHomeOutputDirectory());
-  this->LoadCache(nullptr);
+  this->Write();
 
   // run the generate process
   this->OkToGenerate = true;
@@ -498,21 +499,21 @@ int cmCursesMainForm::Configure(int noconfigure)
 
   if (retVal != 0 || this->HasNonStatusOutputs) {
     // see if there was an error
-    if (cmSystemTools::GetErrorOccuredFlag()) {
+    if (cmSystemTools::GetErrorOccurredFlag()) {
       this->OkToGenerate = false;
     }
     int xx;
     int yy;
     getmaxyx(stdscr, yy, xx);
     const char* title = "Configure produced the following output";
-    if (cmSystemTools::GetErrorOccuredFlag()) {
+    if (cmSystemTools::GetErrorOccurredFlag()) {
       title = "Configure failed with the following output";
     }
     cmCursesLongMessageForm* msgs = new cmCursesLongMessageForm(
       this->Outputs, title,
       cmCursesLongMessageForm::ScrollBehavior::ScrollDown);
     // reset error condition
-    cmSystemTools::ResetErrorOccuredFlag();
+    cmSystemTools::ResetErrorOccurredFlag();
     CurrentForm = msgs;
     msgs->Render(1, 1, xx, yy);
     msgs->HandleInput();
@@ -551,16 +552,16 @@ int cmCursesMainForm::Generate()
 
   if (retVal != 0 || this->HasNonStatusOutputs) {
     // see if there was an error
-    if (cmSystemTools::GetErrorOccuredFlag()) {
+    if (cmSystemTools::GetErrorOccurredFlag()) {
       this->OkToGenerate = false;
     }
     // reset error condition
-    cmSystemTools::ResetErrorOccuredFlag();
+    cmSystemTools::ResetErrorOccurredFlag();
     int xx;
     int yy;
     getmaxyx(stdscr, yy, xx);
     const char* title = "Generate produced the following output";
-    if (cmSystemTools::GetErrorOccuredFlag()) {
+    if (cmSystemTools::GetErrorOccurredFlag()) {
       title = "Generate failed with the following output";
     }
     cmCursesLongMessageForm* msgs = new cmCursesLongMessageForm(
@@ -618,10 +619,10 @@ void cmCursesMainForm::FillCacheManagerFromUI()
 {
   for (cmCursesCacheEntryComposite& entry : this->Entries) {
     const std::string& cacheKey = entry.Key;
-    cmProp existingValue =
+    cmValue existingValue =
       this->CMakeInstance->GetState()->GetCacheEntryValue(cacheKey);
     if (existingValue) {
-      std::string oldValue = *existingValue;
+      std::string const& oldValue = *existingValue;
       std::string newValue = entry.Entry->GetValue();
       std::string fixedOldValue;
       std::string fixedNewValue;
@@ -685,6 +686,12 @@ void cmCursesMainForm::HandleInput()
     }
     int key = getch();
 
+#ifdef _WIN32
+    if (key == KEY_RESIZE) {
+      HandleResize();
+    }
+#endif // _WIN32
+
     getmaxyx(stdscr, y, x);
     // If window too small, handle 'q' only
     if (x < cmCursesMainForm::MIN_WIDTH || y < cmCursesMainForm::MIN_HEIGHT) {
@@ -739,7 +746,8 @@ void cmCursesMainForm::HandleInput()
     if ((!currentWidget || !widgetHandled) && !this->SearchMode) {
       // If the current widget does not want to handle input,
       // we handle it.
-      sprintf(debugMessage, "Main form handling input, key: %d", key);
+      snprintf(debugMessage, sizeof(debugMessage),
+               "Main form handling input, key: %d", key);
       cmCursesForm::LogMessage(debugMessage);
       // quit
       if (key == 'q') {
@@ -791,6 +799,21 @@ void cmCursesMainForm::HandleInput()
       else if (key == KEY_PPAGE || key == ctrl('u')) {
         form_driver(this->Form, REQ_PREV_PAGE);
       }
+      // first entry
+      else if (key == KEY_HOME) {
+        form_driver(this->Form, REQ_FIRST_PAGE);
+        form_driver(this->Form, REQ_FIRST_FIELD);
+      }
+      // last entry
+      else if (key == KEY_END) {
+        form_driver(this->Form, REQ_LAST_PAGE);
+        form_driver(this->Form, REQ_LAST_FIELD);
+      }
+      // write and quit
+      else if (key == 'w') {
+        this->Write();
+        break;
+      }
       // configure
       else if (key == 'c') {
         this->Configure();
@@ -804,9 +827,9 @@ void cmCursesMainForm::HandleInput()
         cmCursesWidget* lbl = reinterpret_cast<cmCursesWidget*>(
           field_userptr(this->Fields[findex - 2]));
         const char* curField = lbl->GetValue();
-        cmProp helpString = nullptr;
+        cmValue helpString = nullptr;
 
-        cmProp existingValue =
+        cmValue existingValue =
           this->CMakeInstance->GetState()->GetCacheEntryValue(curField);
         if (existingValue) {
           helpString = this->CMakeInstance->GetState()->GetCacheEntryProperty(
@@ -851,6 +874,10 @@ void cmCursesMainForm::HandleInput()
         if (!this->OldSearchString.empty()) {
           this->JumpToCacheEntry(this->OldSearchString.c_str());
         }
+      } else if (key == 'N') {
+        if (!this->OldSearchString.empty()) {
+          this->JumpToCacheEntry(this->OldSearchString.c_str(), true);
+        }
       }
       // switch advanced on/off
       else if (key == 't') {
@@ -867,7 +894,7 @@ void cmCursesMainForm::HandleInput()
         }
       }
       // delete cache entry
-      else if (key == 'd' && this->NumberOfVisibleEntries) {
+      else if (key == 'd' && this->NumberOfVisibleEntries && !this->IsEmpty) {
         this->OkToGenerate = false;
         FIELD* cur = current_field(this->Form);
         size_t findex = field_index(cur);
@@ -942,6 +969,11 @@ int cmCursesMainForm::LoadCache(const char* /*unused*/)
 
 void cmCursesMainForm::JumpToCacheEntry(const char* astr)
 {
+  this->JumpToCacheEntry(astr, false);
+}
+
+void cmCursesMainForm::JumpToCacheEntry(const char* astr, bool reverse)
+{
   std::string str;
   if (astr) {
     str = cmSystemTools::LowerCase(astr);
@@ -970,12 +1002,21 @@ void cmCursesMainForm::JumpToCacheEntry(const char* astr)
         }
       }
     }
-    if (size_t(findex) >= 3 * this->NumberOfVisibleEntries - 1) {
-      set_current_field(this->Form, this->Fields[2]);
-    } else if (new_page(this->Fields[findex + 1])) {
-      form_driver(this->Form, REQ_NEXT_PAGE);
+    if (!reverse &&
+        static_cast<size_t>(findex) >= 3 * this->NumberOfVisibleEntries - 1) {
+      form_driver(this->Form, REQ_FIRST_PAGE);
+      form_driver(this->Form, REQ_FIRST_FIELD);
+    } else if (reverse && static_cast<size_t>(findex) < 3) {
+      form_driver(this->Form, REQ_LAST_PAGE);
+      form_driver(this->Form, REQ_LAST_FIELD);
+    } else if (this->Fields[findex + (reverse ? -3 : 1)]->page !=
+               this->Fields[findex]->page) {
+      form_driver(this->Form, reverse ? REQ_PREV_PAGE : REQ_NEXT_PAGE);
+      if (reverse) {
+        form_driver(this->Form, REQ_LAST_FIELD);
+      }
     } else {
-      form_driver(this->Form, REQ_NEXT_FIELD);
+      form_driver(this->Form, reverse ? REQ_PREV_FIELD : REQ_NEXT_FIELD);
     }
     cur = current_field(this->Form);
     findex = field_index(cur);
@@ -1037,15 +1078,21 @@ const char* cmCursesMainForm::s_ConstHelpMessage =
   "hit 'g' to have CMake generate all the build files (i.e. makefiles or "
   "project files) and exit. "
   "At any point during the process, you can exit ccmake with 'q'. However, "
-  "this will not generate/change any build files.\n\n"
+  "this will not generate/change any build files. Additionally, you can exit "
+  "ccmake with 'w' to write changes to the cache file without generating or "
+  "changing the build files.\n\n"
   "ccmake KEYS:\n\n"
   "Navigation: "
   "You can use the arrow keys and page up, down to navigate the options. "
-  "Alternatively, you can use the following keys: \n"
+  "Additionally, you can use the following keys: \n"
   " C-n or j : next option\n"
   " C-p or k : previous options\n"
   " C-d : down one page\n"
-  " C-u : up one page\n\n"
+  " C-u : up one page\n"
+  " Home : jump to first option\n"
+  " End : jump to last option\n"
+  " n : next search result\n"
+  " N : previous search result\n\n"
   "Editing options: "
   "To change an option  press enter or return. If the current options is a "
   "boolean, this will toggle its value. "

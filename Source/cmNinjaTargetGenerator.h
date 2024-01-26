@@ -15,10 +15,10 @@
 
 #include "cmCommonTargetGenerator.h"
 #include "cmGlobalNinjaGenerator.h"
+#include "cmImportedCxxModuleInfo.h"
 #include "cmNinjaTypes.h"
 #include "cmOSXBundleGenerator.h"
 
-class cmCustomCommand;
 class cmGeneratedFileStream;
 class cmGeneratorTarget;
 class cmLocalNinjaGenerator;
@@ -63,21 +63,25 @@ protected:
 
   cmMakefile* GetMakefile() const { return this->Makefile; }
 
+  enum class WithScanning
+  {
+    No,
+    Yes,
+  };
   std::string LanguageCompilerRule(const std::string& lang,
-                                   const std::string& config) const;
+                                   const std::string& config,
+                                   WithScanning withScanning) const;
   std::string LanguagePreprocessAndScanRule(std::string const& lang,
                                             const std::string& config) const;
   std::string LanguageScanRule(std::string const& lang,
                                const std::string& config) const;
   std::string LanguageDyndepRule(std::string const& lang,
                                  const std::string& config) const;
-  bool NeedDyndep(std::string const& lang, std::string const& config) const;
   bool NeedExplicitPreprocessing(std::string const& lang) const;
   bool CompileWithDefines(std::string const& lang) const;
-  bool NeedCxxModuleSupport(std::string const& lang,
-                            std::string const& config) const;
 
   std::string OrderDependsTargetForTarget(const std::string& config);
+  std::string OrderDependsTargetForTargetPrivate(const std::string& config);
 
   std::string ComputeOrderDependsForTarget();
 
@@ -88,7 +92,8 @@ protected:
    */
   std::string ComputeFlagsForObject(cmSourceFile const* source,
                                     const std::string& language,
-                                    const std::string& config);
+                                    const std::string& config,
+                                    const std::string& objectFileName);
 
   void AddIncludeFlags(std::string& flags, std::string const& lang,
                        const std::string& config) override;
@@ -101,7 +106,7 @@ protected:
                               const std::string& language,
                               const std::string& config);
 
-  std::string ConvertToNinjaPath(const std::string& path) const
+  std::string const& ConvertToNinjaPath(const std::string& path) const
   {
     return this->GetGlobalGenerator()->ConvertToNinjaPath(path);
   }
@@ -110,21 +115,33 @@ protected:
     return this->GetGlobalGenerator()->MapToNinjaPath();
   }
 
+  std::string ConvertToNinjaAbsPath(std::string path) const
+  {
+    return this->GetGlobalGenerator()->ConvertToNinjaAbsPath(std::move(path));
+  }
+
   /// @return the list of link dependency for the given target @a target.
   cmNinjaDeps ComputeLinkDeps(const std::string& linkLanguage,
                               const std::string& config,
                               bool ignoreType = false) const;
 
   /// @return the source file path for the given @a source.
-  std::string GetSourceFilePath(cmSourceFile const* source) const;
+  std::string GetCompiledSourceNinjaPath(cmSourceFile const* source) const;
 
   /// @return the object file path for the given @a source.
   std::string GetObjectFilePath(cmSourceFile const* source,
                                 const std::string& config) const;
+  std::string GetBmiFilePath(cmSourceFile const* source,
+                             const std::string& config) const;
 
   /// @return the preprocessed source file path for the given @a source.
   std::string GetPreprocessedFilePath(cmSourceFile const* source,
                                       const std::string& config) const;
+
+  /// @return the clang-tidy replacements file path for the given @a source.
+  std::string GetClangTidyReplacementsFilePath(
+    std::string const& directory, cmSourceFile const& source,
+    std::string const& config) const override;
 
   /// @return the dyndep file path for this target.
   std::string GetDyndepFilePath(std::string const& lang,
@@ -145,9 +162,15 @@ protected:
                           const std::string& config);
   void WriteCompileRule(const std::string& language,
                         const std::string& config);
+  void WriteCompileRule(const std::string& language, const std::string& config,
+                        WithScanning withScanning);
   void WriteObjectBuildStatements(const std::string& config,
                                   const std::string& fileConfig,
                                   bool firstForConfig);
+  void WriteCxxModuleBmiBuildStatement(cmSourceFile const* source,
+                                       const std::string& config,
+                                       const std::string& fileConfig,
+                                       bool firstForConfig);
   void WriteObjectBuildStatement(cmSourceFile const* source,
                                  const std::string& config,
                                  const std::string& fileConfig,
@@ -157,6 +180,9 @@ protected:
 
   void EmitSwiftDependencyInfo(cmSourceFile const* source,
                                const std::string& config);
+
+  void GenerateSwiftOutputFileMap(const std::string& config,
+                                  std::string& flags);
 
   void ExportObjectCompileCommand(
     std::string const& language, std::string const& sourceFileName,
@@ -203,16 +229,29 @@ protected:
 
 private:
   cmLocalNinjaGenerator* LocalGenerator;
+  bool HasPrivateGeneratedSources = false;
+
+  struct ScanningFiles
+  {
+    bool IsEmpty() const
+    {
+      return this->ScanningOutput.empty() && this->ModuleMapFile.empty();
+    }
+
+    std::string ScanningOutput;
+    std::string ModuleMapFile;
+  };
 
   struct ByConfig
   {
     /// List of object files for this target.
     cmNinjaDeps Objects;
-    // Fortran Support
-    std::map<std::string, cmNinjaDeps> DDIFiles;
+    // Dyndep Support
+    std::map<std::string, std::vector<ScanningFiles>> ScanningInfo;
+    // Imported C++ module info.
+    mutable ImportedCxxModuleLookup ImportedCxxModules;
     // Swift Support
     Json::Value SwiftOutputMap;
-    std::vector<cmCustomCommand const*> CustomCommands;
     cmNinjaDeps ExtraFiles;
     std::unique_ptr<MacOSXContentGeneratorType> MacOSXContentGenerator;
   };

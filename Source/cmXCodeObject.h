@@ -5,6 +5,7 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <algorithm>
+#include <cstddef>
 #include <iosfwd>
 #include <map>
 #include <string>
@@ -128,7 +129,7 @@ public:
   // search the attribute list for an object of the specified type
   cmXCodeObject* GetObject(cmXCodeObject::PBXType t) const
   {
-    for (auto o : this->List) {
+    for (auto* o : this->List) {
       if (o->IsA == t) {
         return o;
       }

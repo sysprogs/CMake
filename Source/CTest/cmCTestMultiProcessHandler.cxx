@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <cm/memory>
+#include <cm/optional>
 #include <cmext/algorithm>
 
 #include <cm3p/json/value.h>
@@ -34,6 +35,7 @@
 #include "cmCTestRunTest.h"
 #include "cmCTestTestHandler.h"
 #include "cmDuration.h"
+#include "cmJSONState.h"
 #include "cmListFileCache.h"
 #include "cmRange.h"
 #include "cmStringAlgorithms.h"
@@ -74,6 +76,7 @@ cmCTestMultiProcessHandler::cmCTestMultiProcessHandler()
   this->ProcessorsAvailable = cmAffinity::GetProcessorsAvailable();
   this->HaveAffinity = this->ProcessorsAvailable.size();
   this->HasCycles = false;
+  this->HasInvalidGeneratedResourceSpec = false;
   this->SerialTestRunning = false;
 }
 
@@ -94,7 +97,9 @@ void cmCTestMultiProcessHandler::SetTests(TestMap& tests,
   if (!this->CTest->GetShowOnly()) {
     this->ReadCostData();
     this->HasCycles = !this->CheckCycles();
-    if (this->HasCycles) {
+    this->HasInvalidGeneratedResourceSpec =
+      !this->CheckGeneratedResourceSpec();
+    if (this->HasCycles || this->HasInvalidGeneratedResourceSpec) {
       return;
     }
     this->CreateTestCostList();
@@ -124,7 +129,7 @@ void cmCTestMultiProcessHandler::SetTestLoad(unsigned long load)
 void cmCTestMultiProcessHandler::RunTests()
 {
   this->CheckResume();
-  if (this->HasCycles) {
+  if (this->HasCycles || this->HasInvalidGeneratedResourceSpec) {
     return;
   }
 #ifdef CMAKE_UV_SIGNAL_HACK
@@ -179,7 +184,7 @@ bool cmCTestMultiProcessHandler::StartTestProcess(int test)
   }
   testRun->SetIndex(test);
   testRun->SetTestProperties(this->Properties[test]);
-  if (this->TestHandler->UseResourceSpec) {
+  if (this->UseResourceSpec) {
     testRun->SetUseAllocatedResources(true);
     testRun->SetAllocatedResources(this->AllocatedResources[test]);
   }
@@ -228,15 +233,15 @@ bool cmCTestMultiProcessHandler::StartTestProcess(int test)
       }
       e << "\n";
     }
-    e << "Resource spec file:\n\n  " << this->TestHandler->ResourceSpecFile;
-    cmCTestRunTest::StartFailure(std::move(testRun), e.str(),
+    e << "Resource spec file:\n\n  " << this->ResourceSpecFile;
+    cmCTestRunTest::StartFailure(std::move(testRun), this->Total, e.str(),
                                  "Insufficient resources");
     return false;
   }
 
   cmWorkingDirectory workdir(this->Properties[test]->Directory);
   if (workdir.Failed()) {
-    cmCTestRunTest::StartFailure(std::move(testRun),
+    cmCTestRunTest::StartFailure(std::move(testRun), this->Total,
                                  "Failed to change working directory to " +
                                    this->Properties[test]->Directory + " : " +
                                    std::strerror(workdir.GetLastResult()),
@@ -252,7 +257,7 @@ bool cmCTestMultiProcessHandler::StartTestProcess(int test)
 
 bool cmCTestMultiProcessHandler::AllocateResources(int index)
 {
-  if (!this->TestHandler->UseResourceSpec) {
+  if (!this->UseResourceSpec) {
     return true;
   }
 
@@ -321,7 +326,7 @@ bool cmCTestMultiProcessHandler::TryAllocateResources(
 
 void cmCTestMultiProcessHandler::DeallocateResources(int index)
 {
-  if (!this->TestHandler->UseResourceSpec) {
+  if (!this->UseResourceSpec) {
     return;
   }
 
@@ -357,7 +362,7 @@ bool cmCTestMultiProcessHandler::AllResourcesAvailable()
 
 void cmCTestMultiProcessHandler::CheckResourcesAvailable()
 {
-  if (this->TestHandler->UseResourceSpec) {
+  if (this->UseResourceSpec) {
     for (auto test : this->SortedTests) {
       std::map<std::string, std::vector<cmCTestBinPackerAllocation>>
         allocations;
@@ -587,24 +592,24 @@ void cmCTestMultiProcessHandler::StartNextTests()
         onlyRunSerialTestsLeft = false;
       }
     }
-    cmCTestLog(this->CTest, HANDLER_OUTPUT, "***** WAITING, ");
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "***** WAITING, ");
 
     if (this->SerialTestRunning) {
-      cmCTestLog(this->CTest, HANDLER_OUTPUT,
+      cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                  "Waiting for RUN_SERIAL test to finish.");
     } else if (onlyRunSerialTestsLeft) {
-      cmCTestLog(this->CTest, HANDLER_OUTPUT,
+      cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                  "Only RUN_SERIAL tests remain, awaiting available slot.");
     } else {
       /* clang-format off */
-      cmCTestLog(this->CTest, HANDLER_OUTPUT,
+      cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                  "System Load: " << systemLoad << ", "
                  "Max Allowed Load: " << this->TestLoad << ", "
                  "Smallest test " << testWithMinProcessors <<
                  " requires " << minProcessorsRequired);
       /* clang-format on */
     }
-    cmCTestLog(this->CTest, HANDLER_OUTPUT, "*****" << std::endl);
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT, "*****" << std::endl);
 
     // Wait between 1 and 5 seconds before trying again.
     unsigned int milliseconds = (cmSystemTools::RandomSeed() % 5 + 1) * 1000;
@@ -633,8 +638,9 @@ void cmCTestMultiProcessHandler::FinishTestProcess(
   int test = runner->GetIndex();
   auto* properties = runner->GetTestProperties();
 
-  bool testResult = runner->EndTest(this->Completed, this->Total, started);
-  if (runner->TimedOutForStopTime()) {
+  cmCTestRunTest::EndTestResult testResult =
+    runner->EndTest(this->Completed, this->Total, started);
+  if (testResult.StopTimePassed) {
     this->SetStopTimePassed();
   }
   if (started) {
@@ -645,7 +651,7 @@ void cmCTestMultiProcessHandler::FinishTestProcess(
     }
   }
 
-  if (testResult) {
+  if (testResult.Passed) {
     this->Passed->push_back(properties->Name);
   } else if (!properties->Disabled) {
     this->Failed->push_back(properties->Name);
@@ -1026,6 +1032,11 @@ static Json::Value DumpCTestProperties(
     properties.append(DumpCTestProperty(
       "ENVIRONMENT", DumpToJsonArray(testProperties.Environment)));
   }
+  if (!testProperties.EnvironmentModification.empty()) {
+    properties.append(DumpCTestProperty(
+      "ENVIRONMENT_MODIFICATION",
+      DumpToJsonArray(testProperties.EnvironmentModification)));
+  }
   if (!testProperties.ErrorRegularExpressions.empty()) {
     properties.append(DumpCTestProperty(
       "FAIL_REGULAR_EXPRESSION",
@@ -1090,9 +1101,9 @@ static Json::Value DumpCTestProperties(
     properties.append(
       DumpCTestProperty("SKIP_RETURN_CODE", testProperties.SkipReturnCode));
   }
-  if (testProperties.ExplicitTimeout) {
+  if (testProperties.Timeout) {
     properties.append(
-      DumpCTestProperty("TIMEOUT", testProperties.Timeout.count()));
+      DumpCTestProperty("TIMEOUT", testProperties.Timeout->count()));
   }
   if (!testProperties.TimeoutRegularExpressions.empty()) {
     properties.append(DumpCTestProperty(
@@ -1279,10 +1290,8 @@ void cmCTestMultiProcessHandler::PrintTestList()
   }
 
   this->TestHandler->SetMaxIndex(this->FindMaxIndex());
-  int count = 0;
 
   for (auto& it : this->Properties) {
-    count++;
     cmCTestTestHandler::cmCTestTestProperties& p = *it.second;
 
     // Don't worry if this fails, we are only showing the test list, not
@@ -1438,5 +1447,83 @@ bool cmCTestMultiProcessHandler::CheckCycles()
   cmCTestOptionalLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                      "Checking test dependency graph end" << std::endl,
                      this->Quiet);
+  return true;
+}
+
+bool cmCTestMultiProcessHandler::CheckGeneratedResourceSpec()
+{
+  for (auto& test : this->Properties) {
+    if (!test.second->GeneratedResourceSpecFile.empty()) {
+      if (this->ResourceSpecSetupTest) {
+        cmCTestLog(
+          this->CTest, ERROR_MESSAGE,
+          "Only one test may define the GENERATED_RESOURCE_SPEC_FILE property"
+            << std::endl);
+        return false;
+      }
+
+      if (test.second->FixturesSetup.size() != 1) {
+        cmCTestLog(this->CTest, ERROR_MESSAGE,
+                   "Test that defines GENERATED_RESOURCE_SPEC_FILE must have "
+                   "exactly one FIXTURES_SETUP"
+                     << std::endl);
+        return false;
+      }
+
+      if (!cmSystemTools::FileIsFullPath(
+            test.second->GeneratedResourceSpecFile)) {
+        cmCTestLog(this->CTest, ERROR_MESSAGE,
+                   "GENERATED_RESOURCE_SPEC_FILE must be an absolute path"
+                     << std::endl);
+        return false;
+      }
+
+      this->ResourceSpecSetupTest = test.first;
+      this->ResourceSpecSetupFixture = *test.second->FixturesSetup.begin();
+    }
+  }
+
+  if (!this->ResourceSpecSetupFixture.empty()) {
+    for (auto& test : this->Properties) {
+      if (!test.second->ResourceGroups.empty() &&
+          !test.second->FixturesRequired.count(
+            this->ResourceSpecSetupFixture)) {
+        cmCTestLog(this->CTest, ERROR_MESSAGE,
+                   "All tests that have RESOURCE_GROUPS must include the "
+                   "resource spec generator fixture in their FIXTURES_REQUIRED"
+                     << std::endl);
+        return false;
+      }
+    }
+  }
+
+  if (!this->ResourceSpecFile.empty()) {
+    if (this->ResourceSpecSetupTest) {
+      cmCTestLog(this->CTest, ERROR_MESSAGE,
+                 "GENERATED_RESOURCE_SPEC_FILE test property cannot be used "
+                 "in conjunction with ResourceSpecFile option"
+                   << std::endl);
+      return false;
+    }
+    std::string error;
+    if (!this->InitResourceAllocator(error)) {
+      cmCTestLog(this->CTest, ERROR_MESSAGE, error << std::endl);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool cmCTestMultiProcessHandler::InitResourceAllocator(std::string& error)
+{
+  if (!this->ResourceSpec.ReadFromJSONFile(this->ResourceSpecFile)) {
+    error = cmStrCat("Could not read/parse resource spec file ",
+                     this->ResourceSpecFile, ": ",
+                     this->ResourceSpec.parseState.GetErrorMessage());
+    return false;
+  }
+  this->UseResourceSpec = true;
+  this->ResourceAllocator.InitializeFromResourceSpec(this->ResourceSpec);
   return true;
 }

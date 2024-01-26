@@ -6,10 +6,10 @@
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmProperty.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 namespace {
 
@@ -28,12 +28,14 @@ bool MainSignature(std::vector<std::string> const& args,
   std::string configuration;
   std::string project_name;
   std::string target;
+  std::string parallel;
   enum Doing
   {
     DoingNone,
     DoingConfiguration,
     DoingProjectName,
-    DoingTarget
+    DoingTarget,
+    DoingParallel
   };
   Doing doing = DoingNone;
   for (unsigned int i = 1; i < args.size(); ++i) {
@@ -43,6 +45,8 @@ bool MainSignature(std::vector<std::string> const& args,
       doing = DoingProjectName;
     } else if (args[i] == "TARGET") {
       doing = DoingTarget;
+    } else if (args[i] == "PARALLEL_LEVEL") {
+      doing = DoingParallel;
     } else if (doing == DoingConfiguration) {
       doing = DoingNone;
       configuration = args[i];
@@ -52,6 +56,9 @@ bool MainSignature(std::vector<std::string> const& args,
     } else if (doing == DoingTarget) {
       doing = DoingNone;
       target = args[i];
+    } else if (doing == DoingParallel) {
+      doing = DoingNone;
+      parallel = args[i];
     } else {
       status.SetError(cmStrCat("unknown argument \"", args[i], "\""));
       return false;
@@ -77,7 +84,7 @@ bool MainSignature(std::vector<std::string> const& args,
   }
 
   std::string makecommand = mf.GetGlobalGenerator()->GenerateCMakeBuildCommand(
-    target, configuration, "", mf.IgnoreErrorsCMP0061());
+    target, configuration, parallel, "", mf.IgnoreErrorsCMP0061());
 
   mf.AddDefinition(variable, makecommand);
 
@@ -95,7 +102,7 @@ bool TwoArgsSignature(std::vector<std::string> const& args,
   cmMakefile& mf = status.GetMakefile();
 
   std::string const& define = args[0];
-  cmProp cacheValue = mf.GetDefinition(define);
+  cmValue cacheValue = mf.GetDefinition(define);
 
   std::string configType;
   if (!cmSystemTools::GetEnv("CMAKE_CONFIG_TYPE", configType) ||
@@ -104,7 +111,7 @@ bool TwoArgsSignature(std::vector<std::string> const& args,
   }
 
   std::string makecommand = mf.GetGlobalGenerator()->GenerateCMakeBuildCommand(
-    "", configType, "", mf.IgnoreErrorsCMP0061());
+    "", configType, "", "", mf.IgnoreErrorsCMP0061());
 
   if (cacheValue) {
     return true;

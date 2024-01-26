@@ -8,14 +8,13 @@
 #include <utility>
 #include <vector>
 
-#include <cm3p/archive.h>
-
 #include "cmCPackComponentGroup.h"
 #include "cmCPackGenerator.h"
 #include "cmCPackLog.h"
 #include "cmGeneratedFileStream.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmWorkingDirectory.h"
 
 cmCPackGenerator* cmCPackArchiveGenerator::Create7ZGenerator()
@@ -78,13 +77,13 @@ std::string cmCPackArchiveGenerator::GetArchiveComponentFileName(
 
   if (this->IsSet("CPACK_ARCHIVE_" + componentUpper + "_FILE_NAME")) {
     packageFileName +=
-      this->GetOption("CPACK_ARCHIVE_" + componentUpper + "_FILE_NAME");
+      *this->GetOption("CPACK_ARCHIVE_" + componentUpper + "_FILE_NAME");
   } else if (this->IsSet("CPACK_ARCHIVE_FILE_NAME")) {
     packageFileName += this->GetComponentPackageFileName(
-      this->GetOption("CPACK_ARCHIVE_FILE_NAME"), component, isGroupName);
+      *this->GetOption("CPACK_ARCHIVE_FILE_NAME"), component, isGroupName);
   } else {
     packageFileName += this->GetComponentPackageFileName(
-      this->GetOption("CPACK_PACKAGE_FILE_NAME"), component, isGroupName);
+      *this->GetOption("CPACK_PACKAGE_FILE_NAME"), component, isGroupName);
   }
 
   packageFileName += this->GetOutputExtension();
@@ -95,6 +94,18 @@ std::string cmCPackArchiveGenerator::GetArchiveComponentFileName(
 int cmCPackArchiveGenerator::InitializeInternal()
 {
   this->SetOptionIfNotSet("CPACK_INCLUDE_TOPLEVEL_DIRECTORY", "1");
+  cmValue newExtensionValue = this->GetOption("CPACK_ARCHIVE_FILE_EXTENSION");
+  if (!newExtensionValue.IsEmpty()) {
+    std::string newExtension = *newExtensionValue;
+    if (!cmHasLiteralPrefix(newExtension, ".")) {
+      newExtension = cmStrCat('.', newExtension);
+    }
+    cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                  "Using user-provided file extension "
+                    << newExtension << " instead of the default "
+                    << this->OutputExtension << std::endl);
+    this->OutputExtension = std::move(newExtension);
+  }
   return this->Superclass::InitializeInternal();
 }
 
@@ -119,11 +130,11 @@ int cmCPackArchiveGenerator::addOneComponentToArchive(
   if (this->IsOn("CPACK_COMPONENT_INCLUDE_TOPLEVEL_DIRECTORY")) {
     filePrefix = cmStrCat(this->GetOption("CPACK_PACKAGE_FILE_NAME"), '/');
   }
-  const char* installPrefix =
-    this->GetOption("CPACK_PACKAGING_INSTALL_PREFIX");
-  if (installPrefix && installPrefix[0] == '/' && installPrefix[1] != 0) {
+  cmValue installPrefix = this->GetOption("CPACK_PACKAGING_INSTALL_PREFIX");
+  if (installPrefix && installPrefix->size() > 1 &&
+      (*installPrefix)[0] == '/') {
     // add to file prefix and remove the leading '/'
-    filePrefix += installPrefix + 1;
+    filePrefix += installPrefix->substr(1);
     filePrefix += "/";
   }
   for (std::string const& file : component->Files) {
@@ -154,15 +165,9 @@ int cmCPackArchiveGenerator::addOneComponentToArchive(
                     << (filename) << ">." << std::endl);                      \
     return 0;                                                                 \
   }                                                                           \
-  cmArchiveWrite archive(gf, this->Compress, this->ArchiveFormat);            \
+  cmArchiveWrite archive(gf, this->Compress, this->ArchiveFormat, 0,          \
+                         this->GetThreadCount());                             \
   do {                                                                        \
-    if (!this->SetArchiveOptions(&archive)) {                                 \
-      cmCPackLogger(cmCPackLog::LOG_ERROR,                                    \
-                    "Problem to set archive options <"                        \
-                      << (filename) << ">, ERROR = " << (archive).GetError()  \
-                      << std::endl);                                          \
-      return 0;                                                               \
-    }                                                                         \
     if (!archive.Open()) {                                                    \
       cmCPackLogger(cmCPackLog::LOG_ERROR,                                    \
                     "Problem to open archive <"                               \
@@ -264,9 +269,9 @@ int cmCPackArchiveGenerator::PackageComponentsAllInOne()
   this->packageFileNames[0] += "/";
 
   if (this->IsSet("CPACK_ARCHIVE_FILE_NAME")) {
-    this->packageFileNames[0] += this->GetOption("CPACK_ARCHIVE_FILE_NAME");
+    this->packageFileNames[0] += *this->GetOption("CPACK_ARCHIVE_FILE_NAME");
   } else {
-    this->packageFileNames[0] += this->GetOption("CPACK_PACKAGE_FILE_NAME");
+    this->packageFileNames[0] += *this->GetOption("CPACK_PACKAGE_FILE_NAME");
   }
 
   this->packageFileNames[0] += this->GetOutputExtension();
@@ -346,26 +351,16 @@ bool cmCPackArchiveGenerator::SupportsComponentInstallation() const
   return this->IsOn("CPACK_ARCHIVE_COMPONENT_INSTALL");
 }
 
-bool cmCPackArchiveGenerator::SetArchiveOptions(cmArchiveWrite* archive)
+int cmCPackArchiveGenerator::GetThreadCount() const
 {
-#if ARCHIVE_VERSION_NUMBER >= 3004000
-  // Upstream fixed an issue with their integer parsing in 3.4.0 which would
-  // cause spurious errors to be raised from `strtoull`.
-  if (this->Compress == cmArchiveWrite::CompressXZ) {
-    const char* threads = "1";
+  int threads = 1;
 
-    // CPACK_ARCHIVE_THREADS overrides CPACK_THREADS
-    if (this->IsSet("CPACK_ARCHIVE_THREADS")) {
-      threads = this->GetOption("CPACK_ARCHIVE_THREADS");
-    } else if (this->IsSet("CPACK_THREADS")) {
-      threads = this->GetOption("CPACK_THREADS");
-    }
-
-    if (!archive->SetFilterOption("xz", "threads", threads)) {
-      return false;
-    }
+  // CPACK_ARCHIVE_THREADS overrides CPACK_THREADS
+  if (this->IsSet("CPACK_ARCHIVE_THREADS")) {
+    threads = std::stoi(*this->GetOption("CPACK_ARCHIVE_THREADS"));
+  } else if (this->IsSet("CPACK_THREADS")) {
+    threads = std::stoi(*this->GetOption("CPACK_THREADS"));
   }
-#endif
 
-  return true;
+  return threads;
 }

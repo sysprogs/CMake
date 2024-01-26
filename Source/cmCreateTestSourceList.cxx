@@ -87,17 +87,19 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
       func_name = cmSystemTools::GetFilenameWithoutLastExtension(*i);
     }
     cmSystemTools::ConvertToUnixSlashes(func_name);
-    std::replace(func_name.begin(), func_name.end(), ' ', '_');
-    std::replace(func_name.begin(), func_name.end(), '/', '_');
-    std::replace(func_name.begin(), func_name.end(), ':', '_');
+    func_name = cmSystemTools::MakeCidentifier(func_name);
+    bool already_declared =
+      std::find(tests_func_name.begin(), tests_func_name.end(), func_name) !=
+      tests_func_name.end();
     tests_func_name.push_back(func_name);
-    forwardDeclareCode += "int ";
-    forwardDeclareCode += func_name;
-    forwardDeclareCode += "(int, char*[]);\n";
+    if (!already_declared) {
+      forwardDeclareCode += "int ";
+      forwardDeclareCode += func_name;
+      forwardDeclareCode += "(int, char*[]);\n";
+    }
   }
 
   std::string functionMapCode;
-  int numTests = 0;
   std::vector<std::string>::iterator j;
   for (i = testsBegin, j = tests_func_name.begin(); i != tests.end();
        ++i, ++j) {
@@ -116,7 +118,6 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
     functionMapCode += *j;
     functionMapCode += "\n"
                        "  },\n";
-    numTests++;
   }
   if (!extraInclude.empty()) {
     mf.AddDefinition("CMAKE_TESTDRIVER_EXTRA_INCLUDES", extraInclude);

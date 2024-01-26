@@ -5,6 +5,7 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <map>
@@ -13,15 +14,17 @@
 #include <utility>
 #include <vector>
 
-#include <stddef.h>
+#include <cm/optional>
+#include <cm/string_view>
 
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmCTest.h"
 #include "cmCTestGenericHandler.h"
-#include "cmCTestResourceSpec.h"
+#include "cmCTestTypes.h" // IWYU pragma: keep
 #include "cmDuration.h"
 #include "cmListFileCache.h"
+#include "cmValue.h"
 
 class cmMakefile;
 class cmXMLWriter;
@@ -32,6 +35,7 @@ class cmXMLWriter;
  */
 class cmCTestTestHandler : public cmCTestGenericHandler
 {
+  friend class cmCTest;
   friend class cmCTestRunTest;
   friend class cmCTestMultiProcessHandler;
 
@@ -65,8 +69,8 @@ public:
   /// them on
   void UseIncludeRegExp();
   void UseExcludeRegExp();
-  void SetIncludeRegExp(const char*);
-  void SetExcludeRegExp(const char*);
+  void SetIncludeRegExp(const std::string&);
+  void SetExcludeRegExp(const std::string&);
 
   void SetMaxIndex(int n) { this->MaxIndex = n; }
   int GetMaxIndex() { return this->MaxIndex; }
@@ -80,8 +84,11 @@ public:
     this->CustomMaximumFailedTestOutputSize = n;
   }
 
+  //! Set test output truncation mode. Return false if unknown mode.
+  bool SetTestOutputTruncation(const std::string& mode);
+
   //! pass the -I argument down
-  void SetTestsToRunInformation(const char*);
+  void SetTestsToRunInformation(cmValue);
 
   cmCTestTestHandler();
 
@@ -112,12 +119,16 @@ public:
     bool operator!=(const cmCTestTestResourceRequirement& other) const;
   };
 
-  // NOTE: This struct is Saved/Restored
-  // in cmCTestTestHandler, if you add to this class
-  // then you must add the new members to that code or
-  // ctest -j N will break for that feature
+  struct Signal
+  {
+    int Number = 0;
+    std::string Name;
+  };
+
   struct cmCTestTestProperties
   {
+    void AppendError(cm::string_view err);
+    cm::optional<std::string> Error;
     std::string Name;
     std::string Directory;
     std::vector<std::string> Args;
@@ -134,23 +145,25 @@ public:
     std::vector<std::pair<cmsys::RegularExpression, std::string>>
       TimeoutRegularExpressions;
     std::map<std::string, std::string> Measurements;
-    bool IsInBasedOnREOptions;
-    bool WillFail;
-    bool Disabled;
-    float Cost;
-    int PreviousRuns;
-    bool RunSerial;
-    cmDuration Timeout;
-    bool ExplicitTimeout;
+    bool IsInBasedOnREOptions = true;
+    bool WillFail = false;
+    bool Disabled = false;
+    float Cost = 0;
+    int PreviousRuns = 0;
+    bool RunSerial = false;
+    cm::optional<cmDuration> Timeout;
+    cm::optional<Signal> TimeoutSignal;
+    cm::optional<cmDuration> TimeoutGracePeriod;
     cmDuration AlternateTimeout;
-    int Index;
+    int Index = 0;
     // Requested number of process slots
-    int Processors;
-    bool WantAffinity;
+    int Processors = 1;
+    bool WantAffinity = false;
     std::vector<size_t> Affinity;
     // return code of test which will mark test as "not run"
-    int SkipReturnCode;
+    int SkipReturnCode = -1;
     std::vector<std::string> Environment;
+    std::vector<std::string> EnvironmentModification;
     std::vector<std::string> Labels;
     std::set<std::string> LockedResources;
     std::set<std::string> FixturesSetup;
@@ -158,6 +171,7 @@ public:
     std::set<std::string> FixturesRequired;
     std::set<std::string> RequireSuccessDepends;
     std::vector<std::vector<cmCTestTestResourceRequirement>> ResourceGroups;
+    std::string GeneratedResourceSpecFile;
     // Private test generator properties used to track backtraces
     cmListFileBacktrace Backtrace;
   };
@@ -169,16 +183,17 @@ public:
     std::string Reason;
     std::string FullCommandLine;
     std::string Environment;
-    cmDuration ExecutionTime;
-    std::int64_t ReturnValue;
-    int Status;
+    cmDuration ExecutionTime = cmDuration::zero();
+    std::int64_t ReturnValue = 0;
+    int Status = NOT_RUN;
     std::string ExceptionStatus;
     bool CompressOutput;
     std::string CompletionStatus;
+    std::string CustomCompletionStatus;
     std::string Output;
-    std::string DartString;
-    int TestCount;
-    cmCTestTestProperties* Properties;
+    std::string TestMeasurementsOutput;
+    int TestCount = 0;
+    cmCTestTestProperties* Properties = nullptr;
   };
 
   struct cmCTestTestResultLess
@@ -209,6 +224,9 @@ public:
 
   using ListOfTests = std::vector<cmCTestTestProperties>;
 
+  // Support for writing test results in JUnit XML format.
+  void SetJUnitXMLFileName(const std::string& id);
+
 protected:
   using SetOfTests =
     std::set<cmCTestTestHandler::cmCTestTestResult, cmCTestTestResultLess>;
@@ -234,9 +252,12 @@ protected:
                              cmCTestTestResult const& result);
   // Write attached test files into the xml
   void AttachFiles(cmXMLWriter& xml, cmCTestTestResult& result);
+  void AttachFile(cmXMLWriter& xml, std::string const& file,
+                  std::string const& name);
 
-  //! Clean test output to specified length
-  void CleanTestOutput(std::string& output, size_t length);
+  //! Clean test output to specified length and truncation mode
+  void CleanTestOutput(std::string& output, size_t length,
+                       cmCTestTypes::TruncationMode truncate);
 
   cmDuration ElapsedTestingTime;
 
@@ -251,6 +272,7 @@ protected:
   bool MemCheck;
   int CustomMaximumPassedTestOutputSize;
   int CustomMaximumFailedTestOutputSize;
+  cmCTestTypes::TruncationMode TestOutputTruncation;
   int MaxIndex;
 
 public:
@@ -270,9 +292,14 @@ public:
 
 private:
   /**
-   * Generate the Dart compatible output
+   * Write test results in CTest's Test.xml format
    */
-  virtual void GenerateDartOutput(cmXMLWriter& xml);
+  virtual void GenerateCTestXML(cmXMLWriter& xml);
+
+  /**
+   * Write test results in JUnit XML format
+   */
+  bool WriteJUnitXML();
 
   void PrintLabelOrSubprojectSummary(bool isSubProject);
 
@@ -292,7 +319,7 @@ private:
 
   // compute the lists of tests that will actually run
   // based on LastTestFailed.log
-  void ComputeTestListForRerunFailed();
+  bool ComputeTestListForRerunFailed();
 
   // add required setup/cleanup tests not already in the
   // list of tests to be run and update dependencies between
@@ -320,29 +347,22 @@ private:
 
   std::vector<int> TestsToRun;
 
-  bool UseIncludeLabelRegExpFlag;
-  bool UseExcludeLabelRegExpFlag;
   bool UseIncludeRegExpFlag;
   bool UseExcludeRegExpFlag;
   bool UseExcludeRegExpFirst;
-  std::string IncludeLabelRegExp;
-  std::string ExcludeLabelRegExp;
   std::string IncludeRegExp;
   std::string ExcludeRegExp;
   std::string ExcludeFixtureRegExp;
   std::string ExcludeFixtureSetupRegExp;
   std::string ExcludeFixtureCleanupRegExp;
-  cmsys::RegularExpression IncludeLabelRegularExpression;
-  cmsys::RegularExpression ExcludeLabelRegularExpression;
+  std::vector<cmsys::RegularExpression> IncludeLabelRegularExpressions;
+  std::vector<cmsys::RegularExpression> ExcludeLabelRegularExpressions;
   cmsys::RegularExpression IncludeTestsRegularExpression;
   cmsys::RegularExpression ExcludeTestsRegularExpression;
 
-  bool UseResourceSpec;
-  cmCTestResourceSpec ResourceSpec;
   std::string ResourceSpecFile;
 
-  void GenerateRegressionImages(cmXMLWriter& xml, const std::string& dart);
-  cmsys::RegularExpression DartStuff1;
+  void RecordCustomTestMeasurements(cmXMLWriter& xml, std::string content);
   void CheckLabelFilter(cmCTestTestProperties& it);
   void CheckLabelFilterExclude(cmCTestTestProperties& it);
   void CheckLabelFilterInclude(cmCTestTestProperties& it);
@@ -351,11 +371,16 @@ private:
   bool UseUnion;
   ListOfTests TestList;
   size_t TotalNumberOfTests;
-  cmsys::RegularExpression DartStuff;
+  cmsys::RegularExpression AllTestMeasurementsRegex;
+  cmsys::RegularExpression SingleTestMeasurementRegex;
+  cmsys::RegularExpression CustomCompletionStatusRegex;
+  cmsys::RegularExpression CustomLabelRegex;
 
   std::ostream* LogFile;
 
   cmCTest::Repeat RepeatMode = cmCTest::Repeat::Never;
   int RepeatCount = 1;
   bool RerunFailed;
+
+  std::string JUnitXMLFileName;
 };

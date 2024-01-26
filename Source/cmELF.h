@@ -4,15 +4,12 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include <cstdint>
 #include <iosfwd>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
-
-#if !defined(CMake_USE_ELF_PARSER)
-#  error "This file may be included only if CMake_USE_ELF_PARSER is enabled."
-#endif
 
 class cmELFInternal;
 
@@ -72,6 +69,9 @@ public:
   /** Get the type of the file opened.  */
   FileType GetFileType() const;
 
+  /** Get the machine of the file opened.  */
+  std::uint16_t GetMachine() const;
+
   /** Get the number of ELF sections present.  */
   unsigned int GetNumberOfSections() const;
 
@@ -97,6 +97,9 @@ public:
 
   /** Get the RUNPATH field if any.  */
   StringEntry const* GetRunPath();
+
+  /** Returns true if the ELF file targets a MIPS CPU.  */
+  bool IsMIPS() const;
 
   /** Print human-readable information about the ELF file.  */
   void PrintInfo(std::ostream& os) const;

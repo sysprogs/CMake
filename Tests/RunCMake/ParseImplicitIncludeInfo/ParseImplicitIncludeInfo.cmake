@@ -1,6 +1,3 @@
-cmake_minimum_required(VERSION 3.14)
-project(Minimal NONE)
-
 #
 # list of targets to test.  to add a target: put its files in the data
 # subdirectory and add it to this list...  we run each target's
@@ -23,6 +20,9 @@ set(targets
   hand-C-empty hand-CXX-empty
   hand-C-relative hand-CXX-relative
   linux-C-GNU-7.3.0 linux-CXX-GNU-7.3.0 linux-Fortran-GNU-7.3.0
+  linux-C-GNU-10.2.1-static-libgcc
+    linux-CXX-GNU-10.2.1-static-libstdc++
+    linux-Fortran-GNU-10.2.1-static-libgfortran
   linux-C-Intel-18.0.0.20170811 linux-CXX-Intel-18.0.0.20170811
   linux-C-PGI-18.10.1 linux-CXX-PGI-18.10.1
     linux-Fortran-PGI-18.10.1 linux_pgf77-Fortran-PGI-18.10.1
@@ -35,6 +35,7 @@ set(targets
   linux-C-XL-16.1.0.0 linux-CXX-XL-16.1.0.0
   linux-CUDA-NVIDIA-10.1.168-CLANG linux-CUDA-NVIDIA-10.1.168-XLClang-v-empty
     linux-CUDA-NVIDIA-9.2.148-GCC
+  linux-custom_clang-C-Clang-13.0.0 linux-custom_clang-CXX-Clang-13.0.0
   mingw.org-C-GNU-4.9.3 mingw.org-CXX-GNU-4.9.3
   netbsd-C-GNU-4.8.5 netbsd-CXX-GNU-4.8.5
     netbsd_nostdinc-C-GNU-4.8.5 netbsd_nostdinc-CXX-GNU-4.8.5

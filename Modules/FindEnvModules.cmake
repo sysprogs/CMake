@@ -81,7 +81,7 @@ modules:
 
 .. command:: env_module
 
-  Execute an aribitrary module command:
+  Execute an arbitrary module command:
 
   .. code-block:: cmake
 
@@ -259,7 +259,7 @@ function(env_module_swap out_mod in_mod)
   )
 
   if(MOD_ARGS_OUTPUT_VARIABLE)
-    set(${MOD_ARGS_OUTPUT_VARIABLE} "${err_var}" PARENT_SCOPE)
+    set(${MOD_ARGS_OUTPUT_VARIABLE} "${tmp_out}" PARENT_SCOPE)
   endif()
   if(MOD_ARGS_RESULT_VARIABLE)
     set(${MOD_ARGS_RESULT_VARIABLE} ${tmp_ret} PARENT_SCOPE)

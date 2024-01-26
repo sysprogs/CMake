@@ -17,58 +17,23 @@
 
 #include "cmsys/FStream.hxx"
 
-// Include the ELF format information system header.
-#if defined(__OpenBSD__)
-#  include <elf_abi.h>
-#elif defined(__HAIKU__)
-#  include <elf32.h>
-#  include <elf64.h>
-using Elf32_Ehdr = struct Elf32_Ehdr;
-using Elf32_Shdr = struct Elf32_Shdr;
-using Elf32_Sym = struct Elf32_Sym;
-using Elf32_Rel = struct Elf32_Rel;
-using Elf32_Rela = struct Elf32_Rela;
-#  define ELFMAG0 0x7F
-#  define ELFMAG1 'E'
-#  define ELFMAG2 'L'
-#  define ELFMAG3 'F'
-#  define ET_NONE 0
-#  define ET_REL 1
-#  define ET_EXEC 2
-#  define ET_DYN 3
-#  define ET_CORE 4
-#  define EM_386 3
-#  define EM_SPARC 2
-#  define EM_PPC 20
-#else
-#  include <elf.h>
-#endif
-#if defined(__sun)
-#  include <sys/link.h> // For dynamic section information
-#endif
-#ifdef _SCO_DS
-#  include <link.h> // For DT_SONAME etc.
-#endif
-#ifndef DT_RUNPATH
-#  define DT_RUNPATH 29
-#endif
+#include "cmelf/elf32.h"
+#include "cmelf/elf64.h"
+#include "cmelf/elf_common.h"
 
 // Low-level byte swapping implementation.
 template <size_t s>
 struct cmELFByteSwapSize
 {
 };
-void cmELFByteSwap(char* /*unused*/, cmELFByteSwapSize<1> /*unused*/)
-{
-}
-void cmELFByteSwap(char* data, cmELFByteSwapSize<2> /*unused*/)
+static void cmELFByteSwap(char* data, cmELFByteSwapSize<2> /*unused*/)
 {
   char one_byte;
   one_byte = data[0];
   data[0] = data[1];
   data[1] = one_byte;
 }
-void cmELFByteSwap(char* data, cmELFByteSwapSize<4> /*unused*/)
+static void cmELFByteSwap(char* data, cmELFByteSwapSize<4> /*unused*/)
 {
   char one_byte;
   one_byte = data[0];
@@ -78,7 +43,7 @@ void cmELFByteSwap(char* data, cmELFByteSwapSize<4> /*unused*/)
   data[1] = data[2];
   data[2] = one_byte;
 }
-void cmELFByteSwap(char* data, cmELFByteSwapSize<8> /*unused*/)
+static void cmELFByteSwap(char* data, cmELFByteSwapSize<8> /*unused*/)
 {
   char one_byte;
   one_byte = data[0];
@@ -118,7 +83,6 @@ public:
     : External(external)
     , Stream(std::move(fin))
     , ByteOrder(order)
-    , ELFType(cmELF::FileTypeInvalid)
   {
 // In most cases the processor-specific byte order will match that
 // of the target execution environment.  If we choose wrong here
@@ -145,6 +109,7 @@ public:
   virtual std::vector<char> EncodeDynamicEntries(
     const cmELF::DynamicEntryList&) = 0;
   virtual StringEntry const* GetDynamicSectionString(unsigned int tag) = 0;
+  virtual bool IsMips() const = 0;
   virtual void PrintInfo(std::ostream& os) const = 0;
 
   // Lookup the SONAME in the DYNAMIC section.
@@ -168,6 +133,9 @@ public:
   // Return the recorded ELF type.
   cmELF::FileType GetFileType() const { return this->ELFType; }
 
+  // Return the recorded machine.
+  std::uint16_t GetMachine() const { return this->Machine; }
+
 protected:
   // Data common to all ELF class implementations.
 
@@ -181,7 +149,10 @@ protected:
   ByteOrderType ByteOrder;
 
   // The ELF file type.
-  cmELF::FileType ELFType;
+  cmELF::FileType ELFType = cmELF::FileTypeInvalid;
+
+  // The ELF architecture.
+  std::uint16_t Machine;
 
   // Whether we need to byte-swap structures read from the stream.
   bool NeedSwap;
@@ -212,7 +183,6 @@ struct cmELFTypes32
 };
 
 // Configure the implementation template for 64-bit ELF files.
-#ifndef _SCO_DS
 struct cmELFTypes64
 {
   using ELF_Ehdr = Elf64_Ehdr;
@@ -222,7 +192,6 @@ struct cmELFTypes64
   using tagtype = ::uint64_t;
   static const char* GetName() { return "64-bit"; }
 };
-#endif
 
 // Parser implementation template.
 template <class Types>
@@ -255,6 +224,8 @@ public:
 
   // Lookup a string from the dynamic section with the given tag.
   StringEntry const* GetDynamicSectionString(unsigned int tag) override;
+
+  bool IsMips() const override { return this->ELFHeader.e_machine == EM_MIPS; }
 
   // Print information about the ELF file.
   void PrintInfo(std::ostream& os) const override
@@ -339,16 +310,12 @@ private:
         eti == ET_CORE) {
       return true;
     }
-#if defined(ET_LOOS) && defined(ET_HIOS)
     if (eti >= ET_LOOS && eti <= ET_HIOS) {
       return true;
     }
-#endif
-#if defined(ET_LOPROC) && defined(ET_HIPROC)
     if (eti >= ET_LOPROC && eti <= ET_HIPROC) {
       return true;
     }
-#endif
     return false;
   }
 
@@ -459,24 +426,22 @@ cmELFInternalImpl<Types>::cmELFInternalImpl(cmELF* external,
       break;
     default: {
       unsigned int eti = static_cast<unsigned int>(this->ELFHeader.e_type);
-#if defined(ET_LOOS) && defined(ET_HIOS)
       if (eti >= ET_LOOS && eti <= ET_HIOS) {
         this->ELFType = cmELF::FileTypeSpecificOS;
         break;
       }
-#endif
-#if defined(ET_LOPROC) && defined(ET_HIPROC)
       if (eti >= ET_LOPROC && eti <= ET_HIPROC) {
         this->ELFType = cmELF::FileTypeSpecificProc;
         break;
       }
-#endif
       std::ostringstream e;
       e << "Unknown ELF file type " << eti;
       this->SetErrorMessage(e.str().c_str());
       return;
     }
   }
+
+  this->Machine = this->ELFHeader.e_machine;
 
   // Load the section headers.
   this->SectionHeaders.resize(this->ELFHeader.e_shnum);
@@ -673,17 +638,12 @@ cmELF::StringEntry const* cmELFInternalImpl<Types>::GetDynamicSectionString(
 
 const long cmELF::TagRPath = DT_RPATH;
 const long cmELF::TagRunPath = DT_RUNPATH;
-
-#ifdef DT_MIPS_RLD_MAP_REL
 const long cmELF::TagMipsRldMapRel = DT_MIPS_RLD_MAP_REL;
-#else
-const long cmELF::TagMipsRldMapRel = 0;
-#endif
 
 cmELF::cmELF(const char* fname)
 {
   // Try to open the file.
-  auto fin = cm::make_unique<cmsys::ifstream>(fname);
+  auto fin = cm::make_unique<cmsys::ifstream>(fname, std::ios::binary);
 
   // Quit now if the file could not be opened.
   if (!fin || !*fin) {
@@ -728,15 +688,11 @@ cmELF::cmELF(const char* fname)
     // 32-bit ELF
     this->Internal = cm::make_unique<cmELFInternalImpl<cmELFTypes32>>(
       this, std::move(fin), order);
-  }
-#ifndef _SCO_DS
-  else if (ident[EI_CLASS] == ELFCLASS64) {
+  } else if (ident[EI_CLASS] == ELFCLASS64) {
     // 64-bit ELF
     this->Internal = cm::make_unique<cmELFInternalImpl<cmELFTypes64>>(
       this, std::move(fin), order);
-  }
-#endif
-  else {
+  } else {
     this->ErrorMessage = "ELF file class is not 32-bit or 64-bit.";
     return;
   }
@@ -755,6 +711,14 @@ cmELF::FileType cmELF::GetFileType() const
     return this->Internal->GetFileType();
   }
   return FileTypeInvalid;
+}
+
+std::uint16_t cmELF::GetMachine() const
+{
+  if (this->Valid()) {
+    return this->Internal->GetMachine();
+  }
+  return 0;
 }
 
 unsigned int cmELF::GetNumberOfSections() const
@@ -828,6 +792,14 @@ cmELF::StringEntry const* cmELF::GetRunPath()
     return this->Internal->GetRunPath();
   }
   return nullptr;
+}
+
+bool cmELF::IsMIPS() const
+{
+  if (this->Valid()) {
+    return this->Internal->IsMips();
+  }
+  return false;
 }
 
 void cmELF::PrintInfo(std::ostream& os) const

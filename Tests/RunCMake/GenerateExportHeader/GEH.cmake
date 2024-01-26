@@ -43,14 +43,6 @@ endif()
 
 include(GenerateExportHeader)
 
-set(CMAKE_CXX_STANDARD 98)
-
-# Clang/C2 in C++98 mode cannot properly handle some of MSVC headers
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
-    CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
-  set(CMAKE_CXX_STANDARD 11)
-endif()
-
 add_subdirectory(lib_shared_and_static)
 
 if(CMAKE_SYSTEM_NAME MATCHES "AIX" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
@@ -106,9 +98,11 @@ if (WIN32 OR CYGWIN)
   if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM") AND
     CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
     set(_platform Win32-Clang)
-  elseif(MSVC AND COMPILER_HAS_DEPRECATED)
+  elseif((MSVC OR CMAKE_C_COMPILER_ID STREQUAL "OrangeC") AND COMPILER_HAS_DEPRECATED)
     set(_platform Win32)
-  elseif((MINGW OR CYGWIN) AND COMPILER_HAS_DEPRECATED)
+  elseif(CYGWIN AND COMPILER_HAS_DEPRECATED)
+    set(_platform Cygwin)
+  elseif(MINGW AND COMPILER_HAS_DEPRECATED)
     set(_platform MinGW)
   else()
     set(_platform WinEmpty)

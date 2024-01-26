@@ -1,7 +1,15 @@
 Visual Studio 9 2008
 --------------------
 
-Generates Visual Studio 9 2008 project files.
+Deprecated.  Generates Visual Studio 9 2008 project files.
+
+.. note::
+  This generator is deprecated and will be removed in a future version
+  of CMake.  It will still be possible to build with VS 9 2008 tools
+  using the :generator:`Visual Studio 14 2015` generator (or above,
+  and with VS 10 2010 also installed) with
+  :variable:`CMAKE_GENERATOR_TOOLSET` set to ``v90``,
+  or by using the :generator:`NMake Makefiles` generator.
 
 Platform Selection
 ^^^^^^^^^^^^^^^^^^
@@ -10,7 +18,7 @@ The default target platform name (architecture) is ``Win32``.
 
 .. versionadded:: 3.1
   The :variable:`CMAKE_GENERATOR_PLATFORM` variable may be set, perhaps
-  via the :manual:`cmake(1)` ``-A`` option, to specify a target platform
+  via the :option:`cmake -A` option, to specify a target platform
   name (architecture).  For example:
 
   * ``cmake -G "Visual Studio 9 2008" -A Win32``

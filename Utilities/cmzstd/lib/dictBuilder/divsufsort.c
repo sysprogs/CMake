@@ -40,6 +40,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef __clang_analyzer__
+#include <string.h>
+#endif
+
 #include "divsufsort.h"
 
 /*- Constants -*/
@@ -1119,6 +1123,9 @@ tr_copy(int *ISA, const int *SA,
 
   v = b - SA - 1;
   for(c = first, d = a - 1; c <= d; ++c) {
+    #ifdef __clang_analyzer__
+    assert(c);
+    #endif
     if((0 <= (s = *c - depth)) && (ISA[s] == v)) {
       *++d = s;
       ISA[s] = d - SA;
@@ -1183,6 +1190,10 @@ tr_introsort(int *ISA, const int *ISAd,
   int incr = ISAd - ISA;
   int limit, next;
   int ssize, trlink = -1;
+
+  #ifdef __clang_analyzer__
+  memset(stack, 0, sizeof(stack));
+  #endif
 
   for(ssize = 0, limit = tr_ilg(last - first);;) {
 
@@ -1576,7 +1587,7 @@ note:
     /* Construct the inverse suffix array of type B* suffixes using trsort. */
     trsort(ISAb, SA, m, 1);
 
-    /* Set the sorted order of tyoe B* suffixes. */
+    /* Set the sorted order of type B* suffixes. */
     for(i = n - 1, j = m, c0 = T[n - 1]; 0 <= i;) {
       for(--i, c1 = c0; (0 <= i) && ((c0 = T[i]) >= c1); --i, c1 = c0) { }
       if(0 <= i) {

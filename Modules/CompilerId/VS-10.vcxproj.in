@@ -18,14 +18,15 @@
     @id_ToolsetVCTargetsDir@
     @id_CustomGlobals@
   </PropertyGroup>
-  @id_toolset_version_props@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  @id_toolset_version_props@
   <PropertyGroup>
     @id_PreferredToolArchitecture@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|@id_platform@'" Label="Configuration">
     <ConfigurationType>@id_config_type@</ConfigurationType>
     @id_toolset@
+    @id_api_level@
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -44,7 +45,7 @@
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(ApplicationType)'!='Android'">MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>TurnOffAllWarnings</WarningLevel>

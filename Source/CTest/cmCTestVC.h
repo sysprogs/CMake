@@ -6,6 +6,7 @@
 
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 #include "cmProcessOutput.h"
 #include "cmProcessTools.h"
@@ -95,15 +96,10 @@ protected:
   /** Represent change to one file.  */
   struct File
   {
-    PathStatus Status;
-    Revision const* Rev;
-    Revision const* PriorRev;
-    File()
-      : Status(PathUpdated)
-      , Rev(nullptr)
-      , PriorRev(nullptr)
-    {
-    }
+    PathStatus Status = PathUpdated;
+    Revision const* Rev = nullptr;
+    Revision const* PriorRev = nullptr;
+    File() = default;
     File(PathStatus status, Revision const* rev, Revision const* priorRev)
       : Status(status)
       , Rev(rev)
@@ -113,15 +109,15 @@ protected:
   };
 
   /** Convert a list of arguments to a human-readable command line.  */
-  static std::string ComputeCommandLine(char const* const* cmd);
+  static std::string ComputeCommandLine(const std::vector<std::string>& cmd);
 
   /** Run a command line and send output to given parsers.  */
-  bool RunChild(char const* const* cmd, OutputParser* out, OutputParser* err,
-                const char* workDir = nullptr,
+  bool RunChild(const std::vector<std::string>& cmd, OutputParser* out,
+                OutputParser* err, std::string workDir = {},
                 Encoding encoding = cmProcessOutput::Auto);
 
   /** Run VC update command line and send output to given parsers.  */
-  bool RunUpdateCommand(char const* const* cmd, OutputParser* out,
+  bool RunUpdateCommand(const std::vector<std::string>& cmd, OutputParser* out,
                         OutputParser* err = nullptr,
                         Encoding encoding = cmProcessOutput::Auto);
 

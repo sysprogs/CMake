@@ -24,21 +24,21 @@ The first signature is for adding a custom command to produce an output:
                      [COMMENT comment]
                      [DEPFILE depfile]
                      [JOB_POOL job_pool]
+                     [JOB_SERVER_AWARE <bool>]
                      [VERBATIM] [APPEND] [USES_TERMINAL]
-                     [COMMAND_EXPAND_LISTS])
+                     [COMMAND_EXPAND_LISTS]
+                     [DEPENDS_EXPLICIT_ONLY])
 
 This defines a command to generate specified ``OUTPUT`` file(s).
 A target created in the same directory (``CMakeLists.txt`` file)
 that specifies any output of the custom command as a source file
 is given a rule to generate the file using the command at build time.
-Do not list the output in more than one independent target that
-may build in parallel or the two instances of the rule may conflict
-(instead use the :command:`add_custom_target` command to drive the
-command and make the other targets depend on that one).
-In makefile terms this creates a new target in the following form::
 
-  OUTPUT: MAIN_DEPENDENCY DEPENDS
-          COMMAND
+Do not list the output in more than one independent target that
+may build in parallel or the instances of the rule may conflict.
+Instead, use the :command:`add_custom_target` command to drive the
+command and make the other targets depend on that one.  See the
+`Example: Generating Files for Multiple Targets`_ below.
 
 The options are:
 
@@ -67,6 +67,8 @@ The options are:
   Each byproduct file will be marked with the :prop_sf:`GENERATED`
   source file property automatically.
 
+  *See policy* :policy:`CMP0058` *for the motivation behind this feature.*
+
   Explicit specification of byproducts is supported by the
   :generator:`Ninja` generator to tell the ``ninja`` build tool
   how to regenerate byproducts when they are missing.  It is
@@ -84,6 +86,11 @@ The options are:
     :manual:`generator expressions <cmake-generator-expressions(7)>`.
     :ref:`Target-dependent expressions <Target-Dependent Queries>` are not
     permitted.
+
+  .. versionchanged:: 3.28
+    In targets using :ref:`file sets`, custom command byproducts are now
+    considered private unless they are listed in a non-private file set.
+    See policy :policy:`CMP0154`.
 
 ``COMMAND``
   Specify the command-line(s) to execute at build time.
@@ -137,6 +144,10 @@ The options are:
 ``COMMENT``
   Display the given message before the commands are executed at
   build time.
+
+  .. versionadded:: 3.26
+    Arguments to ``COMMENT`` may use
+    :manual:`generator expressions <cmake-generator-expressions(7)>`.
 
 ``DEPENDS``
   Specify files on which the command depends.  Each argument is converted
@@ -216,6 +227,19 @@ The options are:
   Using a pool that is not defined by :prop_gbl:`JOB_POOLS` causes
   an error by ninja at build time.
 
+``JOB_SERVER_AWARE``
+  .. versionadded:: 3.28
+
+  Specify that the command is GNU Make job server aware.
+
+  For the :generator:`Unix Makefiles`, :generator:`MSYS Makefiles`, and
+  :generator:`MinGW Makefiles` generators this will add the ``+`` prefix to the
+  recipe line. See the `GNU Make Documentation`_ for more information.
+
+  This option is silently ignored by other generators.
+
+.. _`GNU Make Documentation`: https://www.gnu.org/software/make/manual/html_node/MAKE-Variable.html
+
 ``MAIN_DEPENDENCY``
   Specify the primary input source file to the command.  This is
   treated just like any value given to the ``DEPENDS`` option
@@ -227,20 +251,34 @@ The options are:
 
 ``OUTPUT``
   Specify the output files the command is expected to produce.
-  If an output name is a relative path it will be interpreted
-  relative to the build tree directory corresponding to the
-  current source directory.
   Each output file will be marked with the :prop_sf:`GENERATED`
   source file property automatically.
   If the output of the custom command is not actually created
   as a file on disk it should be marked with the :prop_sf:`SYMBOLIC`
   source file property.
 
+  If an output file name is a relative path, its absolute path is
+  determined by interpreting it relative to:
+
+  1. the build directory corresponding to the current source directory
+     (:variable:`CMAKE_CURRENT_BINARY_DIR`), or
+
+  2. the current source directory (:variable:`CMAKE_CURRENT_SOURCE_DIR`).
+
+  The path in the build directory is preferred unless the path in the
+  source tree is mentioned as an absolute source file path elsewhere
+  in the current directory.
+
   .. versionadded:: 3.20
     Arguments to ``OUTPUT`` may use a restricted set of
     :manual:`generator expressions <cmake-generator-expressions(7)>`.
     :ref:`Target-dependent expressions <Target-Dependent Queries>` are not
     permitted.
+
+  .. versionchanged:: 3.28
+    In targets using :ref:`file sets`, custom command outputs are now
+    considered private unless they are listed in a non-private file set.
+    See policy :policy:`CMP0154`.
 
 ``USES_TERMINAL``
   .. versionadded:: 3.2
@@ -271,26 +309,100 @@ The options are:
 ``DEPFILE``
   .. versionadded:: 3.7
 
-  Specify a ``.d`` depfile for the :generator:`Ninja` generator and
-  :ref:`Makefile Generators`.
-  A ``.d`` file holds dependencies usually emitted by the custom
-  command itself.
-  Using ``DEPFILE`` with other generators than :generator:`Ninja` or
-  :ref:`Makefile Generators` is an error.
+  Specify a depfile which holds dependencies for the custom command. It is
+  usually emitted by the custom command itself.  This keyword may only be used
+  if the generator supports it, as detailed below.
 
-  .. versionadded:: 3.20
-    Added the support of :ref:`Makefile Generators`.
+  The expected format, compatible with what is generated by ``gcc`` with the
+  option ``-M``, is independent of the generator or platform.
 
-  If the ``DEPFILE`` argument is relative, it should be relative to
-  :variable:`CMAKE_CURRENT_BINARY_DIR`, and any relative paths inside the
-  ``DEPFILE`` should also be relative to :variable:`CMAKE_CURRENT_BINARY_DIR`
-  (see policy :policy:`CMP0116`. This policy is always ``NEW`` for
-  :ref:`Makefile Generators`).
+  The formal syntax, as specified using
+  `BNF <https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_form>`_ notation with
+  the regular extensions, is the following:
+
+  .. raw:: latex
+
+    \begin{small}
+
+  .. productionlist:: depfile
+    depfile: `rule`*
+    rule: `targets` (':' (`separator` `dependencies`?)?)? `eol`
+    targets: `target` (`separator` `target`)* `separator`*
+    target: `pathname`
+    dependencies: `dependency` (`separator` `dependency`)* `separator`*
+    dependency: `pathname`
+    separator: (`space` | `line_continue`)+
+    line_continue: '\' `eol`
+    space: ' ' | '\t'
+    pathname: `character`+
+    character: `std_character` | `dollar` | `hash` | `whitespace`
+    std_character: <any character except '$', '#' or ' '>
+    dollar: '$$'
+    hash: '\#'
+    whitespace: '\ '
+    eol: '\r'? '\n'
+
+  .. raw:: latex
+
+    \end{small}
 
   .. note::
 
-    For :ref:`Makefile Generators`, this option cannot be specified at the
-    same time as ``IMPLICIT_DEPENDS`` option.
+    As part of ``pathname``, any slash and backslash is interpreted as
+    a directory separator.
+
+  .. versionadded:: 3.7
+    The :generator:`Ninja` generator supports ``DEPFILE`` since the keyword
+    was first added.
+
+  .. versionadded:: 3.17
+    Added the :generator:`Ninja Multi-Config` generator, which included
+    support for the ``DEPFILE`` keyword.
+
+  .. versionadded:: 3.20
+    Added support for :ref:`Makefile Generators`.
+
+    .. note::
+
+      ``DEPFILE`` cannot be specified at the same time as the
+      ``IMPLICIT_DEPENDS`` option for :ref:`Makefile Generators`.
+
+  .. versionadded:: 3.21
+    Added support for :ref:`Visual Studio Generators` with VS 2012 and above,
+    and for the :generator:`Xcode` generator.  Support for
+    :manual:`generator expressions <cmake-generator-expressions(7)>` was also
+    added.
+
+  Using ``DEPFILE`` with generators other than those listed above is an error.
+
+  If the ``DEPFILE`` argument is relative, it should be relative to
+  :variable:`CMAKE_CURRENT_BINARY_DIR`, and any relative paths inside the
+  ``DEPFILE`` should also be relative to :variable:`CMAKE_CURRENT_BINARY_DIR`.
+  See policy :policy:`CMP0116`, which is always ``NEW`` for
+  :ref:`Makefile Generators`, :ref:`Visual Studio Generators`,
+  and the :generator:`Xcode` generator.
+
+``DEPENDS_EXPLICIT_ONLY``
+
+  .. versionadded:: 3.27
+
+  Indicates that the command's ``DEPENDS`` argument represents all files
+  required by the command and implicit dependencies are not required.
+
+  Without this option, if any target uses the output of the custom command,
+  CMake will consider that target's dependencies as implicit dependencies for
+  the custom command in case this custom command requires files implicitly
+  created by those targets.
+
+  This option can be enabled on all custom commands by setting
+  :variable:`CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY` to ``ON``.
+
+  Only the :ref:`Ninja Generators` actually use this information to remove
+  unnecessary implicit dependencies.
+
+  See also the :prop_tgt:`OPTIMIZE_DEPENDENCIES` target property, which may
+  provide another way for reducing the impact of target dependencies in some
+  scenarios.
 
 Examples: Generating Files
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -331,6 +443,51 @@ will re-run whenever ``in.txt`` changes.
   where ``<config>`` is the build configuration, and then compile the generated
   source as part of a library.
 
+Example: Generating Files for Multiple Targets
+""""""""""""""""""""""""""""""""""""""""""""""
+
+If multiple independent targets need the same custom command output,
+it must be attached to a single custom target on which they all depend.
+Consider the following example:
+
+.. code-block:: cmake
+
+  add_custom_command(
+    OUTPUT table.csv
+    COMMAND makeTable -i ${CMAKE_CURRENT_SOURCE_DIR}/input.dat
+                      -o table.csv
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/input.dat
+    VERBATIM)
+  add_custom_target(generate_table_csv DEPENDS table.csv)
+
+  add_custom_command(
+    OUTPUT foo.cxx
+    COMMAND genFromTable -i table.csv -case foo -o foo.cxx
+    DEPENDS table.csv           # file-level dependency
+            generate_table_csv  # target-level dependency
+    VERBATIM)
+  add_library(foo foo.cxx)
+
+  add_custom_command(
+    OUTPUT bar.cxx
+    COMMAND genFromTable -i table.csv -case bar -o bar.cxx
+    DEPENDS table.csv           # file-level dependency
+            generate_table_csv  # target-level dependency
+    VERBATIM)
+  add_library(bar bar.cxx)
+
+Output ``foo.cxx`` is needed only by target ``foo`` and output ``bar.cxx``
+is needed only by target ``bar``, but *both* targets need ``table.csv``,
+transitively.  Since ``foo`` and ``bar`` are independent targets that may
+build concurrently, we prevent them from racing to generate ``table.csv``
+by placing its custom command in a separate target, ``generate_table_csv``.
+The custom commands generating ``foo.cxx`` and ``bar.cxx`` each specify a
+target-level dependency on ``generate_table_csv``, so the targets using them,
+``foo`` and ``bar``, will not build until after target ``generate_table_csv``
+is built.
+
+.. _`add_custom_command(TARGET)`:
+
 Build Events
 ^^^^^^^^^^^^
 
@@ -349,7 +506,7 @@ target is already built, the command will not execute.
                      [BYPRODUCTS [files...]]
                      [WORKING_DIRECTORY dir]
                      [COMMENT comment]
-                     [VERBATIM] [USES_TERMINAL]
+                     [VERBATIM]
                      [COMMAND_EXPAND_LISTS])
 
 This defines a new command that will be associated with building the
@@ -360,9 +517,12 @@ When the command will happen is determined by which
 of the following is specified:
 
 ``PRE_BUILD``
-  On :ref:`Visual Studio Generators`, run before any other rules are
-  executed within the target.
-  On other generators, run just before ``PRE_LINK`` commands.
+  This option has unique behavior for the :ref:`Visual Studio Generators`.
+  When using one of the Visual Studio generators, the command will run before
+  any other rules are executed within the target.  With all other generators,
+  this option behaves the same as ``PRE_LINK`` instead.  Because of this,
+  it is recommended to avoid using ``PRE_BUILD`` except when it is known that
+  a Visual Studio generator is being used.
 ``PRE_LINK``
   Run after sources have been compiled but before linking the binary
   or running the librarian or archiver tool of a static library.
@@ -371,15 +531,23 @@ of the following is specified:
 ``POST_BUILD``
   Run after all other rules within the target have been executed.
 
+Projects should always specify one of the above three keywords when using
+the ``TARGET`` form.  For backward compatibility reasons, ``POST_BUILD`` is
+assumed if no such keyword is given, but projects should explicitly provide
+one of the keywords to make clear the behavior they expect.
+
 .. note::
   Because generator expressions can be used in custom commands,
   it is possible to define ``COMMAND`` lines or whole custom commands
   which evaluate to empty strings for certain configurations.
-  For **Visual Studio 2010 (and newer)** generators these command
+  For **Visual Studio 12 2013 (and newer)** generators these command
   lines or custom commands will be omitted for the specific
   configuration and no "empty-string-command" will be added.
 
   This allows to add individual build events for every configuration.
+
+.. versionadded:: 3.21
+  Support for target-dependent generator expressions.
 
 Examples: Build Events
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -426,3 +594,8 @@ Ninja Multi-Config
   ``add_custom_command`` supports the :generator:`Ninja Multi-Config`
   generator's cross-config capabilities. See the generator documentation
   for more information.
+
+See Also
+^^^^^^^^
+
+* :command:`add_custom_target`

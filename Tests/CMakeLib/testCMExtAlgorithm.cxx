@@ -1,6 +1,5 @@
 #include <iostream>
 #include <memory>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -110,7 +109,7 @@ void testAppend()
 }
 }
 
-int testCMExtAlgorithm(int /*unused*/, char* /*unused*/ [])
+int testCMExtAlgorithm(int /*unused*/, char* /*unused*/[])
 {
   testAppend();
 

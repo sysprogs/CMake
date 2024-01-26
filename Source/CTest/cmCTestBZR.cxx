@@ -16,13 +16,12 @@
 
 #include "cmCTest.h"
 #include "cmCTestVC.h"
-#include "cmProcessTools.h"
 #include "cmSystemTools.h"
 #include "cmXMLParser.h"
 
-extern "C" int cmBZRXMLParserUnknownEncodingHandler(void* /*unused*/,
-                                                    const XML_Char* name,
-                                                    XML_Encoding* info)
+static int cmBZRXMLParserUnknownEncodingHandler(void* /*unused*/,
+                                                const XML_Char* name,
+                                                XML_Encoding* info)
 {
   static const int latin1[] = {
     0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007, 0x0008,
@@ -88,7 +87,6 @@ class cmCTestBZR::InfoParser : public cmCTestVC::LineParser
 public:
   InfoParser(cmCTestBZR* bzr, const char* prefix)
     : BZR(bzr)
-    , CheckOutFound(false)
   {
     this->SetLog(&bzr->Log, prefix);
     this->RegexCheckOut.compile("checkout of branch: *([^\t\r\n]+)$");
@@ -97,7 +95,7 @@ public:
 
 private:
   cmCTestBZR* BZR;
-  bool CheckOutFound;
+  bool CheckOutFound = false;
   cmsys::RegularExpression RegexCheckOut;
   cmsys::RegularExpression RegexParent;
   bool ProcessLine() override
@@ -137,14 +135,14 @@ private:
 std::string cmCTestBZR::LoadInfo()
 {
   // Run "bzr info" to get the repository info from the work tree.
-  const char* bzr = this->CommandLineTool.c_str();
-  const char* bzr_info[] = { bzr, "info", nullptr };
+  std::string bzr = this->CommandLineTool;
+  std::vector<std::string> bzr_info = { bzr, "info" };
   InfoParser iout(this, "info-out> ");
   OutputLogger ierr(this->Log, "info-err> ");
   this->RunChild(bzr_info, &iout, &ierr);
 
   // Run "bzr revno" to get the repository revision number from the work tree.
-  const char* bzr_revno[] = { bzr, "revno", nullptr };
+  std::vector<std::string> bzr_revno = { bzr, "revno" };
   std::string rev;
   RevnoParser rout(this, "revno-out> ", rev);
   OutputLogger rerr(this->Log, "revno-err> ");
@@ -255,26 +253,26 @@ private:
       this->BZR->DoRevision(this->Rev, this->Changes);
     } else if (!this->CData.empty() &&
                (name == "file" || name == "directory")) {
-      this->CurChange.Path.assign(&this->CData[0], this->CData.size());
+      this->CurChange.Path.assign(this->CData.data(), this->CData.size());
       cmSystemTools::ConvertToUnixSlashes(this->CurChange.Path);
       this->Changes.push_back(this->CurChange);
     } else if (!this->CData.empty() && name == "symlink") {
       // symlinks have an arobase at the end in the log
-      this->CurChange.Path.assign(&this->CData[0], this->CData.size() - 1);
+      this->CurChange.Path.assign(this->CData.data(), this->CData.size() - 1);
       cmSystemTools::ConvertToUnixSlashes(this->CurChange.Path);
       this->Changes.push_back(this->CurChange);
     } else if (!this->CData.empty() && name == "committer") {
-      this->Rev.Author.assign(&this->CData[0], this->CData.size());
+      this->Rev.Author.assign(this->CData.data(), this->CData.size());
       if (this->EmailRegex.find(this->Rev.Author)) {
         this->Rev.Author = this->EmailRegex.match(1);
         this->Rev.EMail = this->EmailRegex.match(2);
       }
     } else if (!this->CData.empty() && name == "timestamp") {
-      this->Rev.Date.assign(&this->CData[0], this->CData.size());
+      this->Rev.Date.assign(this->CData.data(), this->CData.size());
     } else if (!this->CData.empty() && name == "message") {
-      this->Rev.Log.assign(&this->CData[0], this->CData.size());
+      this->Rev.Log.assign(this->CData.data(), this->CData.size());
     } else if (!this->CData.empty() && name == "revno") {
-      this->Rev.Rev.assign(&this->CData[0], this->CData.size());
+      this->Rev.Rev.assign(this->CData.data(), this->CData.size());
     }
     this->CData.clear();
   }
@@ -374,22 +372,18 @@ bool cmCTestBZR::UpdateImpl()
   // TODO: if(this->CTest->GetTestModel() == cmCTest::NIGHTLY)
 
   // Use "bzr pull" to update the working tree.
-  std::vector<char const*> bzr_update;
-  bzr_update.push_back(this->CommandLineTool.c_str());
+  std::vector<std::string> bzr_update;
+  bzr_update.push_back(this->CommandLineTool);
   bzr_update.push_back("pull");
 
-  for (std::string const& arg : args) {
-    bzr_update.push_back(arg.c_str());
-  }
+  cm::append(bzr_update, args);
 
-  bzr_update.push_back(this->URL.c_str());
-
-  bzr_update.push_back(nullptr);
+  bzr_update.push_back(this->URL);
 
   // For some reason bzr uses stderr to display the update status.
   OutputLogger out(this->Log, "pull-out> ");
   UpdateParser err(this, "pull-err> ");
-  return this->RunUpdateCommand(&bzr_update[0], &out, &err);
+  return this->RunUpdateCommand(bzr_update, &out, &err);
 }
 
 bool cmCTestBZR::LoadRevisions()
@@ -410,10 +404,9 @@ bool cmCTestBZR::LoadRevisions()
   }
 
   // Run "bzr log" to get all global revisions of interest.
-  const char* bzr = this->CommandLineTool.c_str();
-  const char* bzr_log[] = {
-    bzr, "log", "-v", "-r", revs.c_str(), "--xml", this->URL.c_str(), nullptr
-  };
+  std::string bzr = this->CommandLineTool;
+  std::vector<std::string> bzr_log = { bzr,  "log",   "-v",     "-r",
+                                       revs, "--xml", this->URL };
   {
     LogParser out(this, "log-out> ");
     OutputLogger err(this->Log, "log-err> ");
@@ -469,8 +462,8 @@ private:
 bool cmCTestBZR::LoadModifications()
 {
   // Run "bzr status" which reports local modifications.
-  const char* bzr = this->CommandLineTool.c_str();
-  const char* bzr_status[] = { bzr, "status", "-SV", nullptr };
+  std::string bzr = this->CommandLineTool;
+  std::vector<std::string> bzr_status = { bzr, "status", "-SV" };
   StatusParser out(this, "status-out> ");
   OutputLogger err(this->Log, "status-err> ");
   this->RunChild(bzr_status, &out, &err);

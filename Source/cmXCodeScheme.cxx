@@ -3,16 +3,26 @@
 #include "cmXCodeScheme.h"
 
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <utility>
 
 #include <cmext/algorithm>
+#include <cmext/string_view>
+
+#include "cmsys/String.h"
 
 #include "cmGeneratedFileStream.h"
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
-#include "cmXMLSafe.h"
+#include "cmList.h"
+#include "cmStateTypes.h"
+#include "cmStringAlgorithms.h"
+#include "cmSystemTools.h"
+#include "cmValue.h"
+#include "cmXCodeObject.h"
+#include "cmXMLWriter.h"
+
+class cmLocalGenerator;
 
 cmXCodeScheme::cmXCodeScheme(cmLocalGenerator* lg, cmXCodeObject* xcObj,
                              TestObjects tests,
@@ -59,9 +69,14 @@ void cmXCodeScheme::WriteXCodeXCScheme(std::ostream& fout,
   xout.Attribute("LastUpgradeVersion", WriteVersionString());
   xout.Attribute("version", "1.3");
 
+  cmValue propDftCfg =
+    Target->GetTarget()->GetProperty("XCODE_SCHEME_LAUNCH_CONFIGURATION");
+  std::string launchConfiguration =
+    !propDftCfg.IsEmpty() ? *propDftCfg : "Debug";
+
   WriteBuildAction(xout, container);
   WriteTestAction(xout, FindConfiguration("Debug"), container);
-  WriteLaunchAction(xout, FindConfiguration("Debug"), container);
+  WriteLaunchAction(xout, FindConfiguration(launchConfiguration), container);
   WriteProfileAction(xout, FindConfiguration("Release"));
   WriteAnalyzeAction(xout, FindConfiguration("Debug"));
   WriteArchiveAction(xout, FindConfiguration("Release"));
@@ -107,7 +122,7 @@ void cmXCodeScheme::WriteTestAction(cmXMLWriter& xout,
   xout.Attribute("shouldUseLaunchSchemeArgsEnv", "YES");
 
   xout.StartElement("Testables");
-  for (auto test : this->Tests) {
+  for (auto const* test : this->Tests) {
     xout.StartElement("TestableReference");
     xout.BreakAttributes();
     xout.Attribute("skipped", "NO");
@@ -139,7 +154,15 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
                  "Xcode.DebuggerFoundation.Debugger.LLDB");
   xout.Attribute("selectedLauncherIdentifier",
                  "Xcode.DebuggerFoundation.Launcher.LLDB");
-  xout.Attribute("launchStyle", "0");
+  {
+    cmValue launchMode =
+      this->Target->GetTarget()->GetProperty("XCODE_SCHEME_LAUNCH_MODE");
+    std::string value = "0"; // == 'AUTO'
+    if (launchMode && *launchMode == "WAIT"_s) {
+      value = "1";
+    }
+    xout.Attribute("launchStyle", value);
+  }
   WriteCustomWorkingDirectory(xout, configuration);
 
   xout.Attribute("ignoresPersistentStateOnLaunch", "NO");
@@ -148,6 +171,16 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
                                     true);
   xout.Attribute("debugServiceExtension", "internal");
   xout.Attribute("allowLocationSimulation", "YES");
+  if (cmValue gpuFrameCaptureMode = this->Target->GetTarget()->GetProperty(
+        "XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE")) {
+    std::string value = *gpuFrameCaptureMode;
+    if (cmsysString_strcasecmp(value.c_str(), "Metal") == 0) {
+      value = "1";
+    } else if (cmsysString_strcasecmp(value.c_str(), "Disabled") == 0) {
+      value = "3";
+    }
+    xout.Attribute("enableGPUFrameCaptureMode", value);
+  }
 
   // Diagnostics tab begin
 
@@ -172,6 +205,23 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
 
   WriteLaunchActionAttribute(xout, "enableUBSanitizer",
                              "XCODE_SCHEME_UNDEFINED_BEHAVIOUR_SANITIZER");
+
+  if (cmValue value = this->Target->GetTarget()->GetProperty(
+        "XCODE_SCHEME_ENABLE_GPU_API_VALIDATION")) {
+    if (value.IsOff()) {
+      xout.Attribute("enableGPUValidationMode",
+                     "1"); // unset means YES, "1" means NO
+    }
+  }
+
+  if (cmValue value = this->Target->GetTarget()->GetProperty(
+        "XCODE_SCHEME_ENABLE_GPU_SHADER_VALIDATION")) {
+    if (value.IsOn()) {
+      xout.Attribute("enableGPUShaderValidationMode",
+                     "2"); // unset means NO, "2" means YES
+    }
+  }
+
   WriteLaunchActionAttribute(
     xout, "stopOnEveryUBSanitizerIssue",
     "XCODE_SCHEME_UNDEFINED_BEHAVIOUR_SANITIZER_STOP");
@@ -204,7 +254,7 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
 
   // Info tab begin
 
-  if (cmProp exe =
+  if (cmValue exe =
         this->Target->GetTarget()->GetProperty("XCODE_SCHEME_EXECUTABLE")) {
 
     xout.StartElement("PathRunnable");
@@ -220,9 +270,9 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
 
   // Arguments tab begin
 
-  if (cmProp argList =
+  if (cmValue argList =
         this->Target->GetTarget()->GetProperty("XCODE_SCHEME_ARGUMENTS")) {
-    std::vector<std::string> arguments = cmExpandedList(*argList);
+    cmList arguments{ *argList };
     if (!arguments.empty()) {
       xout.StartElement("CommandLineArguments");
 
@@ -240,9 +290,9 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
     }
   }
 
-  if (cmProp envList =
+  if (cmValue envList =
         this->Target->GetTarget()->GetProperty("XCODE_SCHEME_ENVIRONMENT")) {
-    std::vector<std::string> envs = cmExpandedList(*envList);
+    cmList envs{ *envList };
     if (!envs.empty()) {
       xout.StartElement("EnvironmentVariables");
 
@@ -323,8 +373,8 @@ bool cmXCodeScheme::WriteLaunchActionBooleanAttribute(
   cmXMLWriter& xout, const std::string& attrName, const std::string& varName,
   bool defaultValue)
 {
-  cmProp property = Target->GetTarget()->GetProperty(varName);
-  bool isOn = (property == nullptr && defaultValue) || cmIsOn(property);
+  cmValue property = Target->GetTarget()->GetProperty(varName);
+  bool isOn = (!property && defaultValue) || cmIsOn(property);
 
   if (isOn) {
     xout.Attribute(attrName.c_str(), "YES");
@@ -398,7 +448,7 @@ void cmXCodeScheme::WriteBuildableReference(cmXMLWriter& xout,
   std::string const noConfig; // FIXME: What config to use here?
   xout.Attribute("BuildableName", xcObj->GetTarget()->GetFullName(noConfig));
   xout.Attribute("BlueprintName", xcObj->GetTarget()->GetName());
-  xout.Attribute("ReferencedContainer", "container:" + container);
+  xout.Attribute("ReferencedContainer", cmStrCat("container:", container));
   xout.EndElement();
 }
 

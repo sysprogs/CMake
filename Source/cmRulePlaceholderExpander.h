@@ -8,9 +8,11 @@
 #include <map>
 #include <string>
 
+#include "cmPlaceholderExpander.h"
+
 class cmOutputConverter;
 
-class cmRulePlaceholderExpander
+class cmRulePlaceholderExpander : public cmPlaceholderExpander
 {
 public:
   cmRulePlaceholderExpander(
@@ -62,11 +64,13 @@ public:
     const char* SwiftLibraryName = nullptr;
     const char* SwiftModule = nullptr;
     const char* SwiftModuleName = nullptr;
-    const char* SwiftOutputFileMap = nullptr;
+    const char* SwiftOutputFileMapOption = nullptr;
     const char* SwiftSources = nullptr;
     const char* ISPCHeader = nullptr;
+    const char* CudaCompileMode = nullptr;
     const char* Fatbinary = nullptr;
     const char* RegisterFile = nullptr;
+    const char* Launcher = nullptr;
   };
 
   // Expand rule variables in CMake of the type found in language rules
@@ -74,16 +78,16 @@ public:
                            std::string& string,
                            const RuleVariables& replaceValues);
 
-  // Expand rule variables in a single string
-  std::string ExpandRuleVariable(cmOutputConverter* outputConverter,
-                                 std::string const& variable,
-                                 const RuleVariables& replaceValues);
-
 private:
+  std::string ExpandVariable(std::string const& variable) override;
+
   std::string TargetImpLib;
 
   std::map<std::string, std::string> Compilers;
   std::map<std::string, std::string> VariableMappings;
   std::string CompilerSysroot;
   std::string LinkerSysroot;
+
+  cmOutputConverter* OutputConverter = nullptr;
+  RuleVariables const* ReplaceValues = nullptr;
 };

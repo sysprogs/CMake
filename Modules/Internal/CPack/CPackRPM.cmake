@@ -6,6 +6,63 @@
 cmake_policy(PUSH)
 cmake_policy(SET CMP0057 NEW) # if IN_LIST
 
+function(set_spec_script_if_enabled TYPE PACKAGE_NAME VAR)
+  if(NOT "${VAR}" STREQUAL "" AND NOT "${VAR}" STREQUAL "\n")
+    if(PACKAGE_NAME)
+      set(PACKAGE_NAME " -n ${PACKAGE_NAME}")
+    endif()
+    set(${TYPE}_ "%${TYPE}${PACKAGE_NAME}\n${VAR}\n" PARENT_SCOPE)
+  else()
+    set(${TYPE} "" PARENT_SCOPE)
+  endif()
+endfunction()
+
+macro(set_spec_scripts PACKAGE_NAME)
+  # we should only set scripts that were provided
+  # as script announcement without content inside
+  # spec file will generate unneeded dependency
+  # on shell
+
+  set_spec_script_if_enabled(
+    "post"
+    "${PACKAGE_NAME}"
+    "${RPM_SYMLINK_POSTINSTALL}\n${CPACK_RPM_SPEC_POSTINSTALL}")
+
+  set_spec_script_if_enabled(
+    "posttrans"
+    "${PACKAGE_NAME}"
+    "${CPACK_RPM_SPEC_POSTTRANS}")
+
+  set_spec_script_if_enabled(
+    "postun"
+    "${PACKAGE_NAME}"
+    "${CPACK_RPM_SPEC_POSTUNINSTALL}")
+
+  set_spec_script_if_enabled(
+    "pre"
+    "${PACKAGE_NAME}"
+    "${CPACK_RPM_SPEC_PREINSTALL}")
+
+  set_spec_script_if_enabled(
+    "pretrans"
+    "${PACKAGE_NAME}"
+    "${CPACK_RPM_SPEC_PRETRANS}")
+
+  set_spec_script_if_enabled(
+    "preun"
+    "${PACKAGE_NAME}"
+    "${CPACK_RPM_SPEC_PREUNINSTALL}")
+endmacro()
+
+function(make_rpm_spec_path var path)
+  # RPM supports either whitespace with quoting or globbing without quoting.
+  if(path MATCHES "[ \t]")
+    set("${var}" "\"${path}\"" PARENT_SCOPE)
+  else()
+    set("${var}" "${path}" PARENT_SCOPE)
+  endif()
+endfunction()
+
 function(get_file_permissions FILE RETURN_VAR)
   execute_process(COMMAND ls -l ${FILE}
           OUTPUT_VARIABLE permissions_
@@ -548,7 +605,8 @@ function(cpack_rpm_prepare_install_files INSTALL_FILES_LIST WDIR PACKAGE_PREFIXE
       set(DIRECTIVE "%dir ")
     endif()
 
-    string(APPEND INSTALL_FILES "${DIRECTIVE}\"${F}\"\n")
+    make_rpm_spec_path(F_SPEC "${F}")
+    string(APPEND INSTALL_FILES "${DIRECTIVE}${F_SPEC}\n")
   endforeach()
 
   if(REQUIRES_SYMLINK_RELOCATION_SCRIPT)
@@ -577,8 +635,8 @@ function(cpack_rpm_debugsymbol_check INSTALL_FILES WORKING_DIR)
   endif()
 
   # With objdump we should check the debug symbols
-  find_program(OBJDUMP_EXECUTABLE objdump)
-  if(NOT OBJDUMP_EXECUTABLE)
+  find_program(CPACK_OBJDUMP_EXECUTABLE objdump)
+  if(NOT CPACK_OBJDUMP_EXECUTABLE)
     message(FATAL_ERROR "CPackRPM: objdump binary could not be found!"
       " Required for debuginfo packaging. See documentation of"
       " CPACK_RPM_DEBUGINFO_PACKAGE variable for details.")
@@ -601,7 +659,7 @@ function(cpack_rpm_debugsymbol_check INSTALL_FILES WORKING_DIR)
       continue()
     endif()
 
-    execute_process(COMMAND "${OBJDUMP_EXECUTABLE}" -h ${WORKING_DIR}/${F}
+    execute_process(COMMAND "${CPACK_OBJDUMP_EXECUTABLE}" -h ${WORKING_DIR}/${F}
                     WORKING_DIRECTORY "${CPACK_TOPLEVEL_DIRECTORY}"
                     RESULT_VARIABLE OBJDUMP_EXEC_RESULT
                     OUTPUT_VARIABLE OBJDUMP_OUT
@@ -742,7 +800,7 @@ function(cpack_rpm_variable_fallback OUTPUT_VAR_NAME)
   set(FALLBACK_VAR_NAMES ${ARGN})
 
   foreach(variable_name IN LISTS FALLBACK_VAR_NAMES)
-    if(${variable_name})
+    if(DEFINED ${variable_name})
       set(${OUTPUT_VAR_NAME} "${${variable_name}}" PARENT_SCOPE)
       break()
     endif()
@@ -1024,6 +1082,21 @@ function(cpack_rpm_generate_package)
     OUTPUT_STRIP_TRAILING_WHITESPACE)
   string(REPLACE "\n" ";" RPMBUILD_TAG_LIST "${RPMBUILD_TAG_LIST}")
 
+  # In some versions of RPM, weak dependency tags are present in the --querytags
+  # list, but unsupported by rpmbuild. A different method must be used to check
+  # if they are supported.
+
+  execute_process(
+    COMMAND ${RPM_EXECUTABLE} --suggests
+    ERROR_QUIET
+    RESULT_VARIABLE RPMBUILD_SUGGESTS_RESULT)
+
+  if(NOT RPMBUILD_SUGGESTS_RESULT EQUAL 0)
+    foreach(_WEAK_DEP SUGGESTS RECOMMENDS SUPPLEMENTS ENHANCES)
+      list(REMOVE_ITEM RPMBUILD_TAG_LIST ${_WEAK_DEP})
+    endforeach()
+  endif()
+
   if(CPACK_RPM_PACKAGE_EPOCH)
     set(TMP_RPM_EPOCH "Epoch: ${CPACK_RPM_PACKAGE_EPOCH}")
   endif()
@@ -1087,7 +1160,7 @@ function(cpack_rpm_generate_package)
   endforeach()
 
   # CPACK_RPM_SPEC_INSTALL_POST
-  # May be used to define a RPM post intallation script
+  # May be used to define a RPM post installation script
   # for example setting it to "/bin/true" may prevent
   # rpmbuild from stripping binaries.
   if(CPACK_RPM_SPEC_INSTALL_POST)
@@ -1095,6 +1168,16 @@ function(cpack_rpm_generate_package)
       message("CPackRPM:Debug: User defined CPACK_RPM_SPEC_INSTALL_POST = ${CPACK_RPM_SPEC_INSTALL_POST}")
     endif()
     set(TMP_RPM_SPEC_INSTALL_POST "%define __spec_install_post ${CPACK_RPM_SPEC_INSTALL_POST}")
+  endif()
+
+  # CPACK_RPM_REQUIRES_EXCLUDE_FROM
+  # May be defined to keep the dependency generator from
+  # scanning specific files or directories for deps.
+  if(CPACK_RPM_REQUIRES_EXCLUDE_FROM)
+    if(CPACK_RPM_PACKAGE_DEBUG)
+      message("CPackRPM:Debug: User defined CPACK_RPM_REQUIRES_EXCLUDE_FROM = ${CPACK_RPM_REQUIRES_EXCLUDE_FROM}")
+    endif()
+    set(TMP_RPM_REQUIRES_EXCLUDE_FROM "%global __requires_exclude_from ${CPACK_RPM_REQUIRES_EXCLUDE_FROM}")
   endif()
 
   # CPACK_RPM_POST_INSTALL_SCRIPT_FILE (or CPACK_RPM_<COMPONENT>_POST_INSTALL_SCRIPT_FILE)
@@ -1127,7 +1210,7 @@ function(cpack_rpm_generate_package)
           file(READ ${CPACK_RPM_${RPM_SCRIPT_FILE_TIME_}_${RPM_SCRIPT_FILE_TYPE_}_READ_FILE}
             "CPACK_RPM_SPEC_${RPM_SCRIPT_FILE_TIME_}${RPM_SCRIPT_FILE_TYPE_}")
         else()
-          message("CPackRPM:Warning: CPACK_RPM_${RPM_SCRIPT_FILE_TIME_}_${RPM_SCRIPT_FILE_TYPE_}_SCRIPT_FILE <${CPACK_RPM_${RPM_SCRIPT_FILE_TIME_}_${RPM_SCRIPT_FILE_TYPE_}_READ_FILE}> does not exists - ignoring")
+          message("CPackRPM:Warning: CPACK_RPM_${RPM_SCRIPT_FILE_TIME_}_${RPM_SCRIPT_FILE_TYPE_}_SCRIPT_FILE <${CPACK_RPM_${RPM_SCRIPT_FILE_TIME_}_${RPM_SCRIPT_FILE_TYPE_}_READ_FILE}> does not exist - ignoring")
         endif()
       else()
         # reset SPEC var value if no file has been specified
@@ -1144,7 +1227,7 @@ function(cpack_rpm_generate_package)
     if(EXISTS ${CPACK_RPM_CHANGELOG_FILE})
       file(READ ${CPACK_RPM_CHANGELOG_FILE} CPACK_RPM_SPEC_CHANGELOG)
     else()
-      message(SEND_ERROR "CPackRPM:Warning: CPACK_RPM_CHANGELOG_FILE <${CPACK_RPM_CHANGELOG_FILE}> does not exists - ignoring")
+      message(SEND_ERROR "CPackRPM:Warning: CPACK_RPM_CHANGELOG_FILE <${CPACK_RPM_CHANGELOG_FILE}> does not exist - ignoring")
     endif()
   else()
     set(CPACK_RPM_SPEC_CHANGELOG "* Sun Jul 4 2010 Eric Noulard <eric.noulard@gmail.com> - ${CPACK_RPM_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}\n  Generated by CPack RPM (no Changelog file were provided)")
@@ -1244,7 +1327,8 @@ function(cpack_rpm_generate_package)
         string(APPEND F_PREFIX " ")
       endif()
       # Rebuild the user list file
-      string(APPEND CPACK_RPM_USER_INSTALL_FILES "${F_PREFIX}\"${F_PATH}\"\n")
+      make_rpm_spec_path(F_SPEC "${F_PATH}")
+      string(APPEND CPACK_RPM_USER_INSTALL_FILES "${F_PREFIX}${F_SPEC}\n")
 
       # Remove from CPACK_RPM_INSTALL_FILES and CPACK_ABSOLUTE_DESTINATION_FILES_INTERNAL
       list(REMOVE_ITEM CPACK_RPM_INSTALL_FILES_LIST ${F_PATH})
@@ -1257,7 +1341,8 @@ function(cpack_rpm_generate_package)
     # Rebuild CPACK_RPM_INSTALL_FILES
     set(CPACK_RPM_INSTALL_FILES "")
     foreach(F IN LISTS CPACK_RPM_INSTALL_FILES_LIST)
-      string(APPEND CPACK_RPM_INSTALL_FILES "\"${F}\"\n")
+      make_rpm_spec_path(F_SPEC "${F}")
+      string(APPEND CPACK_RPM_INSTALL_FILES "${F_SPEC}\n")
     endforeach()
   else()
     set(CPACK_RPM_USER_INSTALL_FILES "")
@@ -1278,12 +1363,14 @@ function(cpack_rpm_generate_package)
     # Rebuild INSTALL_FILES
     set(CPACK_RPM_INSTALL_FILES "")
     foreach(F IN LISTS CPACK_RPM_INSTALL_FILES_LIST)
-      string(APPEND CPACK_RPM_INSTALL_FILES "\"${F}\"\n")
+      make_rpm_spec_path(F_SPEC "${F}")
+      string(APPEND CPACK_RPM_INSTALL_FILES "${F_SPEC}\n")
     endforeach()
     # Build ABSOLUTE_INSTALL_FILES
     set(CPACK_RPM_ABSOLUTE_INSTALL_FILES "")
     foreach(F IN LISTS CPACK_ABSOLUTE_DESTINATION_FILES_INTERNAL)
-      string(APPEND CPACK_RPM_ABSOLUTE_INSTALL_FILES "%config \"${F}\"\n")
+      make_rpm_spec_path(F_SPEC "${F}")
+      string(APPEND CPACK_RPM_ABSOLUTE_INSTALL_FILES "%config ${F_SPEC}\n")
     endforeach()
     if(CPACK_RPM_PACKAGE_DEBUG)
       message("CPackRPM:Debug: CPACK_RPM_ABSOLUTE_INSTALL_FILES=${CPACK_RPM_ABSOLUTE_INSTALL_FILES}")
@@ -1349,14 +1436,20 @@ function(cpack_rpm_generate_package)
             continue()
           endif()
 
-          file(GLOB_RECURSE files_for_move_ LIST_DIRECTORIES false RELATIVE
+          file(GLOB_RECURSE files_for_move_ LIST_DIRECTORIES true RELATIVE
             "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}"
             "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}/*")
 
           foreach(f_ IN LISTS files_for_move_)
-            get_filename_component(dir_path_ "${f_}" DIRECTORY)
             set(src_file_
               "${CPACK_TOPLEVEL_DIRECTORY}/${CPACK_PACKAGE_FILE_NAME}/${component_}/${f_}")
+
+            if(IS_DIRECTORY "${src_file_}")
+              file(MAKE_DIRECTORY "${WDIR}/${f_}")
+              continue()
+            endif()
+
+            get_filename_component(dir_path_ "${f_}" DIRECTORY)
 
             # check that we are not overriding an existing file that doesn't
             # match the file that we want to copy
@@ -1579,6 +1672,7 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
 \@FILE_NAME_DEFINE\@
 %define _unpackaged_files_terminate_build 0
 \@TMP_RPM_SPEC_INSTALL_POST\@
+\@TMP_RPM_REQUIRES_EXCLUDE_FROM\@
 \@CPACK_RPM_SPEC_MORE_DEFINE\@
 \@CPACK_RPM_COMPRESSION_TYPE_TMP\@
 
@@ -1607,6 +1701,9 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
     )
 
   elseif(GENERATE_SPEC_PARTS) # binary rpm with single debuginfo package
+
+    set_spec_scripts("${CPACK_RPM_PACKAGE_NAME}")
+
     file(WRITE ${CPACK_RPM_BINARY_SPECFILE}.in
         "# -*- rpm-spec -*-
 %package -n \@CPACK_RPM_PACKAGE_NAME\@
@@ -1637,6 +1734,13 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
 %description -n \@CPACK_RPM_PACKAGE_NAME\@
 \@CPACK_RPM_PACKAGE_DESCRIPTION\@
 
+\@post_\@
+\@posttrans_\@
+\@postun_\@
+\@pre_\@
+\@pretrans_\@
+\@preun_\@
+
 %files -n \@CPACK_RPM_PACKAGE_NAME\@
 %defattr(\@TMP_DEFAULT_FILE_PERMISSIONS\@,\@TMP_DEFAULT_USER\@,\@TMP_DEFAULT_GROUP\@,\@TMP_DEFAULT_DIR_PERMISSIONS\@)
 \@CPACK_RPM_INSTALL_FILES\@
@@ -1661,6 +1765,8 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
     #  - or the user did not provide one : NOT CPACK_RPM_USER_BINARY_SPECFILE
     set(RPMBUILD_FLAGS "-bb")
     if(CPACK_RPM_GENERATE_USER_BINARY_SPECFILE_TEMPLATE OR NOT CPACK_RPM_USER_BINARY_SPECFILE)
+
+      set_spec_scripts("")
 
       file(WRITE ${CPACK_RPM_BINARY_SPECFILE}.in
         "# Restore old style debuginfo creation for rpm >= 4.14.
@@ -1701,6 +1807,7 @@ Vendor:         \@CPACK_RPM_PACKAGE_VENDOR\@
 \@FILE_NAME_DEFINE\@
 %define _unpackaged_files_terminate_build 0
 \@TMP_RPM_SPEC_INSTALL_POST\@
+\@TMP_RPM_REQUIRES_EXCLUDE_FROM\@
 \@CPACK_RPM_SPEC_MORE_DEFINE\@
 \@CPACK_RPM_COMPRESSION_TYPE_TMP\@
 
@@ -1725,24 +1832,12 @@ mv %_topdir/tmpBBroot $RPM_BUILD_ROOT
 
 %clean
 
-%post
-\@RPM_SYMLINK_POSTINSTALL\@
-\@CPACK_RPM_SPEC_POSTINSTALL\@
-
-%posttrans
-\@CPACK_RPM_SPEC_POSTTRANS\@
-
-%postun
-\@CPACK_RPM_SPEC_POSTUNINSTALL\@
-
-%pre
-\@CPACK_RPM_SPEC_PREINSTALL\@
-
-%pretrans
-\@CPACK_RPM_SPEC_PRETRANS\@
-
-%preun
-\@CPACK_RPM_SPEC_PREUNINSTALL\@
+\@post_\@
+\@posttrans_\@
+\@postun_\@
+\@pre_\@
+\@pretrans_\@
+\@preun_\@
 
 %files
 %defattr(\@TMP_DEFAULT_FILE_PERMISSIONS\@,\@TMP_DEFAULT_USER\@,\@TMP_DEFAULT_GROUP\@,\@TMP_DEFAULT_DIR_PERMISSIONS\@)

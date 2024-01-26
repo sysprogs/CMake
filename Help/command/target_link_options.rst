@@ -32,9 +32,9 @@ If ``BEFORE`` is specified, the content will be prepended to the property
 instead of being appended.
 
 The ``INTERFACE``, ``PUBLIC`` and ``PRIVATE`` keywords are required to
-specify the scope of the following arguments.  ``PRIVATE`` and ``PUBLIC``
-items will populate the :prop_tgt:`LINK_OPTIONS` property of
-``<target>``.  ``PUBLIC`` and ``INTERFACE`` items will populate the
+specify the :ref:`scope <Target Usage Requirements>` of the following arguments.
+``PRIVATE`` and ``PUBLIC`` items will populate the :prop_tgt:`LINK_OPTIONS`
+property of ``<target>``.  ``PUBLIC`` and ``INTERFACE`` items will populate the
 :prop_tgt:`INTERFACE_LINK_OPTIONS` property of ``<target>``.
 The following arguments specify link options.  Repeated calls for the same
 ``<target>`` append items in the order called.
@@ -42,13 +42,27 @@ The following arguments specify link options.  Repeated calls for the same
 .. note::
   :ref:`IMPORTED targets <Imported Targets>` only support ``INTERFACE`` items.
 
-Arguments to ``target_link_options`` may use "generator expressions"
-with the syntax ``$<...>``. See the :manual:`cmake-generator-expressions(7)`
-manual for available expressions.  See the :manual:`cmake-buildsystem(7)`
-manual for more on defining buildsystem properties.
+.. |command_name| replace:: ``target_link_options``
+.. include:: GENEX_NOTE.txt
 
 .. include:: DEVICE_LINK_OPTIONS.txt
 
 .. include:: OPTIONS_SHELL.txt
 
 .. include:: LINK_OPTIONS_LINKER.txt
+
+See Also
+^^^^^^^^
+
+* :command:`target_compile_definitions`
+* :command:`target_compile_features`
+* :command:`target_compile_options`
+* :command:`target_include_directories`
+* :command:`target_link_libraries`
+* :command:`target_link_directories`
+* :command:`target_precompile_headers`
+* :command:`target_sources`
+
+* :variable:`CMAKE_<LANG>_FLAGS` and :variable:`CMAKE_<LANG>_FLAGS_<CONFIG>`
+  add language-wide flags passed to all invocations of the compiler.
+  This includes invocations that drive compiling and those that drive linking.

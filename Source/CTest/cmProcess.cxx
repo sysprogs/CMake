@@ -4,6 +4,7 @@
 
 #include <csignal>
 #include <iostream>
+#include <ratio>
 #include <string>
 #include <utility>
 
@@ -26,7 +27,6 @@ cmProcess::cmProcess(std::unique_ptr<cmCTestRunTest> runner)
   : Runner(std::move(runner))
   , Conv(cmProcessOutput::UTF8, CM_PROCESS_BUF_SIZE)
 {
-  this->Timeout = cmDuration::zero();
   this->TotalTime = cmDuration::zero();
   this->ExitValue = 0;
   this->Id = 0;
@@ -152,11 +152,9 @@ bool cmProcess::StartProcess(uv_loop_t& loop, std::vector<size_t>* affinity)
 
 void cmProcess::StartTimer()
 {
-  auto* properties = this->Runner->GetTestProperties();
-  auto msec =
-    std::chrono::duration_cast<std::chrono::milliseconds>(this->Timeout);
-
-  if (msec != std::chrono::milliseconds(0) || !properties->ExplicitTimeout) {
+  if (this->Timeout) {
+    auto msec =
+      std::chrono::duration_cast<std::chrono::milliseconds>(*this->Timeout);
     this->Timer.start(&cmProcess::OnTimeoutCB,
                       static_cast<uint64_t>(msec.count()), 0);
   }
@@ -278,7 +276,29 @@ void cmProcess::OnTimeoutCB(uv_timer_t* timer)
 
 void cmProcess::OnTimeout()
 {
+  bool const wasExecuting = this->ProcessState == cmProcess::State::Executing;
   this->ProcessState = cmProcess::State::Expired;
+
+  // If the test process is still executing normally, and we timed out because
+  // the test timeout was reached, send the custom timeout signal, if any.
+  if (wasExecuting && this->TimeoutReason_ == TimeoutReason::Normal) {
+    cmCTestTestHandler::cmCTestTestProperties* p =
+      this->Runner->GetTestProperties();
+    if (p->TimeoutSignal) {
+      this->TerminationStyle = Termination::Custom;
+      uv_process_kill(this->Process, p->TimeoutSignal->Number);
+      if (p->TimeoutGracePeriod) {
+        this->Timeout = *p->TimeoutGracePeriod;
+      } else {
+        static const cmDuration defaultGracePeriod{ 1.0 };
+        this->Timeout = defaultGracePeriod;
+      }
+      this->StartTimer();
+      return;
+    }
+  }
+
+  this->TerminationStyle = Termination::Forced;
   bool const was_still_reading = !this->ReadHandleClosed;
   if (!this->ReadHandleClosed) {
     this->ReadHandleClosed = true;
@@ -511,7 +531,7 @@ std::string cmProcess::GetExitExceptionString() const
     default:
       char buf[1024];
       const char* fmt = "Exit code 0x%" KWIML_INT_PRIx64 "\n";
-      _snprintf(buf, 1024, fmt, this->ExitValue);
+      snprintf(buf, sizeof(buf), fmt, this->ExitValue);
       exception_str.assign(buf);
   }
 #else

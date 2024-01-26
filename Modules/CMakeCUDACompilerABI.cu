@@ -3,6 +3,7 @@
 #endif
 
 #include "CMakeCompilerABI.h"
+#include "CMakeCompilerCUDAArch.h"
 
 int main(int argc, char* argv[])
 {
@@ -13,6 +14,13 @@ int main(int argc, char* argv[])
 #if defined(ABI_ID)
   require += info_abi[argc];
 #endif
-  (void)argv;
-  return require;
+  static_cast<void>(argv);
+
+  if (!cmakeCompilerCUDAArch()) {
+    // Convince the compiler that the non-zero return value depends
+    // on the info strings so they are not optimized out.
+    return require ? -1 : 1;
+  }
+
+  return 0;
 }

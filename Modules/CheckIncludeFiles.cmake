@@ -27,22 +27,17 @@ be included together.
 The following variables may be set before calling this macro to modify
 the way the check is run:
 
-``CMAKE_REQUIRED_FLAGS``
-  string of compile command line flags.
-``CMAKE_REQUIRED_DEFINITIONS``
-  a :ref:`;-list <CMake Language Lists>` of macros to define (-DFOO=bar).
-``CMAKE_REQUIRED_INCLUDES``
-  a :ref:`;-list <CMake Language Lists>` of header search paths to pass to
-  the compiler.
-``CMAKE_REQUIRED_LINK_OPTIONS``
-  .. versionadded:: 3.14
-    a :ref:`;-list <CMake Language Lists>` of options to add to the link command.
-``CMAKE_REQUIRED_LIBRARIES``
-  a :ref:`;-list <CMake Language Lists>` of libraries to add to the link
-  command. See policy :policy:`CMP0075`.
-``CMAKE_REQUIRED_QUIET``
-  .. versionadded:: 3.1
-    execute quietly without messages.
+.. include:: /module/CMAKE_REQUIRED_FLAGS.txt
+
+.. include:: /module/CMAKE_REQUIRED_DEFINITIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_INCLUDES.txt
+
+.. include:: /module/CMAKE_REQUIRED_LINK_OPTIONS.txt
+
+.. include:: /module/CMAKE_REQUIRED_LIBRARIES.txt
+
+.. include:: /module/CMAKE_REQUIRED_QUIET.txt
 
 See modules :module:`CheckIncludeFile` and :module:`CheckIncludeFileCXX`
 to check for a single header file in ``C`` or ``CXX`` languages.
@@ -52,7 +47,7 @@ include_guard(GLOBAL)
 
 macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
   if(NOT DEFINED "${VARIABLE}")
-    set(CMAKE_CONFIGURABLE_FILE_CONTENT "/* */\n")
+    set(_src_content "/* */\n")
 
     if("x${ARGN}" STREQUAL "x")
        if(CMAKE_C_COMPILER_LOADED)
@@ -70,10 +65,11 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
       message(FATAL_ERROR "Unknown arguments:\n  ${ARGN}\n")
     endif()
 
+    string(MAKE_C_IDENTIFIER ${VARIABLE} _variable_escaped)
     if(_lang STREQUAL "C")
-      set(src ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckIncludeFiles/${VARIABLE}.c)
+      set(src ${_variable_escaped}.c)
     elseif(_lang STREQUAL "CXX")
-      set(src ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CheckIncludeFiles/${VARIABLE}.cpp)
+      set(src ${_variable_escaped}.cpp)
     else()
       message(FATAL_ERROR "Unknown language:\n  ${_lang}\nSupported languages: C, CXX.\n")
     endif()
@@ -86,13 +82,11 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
     set(CHECK_INCLUDE_FILES_CONTENT "/* */\n")
     set(MACRO_CHECK_INCLUDE_FILES_FLAGS ${CMAKE_REQUIRED_FLAGS})
     foreach(FILE ${INCLUDE})
-      string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT
+      string(APPEND _src_content
         "#include <${FILE}>\n")
     endforeach()
-    string(APPEND CMAKE_CONFIGURABLE_FILE_CONTENT
+    string(APPEND _src_content
       "\n\nint main(void){return 0;}\n")
-    configure_file("${CMAKE_ROOT}/Modules/CMakeConfigurableFile.in"
-      "${src}" @ONLY)
 
     set(_INCLUDE ${INCLUDE}) # remove empty elements
     if("${_INCLUDE}" MATCHES "^([^;]+);.+;([^;]+)$")
@@ -136,15 +130,14 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
       message(CHECK_START "Looking for ${_description}")
     endif()
     try_compile(${VARIABLE}
-      ${CMAKE_BINARY_DIR}
-      ${src}
+      SOURCE_FROM_VAR "${src}" _src_content
       COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
       ${_CIF_LINK_OPTIONS}
       ${_CIF_LINK_LIBRARIES}
       CMAKE_FLAGS
       -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_INCLUDE_FILES_FLAGS}
       "${CHECK_INCLUDE_FILES_INCLUDE_DIRS}"
-      OUTPUT_VARIABLE OUTPUT)
+      )
     unset(_CIF_LINK_OPTIONS)
     unset(_CIF_LINK_LIBRARIES)
     if(${VARIABLE})
@@ -152,19 +145,11 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
         message(CHECK_PASS "found")
       endif()
       set(${VARIABLE} 1 CACHE INTERNAL "Have include ${INCLUDE}")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeOutput.log
-        "Determining if files ${INCLUDE} "
-        "exist passed with the following output:\n"
-        "${OUTPUT}\n\n")
     else()
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_FAIL "not found")
       endif()
       set(${VARIABLE} "" CACHE INTERNAL "Have includes ${INCLUDE}")
-      file(APPEND ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeError.log
-        "Determining if files ${INCLUDE} "
-        "exist failed with the following output:\n"
-        "${OUTPUT}\nSource:\n${CMAKE_CONFIGURABLE_FILE_CONTENT}\n")
     endif()
   endif()
 endmacro()

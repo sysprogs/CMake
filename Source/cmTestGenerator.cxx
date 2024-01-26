@@ -13,19 +13,20 @@
 
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmOutputConverter.h"
 #include "cmPolicies.h"
-#include "cmProperty.h"
 #include "cmPropertyMap.h"
 #include "cmRange.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTest.h"
+#include "cmValue.h"
 
 namespace /* anonymous */
 {
@@ -127,7 +128,8 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
   this->TestGenerated = true;
 
   // Set up generator expression evaluation context.
-  cmGeneratorExpression ge(this->Test->GetBacktrace());
+  cmGeneratorExpression ge(*this->Test->GetMakefile()->GetCMakeInstance(),
+                           this->Test->GetBacktrace());
 
   // Determine if policy CMP0110 is set to NEW.
   const bool quote_test_name =
@@ -146,16 +148,16 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
   }
 
   // Evaluate command line arguments
-  std::vector<std::string> argv =
-    this->EvaluateCommandLineArguments(this->Test->GetCommand(), ge, config);
-
-  // Expand arguments if COMMAND_EXPAND_LISTS is set
-  if (this->Test->GetCommandExpandLists()) {
-    argv = cmExpandedLists(argv.begin(), argv.end());
-    // Expanding lists on an empty command may have left it empty
-    if (argv.empty()) {
-      argv.emplace_back();
-    }
+  cmList argv{
+    this->EvaluateCommandLineArguments(this->Test->GetCommand(), ge, config),
+    // Expand arguments if COMMAND_EXPAND_LISTS is set
+    this->Test->GetCommandExpandLists() ? cmList::ExpandElements::Yes
+                                        : cmList::ExpandElements::No,
+    cmList::EmptyElements::Yes
+  };
+  // Expanding lists on an empty command may have left it empty
+  if (argv.empty()) {
+    argv.emplace_back();
   }
 
   // Check whether the command executable is a target whose name is to
@@ -167,9 +169,9 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
     exe = target->GetFullPath(config);
 
     // Prepend with the emulator when cross compiling if required.
-    cmProp emulator = target->GetProperty("CROSSCOMPILING_EMULATOR");
+    cmValue emulator = target->GetProperty("CROSSCOMPILING_EMULATOR");
     if (cmNonempty(emulator)) {
-      std::vector<std::string> emulatorWithArgs = cmExpandedList(*emulator);
+      cmList emulatorWithArgs{ *emulator };
       std::string emulatorExe(emulatorWithArgs[0]);
       cmSystemTools::ConvertToUnixSlashes(emulatorExe);
       os << cmOutputConverter::EscapeForCMake(emulatorExe) << " ";

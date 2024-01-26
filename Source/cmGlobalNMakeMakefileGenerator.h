@@ -4,8 +4,17 @@
 
 #include <iosfwd>
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "cm_codecvt_Encoding.hxx"
+
+#include "cmGlobalGeneratorFactory.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
+#include "cmValue.h"
+
+class cmMakefile;
+class cmake;
 
 /** \class cmGlobalNMakeMakefileGenerator
  * \brief Write a NMake makefiles.
@@ -29,13 +38,14 @@ public:
   static std::string GetActualName() { return "NMake Makefiles"; }
 
   /** Get encoding used by generator for makefile files */
-  codecvt::Encoding GetMakefileEncoding() const override
+  codecvt_Encoding GetMakefileEncoding() const override
   {
-    return codecvt::ANSI;
+    return this->NMakeSupportsUTF8 ? codecvt_Encoding::UTF8_WITH_BOM
+                                   : codecvt_Encoding::ANSI;
   }
 
   /** Get the documentation entry for this generator.  */
-  static void GetDocumentation(cmDocumentationEntry& entry);
+  static cmDocumentationEntry GetDocumentation();
 
   /**
    * Try to determine system information such as shared library
@@ -44,17 +54,25 @@ public:
   void EnableLanguage(std::vector<std::string> const& languages, cmMakefile*,
                       bool optional) override;
 
+  bool IsGNUMakeJobServerAware() const override { return false; }
+
 protected:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 
   void PrintBuildCommandAdvice(std::ostream& os, int jobs) const override;
 
 private:
+  bool NMakeSupportsUTF8 = false;
+  std::string NMakeVersion;
+  bool FindMakeProgram(cmMakefile* mf) override;
+  void CheckNMakeFeatures();
+
   void PrintCompilerAdvice(std::ostream& os, std::string const& lang,
-                           const char* envVar) const override;
+                           cmValue envVar) const override;
 };

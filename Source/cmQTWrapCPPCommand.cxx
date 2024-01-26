@@ -2,11 +2,14 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmQTWrapCPPCommand.h"
 
+#include <utility>
+
+#include <cm/memory>
+
+#include "cmCustomCommand.h"
 #include "cmCustomCommandLines.h"
 #include "cmExecutionStatus.h"
 #include "cmMakefile.h"
-#include "cmPolicies.h"
-#include "cmProperty.h"
 #include "cmRange.h"
 #include "cmSourceFile.h"
 #include "cmStringAlgorithms.h"
@@ -41,7 +44,7 @@ bool cmQTWrapCPPCommand(std::vector<std::string> const& args,
         cmStrCat(mf.GetCurrentBinaryDirectory(), "/moc_", srcName, ".cxx");
       cmSourceFile* sf = mf.GetOrCreateSource(newName, true);
       if (curr) {
-        sf->SetProperty("ABSTRACT", cmToCStr(curr->GetProperty("ABSTRACT")));
+        sf->SetProperty("ABSTRACT", curr->GetProperty("ABSTRACT"));
       }
 
       // Compute the name of the header from which to generate the file.
@@ -72,11 +75,12 @@ bool cmQTWrapCPPCommand(std::vector<std::string> const& args,
       depends.push_back(moc_exe);
       depends.push_back(hname);
 
-      std::string no_main_dependency;
-      const char* no_working_dir = nullptr;
-      mf.AddCustomCommandToOutput(
-        newName, depends, no_main_dependency, commandLines, "Qt Wrapped File",
-        no_working_dir, mf.GetPolicyStatus(cmPolicies::CMP0116));
+      auto cc = cm::make_unique<cmCustomCommand>();
+      cc->SetOutputs(newName);
+      cc->SetDepends(depends);
+      cc->SetCommandLines(commandLines);
+      cc->SetComment("Qt Wrapped File");
+      mf.AddCustomCommandToOutput(std::move(cc));
     }
   }
 

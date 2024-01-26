@@ -11,9 +11,13 @@
 #include <string>
 #include <vector>
 
+#include <cm/optional>
 #include <cm/string_view>
 
+#include "cmDocumentationEntry.h"
 #include "cmGlobalGenerator.h"
+#include "cmTransformDepfile.h"
+#include "cmValue.h"
 #include "cmXCodeObject.h"
 
 class cmCustomCommand;
@@ -25,7 +29,6 @@ class cmMakefile;
 class cmSourceFile;
 class cmSourceGroup;
 class cmake;
-struct cmDocumentationEntry;
 
 /** \class cmGlobalXCodeGenerator
  * \brief Write a Unix makefiles.
@@ -51,7 +54,7 @@ public:
   static std::string GetActualName() { return "Xcode"; }
 
   /** Get the documentation entry for this generator.  */
-  static void GetDocumentation(cmDocumentationEntry& entry);
+  static cmDocumentationEntry GetDocumentation();
 
   //! Create a local generator appropriate to this Global Generator
   std::unique_ptr<cmLocalGenerator> CreateLocalGenerator(
@@ -77,7 +80,8 @@ public:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 
@@ -103,13 +107,25 @@ public:
 
   bool IsXcode() const override { return true; }
 
-  bool HasKnownObjectFileLocation(std::string* reason) const override;
+  bool HasKnownObjectFileLocation(cmTarget const&,
+                                  std::string* reason) const override;
 
   bool IsIPOSupported() const override { return true; }
 
   bool UseEffectivePlatformName(cmMakefile* mf) const override;
 
   bool ShouldStripResourcePath(cmMakefile*) const override;
+
+  /**
+   * Used to determine if this generator supports DEPFILE option.
+   */
+  bool SupportsCustomCommandDepfile() const override { return true; }
+  cm::optional<cmDepfileFormat> DepfileFormat() const override
+  {
+    return this->XcodeBuildSystem == BuildSystem::One
+      ? cmDepfileFormat::MakeDepfile
+      : cmDepfileFormat::GccDepfile;
+  }
 
   bool SetSystemName(std::string const& s, cmMakefile* mf) override;
   bool SetGeneratorToolset(std::string const& ts, bool build,
@@ -126,12 +142,14 @@ protected:
   void AddExtraIDETargets() override;
   void Generate() override;
 
-  FindMakeProgramStage GetFindMakeProgramStage() const override
-  {
-    return FindMakeProgramStage::Early;
-  }
-
 private:
+  enum EmbedActionFlags
+  {
+    NoActionOnCopyByDefault = 0,
+    CodeSignOnCopyByDefault = 1,
+    RemoveHeadersOnCopyByDefault = 2,
+  };
+
   bool ParseGeneratorToolset(std::string const& ts, cmMakefile* mf);
   bool ProcessGeneratorToolsetField(std::string const& key,
                                     std::string const& value, cmMakefile* mf);
@@ -196,10 +214,26 @@ private:
                                     const char* attribute);
   cmXCodeObject* CreateUtilityTarget(cmGeneratorTarget* gtgt);
   void AddDependAndLinkInformation(cmXCodeObject* target);
+  void AddEmbeddedObjects(cmXCodeObject* target,
+                          const std::string& copyFilesBuildPhaseName,
+                          const std::string& embedPropertyName,
+                          const std::string& dstSubfolderSpec,
+                          int actionsOnByDefault,
+                          const std::string& defaultDstPath = "");
   void AddEmbeddedFrameworks(cmXCodeObject* target);
+  void AddEmbeddedPlugIns(cmXCodeObject* target);
+  void AddEmbeddedAppExtensions(cmXCodeObject* target);
+  void AddEmbeddedExtensionKitExtensions(cmXCodeObject* target);
+  void AddEmbeddedResources(cmXCodeObject* target);
   void AddPositionIndependentLinkAttribute(cmGeneratorTarget* target,
                                            cmXCodeObject* buildSettings,
                                            const std::string& configName);
+  void CreateGlobalXCConfigSettings(cmLocalGenerator* root,
+                                    cmXCodeObject* config,
+                                    const std::string& configName);
+  void CreateTargetXCConfigSettings(cmGeneratorTarget* target,
+                                    cmXCodeObject* config,
+                                    const std::string& configName);
   void CreateBuildSettings(cmGeneratorTarget* gtgt,
                            cmXCodeObject* buildSettings,
                            const std::string& buildType);
@@ -302,14 +336,15 @@ private:
   bool XcodeBuildCommandInitialized;
 
   void PrintCompilerAdvice(std::ostream&, std::string const&,
-                           const char*) const override
+                           cmValue) const override
   {
   }
 
-  std::string GetObjectsDirectory(const std::string& projName,
-                                  const std::string& configName,
-                                  const cmGeneratorTarget* t,
-                                  const std::string& variant) const;
+  std::string GetLibraryOrFrameworkPath(const std::string& path) const;
+
+  std::string GetSymrootDir() const;
+  std::string GetTargetTempDir(cmGeneratorTarget const* gt,
+                               std::string const& configName) const;
 
   static std::string GetDeploymentPlatform(const cmMakefile* mf);
 
@@ -321,15 +356,15 @@ private:
                                   std::string const& configName);
   cmXCodeObject* MainGroupChildren;
   cmXCodeObject* FrameworkGroup;
+  cmXCodeObject* ResourcesGroup;
   cmMakefile* CurrentMakefile;
   cmLocalGenerator* CurrentLocalGenerator;
+  cmLocalGenerator* CurrentRootGenerator = nullptr;
   std::vector<std::string> CurrentConfigurationTypes;
   std::string CurrentReRunCMakeMakefile;
   std::string CurrentXCodeHackMakefile;
   std::string CurrentProject;
   std::set<std::string> TargetDoneSet;
-  std::vector<std::string> ProjectSourceDirectoryComponents;
-  std::vector<std::string> ProjectOutputDirectoryComponents;
   std::map<std::string, cmXCodeObject*> GroupMap;
   std::map<std::string, cmXCodeObject*> GroupNameMap;
   std::map<std::string, cmXCodeObject*> TargetGroup;

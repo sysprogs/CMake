@@ -50,6 +50,15 @@
 #  endif
 #endif
 
+#if defined(__LCC__)
+#  pragma diag_suppress 1873 /* comparison between signed and unsigned */
+#endif
+
+#if defined(__NVCOMPILER)
+#  pragma diag_suppress 111 /* statement is unreachable */
+#  pragma diag_suppress 550 /* variable set but never used */
+#endif
+
 /* Make sure isatty is available. */
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #  include <io.h>

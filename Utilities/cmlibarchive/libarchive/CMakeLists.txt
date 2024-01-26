@@ -5,6 +5,10 @@
 #
 ############################################
 
+if (ANDROID)
+  include_directories(${PROJECT_SOURCE_DIR}/contrib/android/include)
+endif()
+
 # Public headers
 SET(include_HEADERS
   archive.h
@@ -78,6 +82,7 @@ SET(libarchive_SOURCES
   archive_read_set_format.c
   archive_read_set_options.c
   archive_read_support_filter_all.c
+  archive_read_support_filter_by_code.c
   archive_read_support_filter_bzip2.c
   archive_read_support_filter_compress.c
   archive_read_support_filter_gzip.c
@@ -144,7 +149,9 @@ SET(libarchive_SOURCES
   archive_write_set_format_ar.c
   archive_write_set_format_by_name.c
   archive_write_set_format_cpio.c
+  archive_write_set_format_cpio_binary.c
   archive_write_set_format_cpio_newc.c
+  archive_write_set_format_cpio_odc.c
   archive_write_set_format_filter_by_ext.c
   archive_write_set_format_gnutar.c
   archive_write_set_format_iso9660.c
@@ -238,6 +245,10 @@ ENDIF()
 # CMake needs just one static "cmlibarchive" library.
 ADD_LIBRARY(cmlibarchive STATIC ${libarchive_SOURCES} ${include_HEADERS})
 TARGET_LINK_LIBRARIES(cmlibarchive ${ADDITIONAL_LIBS})
+
+if(WIN32 AND CMake_BUILD_PCH)
+  target_precompile_headers(cmlibarchive PRIVATE "archive_platform.h" "archive_entry.h" "<cm3p/bzlib.h>")
+endif()
 
 IF(0) # CMake does not build libarchive's full package.
 # Libarchive is a shared library

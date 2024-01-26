@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 
+#include "cmCPackConfigure.h" // IWYU pragma: keep
+
 class cmCPackGenerator;
 class cmCPackLog;
 
@@ -41,5 +43,5 @@ private:
   using t_GeneratorCreatorsMap = std::map<std::string, CreateGeneratorCall*>;
   t_GeneratorCreatorsMap GeneratorCreators;
   DescriptionsMap GeneratorDescriptions;
-  cmCPackLog* Logger;
+  cmCPackLog* Logger{};
 };

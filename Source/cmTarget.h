@@ -5,28 +5,34 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <cm/optional>
+
 #include "cmAlgorithms.h"
 #include "cmListFileCache.h"
 #include "cmPolicies.h"
-#include "cmProperty.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmTargetLinkLibraryType.h"
+#include "cmValue.h"
 
 class cmCustomCommand;
+class cmFileSet;
 class cmGlobalGenerator;
 class cmInstallTargetGenerator;
 class cmMakefile;
-class cmMessenger;
 class cmPropertyMap;
 class cmSourceFile;
+class cmTargetExport;
 class cmTargetInternals;
+
+enum class cmFileSetVisibility;
 
 /** \class cmTarget
  * \brief Represent a library or executable target loaded from a makefile.
@@ -36,11 +42,12 @@ class cmTargetInternals;
 class cmTarget
 {
 public:
-  enum Visibility
+  enum class Visibility
   {
-    VisibilityNormal,
-    VisibilityImported,
-    VisibilityImportedGlobally
+    Normal,
+    Generated,
+    Imported,
+    ImportedGlobally,
   };
 
   enum class PerConfig
@@ -163,27 +170,32 @@ public:
    * commands. It is not a full path nor does it have an extension.
    */
   void AddUtility(std::string const& name, bool cross,
-                  cmMakefile* mf = nullptr);
+                  cmMakefile const* mf = nullptr);
   void AddUtility(BT<std::pair<std::string, bool>> util);
   //! Get the utilities used by this target
   std::set<BT<std::pair<std::string, bool>>> const& GetUtilities() const;
 
   //! Set/Get a property of this target file
-  void SetProperty(const std::string& prop, const char* value);
+  void SetProperty(const std::string& prop, cmValue value);
+  void SetProperty(const std::string& prop, std::nullptr_t)
+  {
+    this->SetProperty(prop, cmValue{ nullptr });
+  }
   void SetProperty(const std::string& prop, const std::string& value)
   {
-    this->SetProperty(prop, value.c_str());
+    this->SetProperty(prop, cmValue(value));
   }
-  void AppendProperty(const std::string& prop, const std::string& value,
-                      bool asString = false);
+  void AppendProperty(
+    const std::string& prop, const std::string& value,
+    cm::optional<cmListFileBacktrace> const& bt = cm::nullopt,
+    bool asString = false);
   //! Might return a nullptr if the property is not set or invalid
-  cmProp GetProperty(const std::string& prop) const;
+  cmValue GetProperty(const std::string& prop) const;
   //! Always returns a valid pointer
   std::string const& GetSafeProperty(std::string const& prop) const;
   bool GetPropertyAsBool(const std::string& prop) const;
   void CheckProperty(const std::string& prop, cmMakefile* context) const;
-  cmProp GetComputedProperty(const std::string& prop, cmMessenger* messenger,
-                             cmListFileBacktrace const& context) const;
+  cmValue GetComputedProperty(const std::string& prop, cmMakefile& mf) const;
   //! Get all properties
   cmPropertyMap const& GetProperties() const;
 
@@ -192,17 +204,26 @@ public:
 
   //! Return whether or not we are targeting AIX.
   bool IsAIX() const;
+  //! Return whether or not we are targeting Apple.
+  bool IsApple() const;
 
+  bool IsNormal() const;
+  bool IsSynthetic() const;
   bool IsImported() const;
   bool IsImportedGloballyVisible() const;
   bool IsPerConfig() const;
+  bool IsRuntimeBinary() const;
   bool CanCompileSources() const;
 
-  bool GetMappedConfig(std::string const& desired_config, cmProp& loc,
-                       cmProp& imp, std::string& suffix) const;
+  bool GetMappedConfig(std::string const& desired_config, cmValue& loc,
+                       cmValue& imp, std::string& suffix) const;
 
   //! Return whether this target is an executable with symbol exports enabled.
   bool IsExecutableWithExports() const;
+
+  //! Return whether this target is a shared library with symbol exports
+  //! enabled.
+  bool IsSharedLibraryWithExports() const;
 
   //! Return whether this target is a shared library Framework on Apple.
   bool IsFrameworkOnApple() const;
@@ -213,29 +234,33 @@ public:
   //! Return whether this target is a GUI executable on Android.
   bool IsAndroidGuiExecutable() const;
 
+  bool HasKnownObjectFileLocation(std::string* reason = nullptr) const;
+
   //! Get a backtrace from the creation of the target.
   cmListFileBacktrace const& GetBacktrace() const;
 
-  void InsertInclude(std::string const& entry, cmListFileBacktrace const& bt,
-                     bool before = false);
-  void InsertCompileOption(std::string const& entry,
-                           cmListFileBacktrace const& bt, bool before = false);
-  void InsertCompileDefinition(std::string const& entry,
-                               cmListFileBacktrace const& bt);
-  void InsertLinkOption(std::string const& entry,
-                        cmListFileBacktrace const& bt, bool before = false);
-  void InsertLinkDirectory(std::string const& entry,
-                           cmListFileBacktrace const& bt, bool before = false);
-  void InsertPrecompileHeader(std::string const& entry,
-                              cmListFileBacktrace const& bt);
+  void InsertInclude(BT<std::string> const& entry, bool before = false);
+  void InsertCompileOption(BT<std::string> const& entry, bool before = false);
+  void InsertCompileDefinition(BT<std::string> const& entry);
+  void InsertLinkOption(BT<std::string> const& entry, bool before = false);
+  void InsertLinkDirectory(BT<std::string> const& entry, bool before = false);
+  void InsertPrecompileHeader(BT<std::string> const& entry);
 
   void AppendBuildInterfaceIncludes();
+  void FinalizeTargetConfiguration(
+    const cmBTStringRange& noConfigCompileDefinitions,
+    cm::optional<std::map<std::string, cmValue>>& perConfigCompileDefinitions);
 
   std::string GetDebugGeneratorExpressions(const std::string& value,
                                            cmTargetLinkLibraryType llt) const;
 
   void AddSystemIncludeDirectories(std::set<std::string> const& incs);
   std::set<std::string> const& GetSystemIncludeDirectories() const;
+
+  void AddInstallIncludeDirectories(cmTargetExport const& te,
+                                    cmStringRange const& incs);
+  cmStringRange GetInstallIncludeDirectoriesEntries(
+    cmTargetExport const& te) const;
 
   BTs<std::string> const* GetLanguageStandardProperty(
     const std::string& propertyName) const;
@@ -244,32 +269,37 @@ public:
                                    std::string const& value,
                                    const std::string& feature);
 
-  cmStringRange GetIncludeDirectoriesEntries() const;
-  cmBacktraceRange GetIncludeDirectoriesBacktraces() const;
+  cmBTStringRange GetIncludeDirectoriesEntries() const;
 
-  cmStringRange GetCompileOptionsEntries() const;
-  cmBacktraceRange GetCompileOptionsBacktraces() const;
+  cmBTStringRange GetCompileOptionsEntries() const;
 
-  cmStringRange GetCompileFeaturesEntries() const;
-  cmBacktraceRange GetCompileFeaturesBacktraces() const;
+  cmBTStringRange GetCompileFeaturesEntries() const;
 
-  cmStringRange GetCompileDefinitionsEntries() const;
-  cmBacktraceRange GetCompileDefinitionsBacktraces() const;
+  cmBTStringRange GetCompileDefinitionsEntries() const;
 
-  cmStringRange GetPrecompileHeadersEntries() const;
-  cmBacktraceRange GetPrecompileHeadersBacktraces() const;
+  cmBTStringRange GetPrecompileHeadersEntries() const;
 
-  cmStringRange GetSourceEntries() const;
-  cmBacktraceRange GetSourceBacktraces() const;
+  cmBTStringRange GetSourceEntries() const;
 
-  cmStringRange GetLinkOptionsEntries() const;
-  cmBacktraceRange GetLinkOptionsBacktraces() const;
+  cmBTStringRange GetLinkOptionsEntries() const;
 
-  cmStringRange GetLinkDirectoriesEntries() const;
-  cmBacktraceRange GetLinkDirectoriesBacktraces() const;
+  cmBTStringRange GetLinkDirectoriesEntries() const;
 
-  cmStringRange GetLinkImplementationEntries() const;
-  cmBacktraceRange GetLinkImplementationBacktraces() const;
+  cmBTStringRange GetLinkImplementationEntries() const;
+
+  cmBTStringRange GetLinkInterfaceEntries() const;
+  cmBTStringRange GetLinkInterfaceDirectEntries() const;
+  cmBTStringRange GetLinkInterfaceDirectExcludeEntries() const;
+
+  void CopyPolicyStatuses(cmTarget const* tgt);
+  void CopyImportedCxxModulesEntries(cmTarget const* tgt);
+  void CopyImportedCxxModulesProperties(cmTarget const* tgt);
+
+  cmBTStringRange GetHeaderSetsEntries() const;
+  cmBTStringRange GetCxxModuleSetsEntries() const;
+
+  cmBTStringRange GetInterfaceHeaderSetsEntries() const;
+  cmBTStringRange GetInterfaceCxxModuleSetsEntries() const;
 
   std::string ImportedGetFullPath(const std::string& config,
                                   cmStateEnums::ArtifactType artifact) const;
@@ -279,7 +309,24 @@ public:
     bool operator()(cmTarget const* t1, cmTarget const* t2) const;
   };
 
+  const cmFileSet* GetFileSet(const std::string& name) const;
+  cmFileSet* GetFileSet(const std::string& name);
+  std::pair<cmFileSet*, bool> GetOrCreateFileSet(const std::string& name,
+                                                 const std::string& type,
+                                                 cmFileSetVisibility vis);
+
+  std::vector<std::string> GetAllFileSetNames() const;
+  std::vector<std::string> GetAllInterfaceFileSets() const;
+
+  static std::string GetFileSetsPropertyName(const std::string& type);
+  static std::string GetInterfaceFileSetsPropertyName(const std::string& type);
+
+  bool HasFileSets() const;
+
 private:
+  template <typename ValueType>
+  void StoreProperty(const std::string& prop, ValueType value);
+
   // Internal representation details.
   friend class cmGeneratorTarget;
 

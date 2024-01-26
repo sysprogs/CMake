@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -20,14 +20,18 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
-#ifndef CURL_DISABLE_CRYPTO_AUTH
+#if (defined(USE_CURL_NTLM_CORE) && !defined(USE_WINDOWS_SSPI)) \
+    || !defined(CURL_DISABLE_DIGEST_AUTH)
+
 #include "curl_hmac.h"
 
 #define MD5_DIGEST_LEN  16
 
-typedef void (* Curl_MD5_init_func)(void *context);
+typedef CURLcode (* Curl_MD5_init_func)(void *context);
 typedef void (* Curl_MD5_update_func)(void *context,
                                       const unsigned char *data,
                                       unsigned int len);
@@ -49,8 +53,8 @@ struct MD5_context {
 extern const struct MD5_params Curl_DIGEST_MD5[1];
 extern const struct HMAC_params Curl_HMAC_MD5[1];
 
-void Curl_md5it(unsigned char *output, const unsigned char *input,
-                const size_t len);
+CURLcode Curl_md5it(unsigned char *output, const unsigned char *input,
+                    const size_t len);
 
 struct MD5_context *Curl_MD5_init(const struct MD5_params *md5params);
 CURLcode Curl_MD5_update(struct MD5_context *context,

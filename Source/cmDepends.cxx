@@ -9,11 +9,12 @@
 #include "cmFileTime.h"
 #include "cmFileTimeCache.h"
 #include "cmGeneratedFileStream.h"
+#include "cmList.h"
 #include "cmLocalUnixMakefileGenerator3.h"
 #include "cmMakefile.h"
-#include "cmProperty.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
 cmDepends::cmDepends(cmLocalUnixMakefileGenerator3* lg, std::string targetDir)
   : LocalGenerator(lg)
@@ -28,11 +29,11 @@ bool cmDepends::Write(std::ostream& makeDepends, std::ostream& internalDepends)
   std::map<std::string, std::set<std::string>> dependencies;
   {
     // Lookup the set of sources to scan.
-    std::vector<std::string> pairs;
+    cmList pairs;
     {
       std::string const srcLang = "CMAKE_DEPENDS_CHECK_" + this->Language;
       cmMakefile* mf = this->LocalGenerator->GetMakefile();
-      cmExpandList(mf->GetSafeDefinition(srcLang), pairs);
+      pairs.assign(mf->GetSafeDefinition(srcLang));
     }
     for (auto si = pairs.begin(); si != pairs.end();) {
       // Get the source and object file.
@@ -229,11 +230,10 @@ bool cmDepends::CheckDependencies(std::istream& internalDepends,
 void cmDepends::SetIncludePathFromLanguage(const std::string& lang)
 {
   // Look for the new per "TARGET_" variant first:
-  cmProp includePath = nullptr;
   std::string includePathVar =
     cmStrCat("CMAKE_", lang, "_TARGET_INCLUDE_PATH");
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  includePath = mf->GetDefinition(includePathVar);
+  cmValue includePath = mf->GetDefinition(includePathVar);
   if (includePath) {
     cmExpandList(*includePath, this->IncludePath);
   } else {

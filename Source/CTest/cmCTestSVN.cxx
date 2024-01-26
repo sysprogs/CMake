@@ -13,7 +13,6 @@
 
 #include "cmCTest.h"
 #include "cmCTestVC.h"
-#include "cmProcessTools.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmXMLParser.h"
@@ -34,7 +33,7 @@ cmCTestSVN::~cmCTestSVN() = default;
 
 void cmCTestSVN::CleanupImpl()
 {
-  std::vector<const char*> svn_cleanup;
+  std::vector<std::string> svn_cleanup;
   svn_cleanup.push_back("cleanup");
   OutputLogger out(this->Log, "cleanup-out> ");
   OutputLogger err(this->Log, "cleanup-err> ");
@@ -89,9 +88,9 @@ static bool cmCTestSVNPathStarts(std::string const& p1, std::string const& p2)
 std::string cmCTestSVN::LoadInfo(SVNInfo& svninfo)
 {
   // Run "svn info" to get the repository info from the work tree.
-  std::vector<const char*> svn_info;
+  std::vector<std::string> svn_info;
   svn_info.push_back("info");
-  svn_info.push_back(svninfo.LocalPath.c_str());
+  svn_info.push_back(svninfo.LocalPath);
   std::string rev;
   InfoParser out(this, "info-out> ", rev, svninfo);
   OutputLogger err(this->Log, "info-err> ");
@@ -252,26 +251,24 @@ bool cmCTestSVN::UpdateImpl()
     args.push_back("-r{" + this->GetNightlyTime() + " +0000}");
   }
 
-  std::vector<char const*> svn_update;
+  std::vector<std::string> svn_update;
   svn_update.push_back("update");
-  for (std::string const& arg : args) {
-    svn_update.push_back(arg.c_str());
-  }
+  cm::append(svn_update, args);
 
   UpdateParser out(this, "up-out> ");
   OutputLogger err(this->Log, "up-err> ");
   return this->RunSVNCommand(svn_update, &out, &err);
 }
 
-bool cmCTestSVN::RunSVNCommand(std::vector<char const*> const& parameters,
+bool cmCTestSVN::RunSVNCommand(std::vector<std::string> const& parameters,
                                OutputParser* out, OutputParser* err)
 {
   if (parameters.empty()) {
     return false;
   }
 
-  std::vector<char const*> args;
-  args.push_back(this->CommandLineTool.c_str());
+  std::vector<std::string> args;
+  args.push_back(this->CommandLineTool);
   cm::append(args, parameters);
   args.push_back("--non-interactive");
 
@@ -279,16 +276,12 @@ bool cmCTestSVN::RunSVNCommand(std::vector<char const*> const& parameters,
 
   std::vector<std::string> parsedUserOptions =
     cmSystemTools::ParseArguments(userOptions);
-  for (std::string const& opt : parsedUserOptions) {
-    args.push_back(opt.c_str());
-  }
+  cm::append(args, parsedUserOptions);
 
-  args.push_back(nullptr);
-
-  if (strcmp(parameters[0], "update") == 0) {
-    return this->RunUpdateCommand(&args[0], out, err);
+  if (parameters[0] == "update") {
+    return this->RunUpdateCommand(args, out, err);
   }
-  return this->RunChild(&args[0], out, err);
+  return this->RunChild(args, out, err);
 }
 
 class cmCTestSVN::LogParser
@@ -353,16 +346,16 @@ private:
     if (name == "logentry") {
       this->SVN->DoRevisionSVN(this->Rev, this->Changes);
     } else if (!this->CData.empty() && name == "path") {
-      std::string orig_path(&this->CData[0], this->CData.size());
+      std::string orig_path(this->CData.data(), this->CData.size());
       std::string new_path = this->SVNRepo.BuildLocalPath(orig_path);
       this->CurChange.Path.assign(new_path);
       this->Changes.push_back(this->CurChange);
     } else if (!this->CData.empty() && name == "author") {
-      this->Rev.Author.assign(&this->CData[0], this->CData.size());
+      this->Rev.Author.assign(this->CData.data(), this->CData.size());
     } else if (!this->CData.empty() && name == "date") {
-      this->Rev.Date.assign(&this->CData[0], this->CData.size());
+      this->Rev.Date.assign(this->CData.data(), this->CData.size());
     } else if (!this->CData.empty() && name == "msg") {
-      this->Rev.Log.assign(&this->CData[0], this->CData.size());
+      this->Rev.Log.assign(this->CData.data(), this->CData.size());
     }
     this->CData.clear();
   }
@@ -394,7 +387,7 @@ bool cmCTestSVN::LoadRevisions(SVNInfo& svninfo)
   }
 
   // Run "svn log" to get all global revisions of interest.
-  std::vector<const char*> svn_log;
+  std::vector<std::string> svn_log;
   svn_log.push_back("log");
   svn_log.push_back("--xml");
   svn_log.push_back("-v");
@@ -473,7 +466,7 @@ private:
 bool cmCTestSVN::LoadModifications()
 {
   // Run "svn status" which reports local modifications.
-  std::vector<const char*> svn_status;
+  std::vector<std::string> svn_status;
   svn_status.push_back("status");
   StatusParser out(this, "status-out> ");
   OutputLogger err(this->Log, "status-err> ");
@@ -535,7 +528,7 @@ bool cmCTestSVN::LoadRepositories()
   this->RootInfo = &(this->Repositories.back());
 
   // Run "svn status" to get the list of external repositories
-  std::vector<const char*> svn_status;
+  std::vector<std::string> svn_status;
   svn_status.push_back("status");
   ExternalParser out(this, "external-out> ");
   OutputLogger err(this->Log, "external-err> ");

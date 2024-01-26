@@ -50,6 +50,10 @@
 #include <cm3p/zlib.h>
 #endif
 
+#ifdef __clang_analyzer__
+#include <assert.h>
+#endif
+
 #include "archive.h"
 #include "archive_endian.h"
 #include "archive_entry.h"
@@ -2178,7 +2182,8 @@ get_system_identitier(char *system_id, size_t size)
 	strncpy(system_id, "Windows", size-1);
 	system_id[size-1] = '\0';
 #else
-#error no way to get the system identifier on your platform.
+	strncpy(system_id, "Unknown", size-1);
+	system_id[size-1] = '\0';
 #endif
 }
 
@@ -6625,6 +6630,11 @@ isoent_collect_dirs(struct vdd *vdd, struct isoent *rootent, int depth)
 		rootent = vdd->rootent;
 	np = rootent;
 	do {
+		#ifdef __clang_analyzer__
+		/* Tell clang-analyzer that pathtbl[depth] is in bounds.  */
+		assert(depth < vdd->max_depth);
+		#endif
+
 		/* Register current directory to pathtable. */
 		path_table_add_entry(&(vdd->pathtbl[depth]), np);
 
@@ -6801,6 +6811,7 @@ isoent_rr_move(struct archive_write *a)
  * This comparing rule is according to ISO9660 Standard 6.9.1
  */
 static int
+__LA_LIBC_CC
 _compare_path_table(const void *v1, const void *v2)
 {
 	const struct isoent *p1, *p2;
@@ -6843,6 +6854,7 @@ _compare_path_table(const void *v1, const void *v2)
 }
 
 static int
+__LA_LIBC_CC
 _compare_path_table_joliet(const void *v1, const void *v2)
 {
 	const struct isoent *p1, *p2;

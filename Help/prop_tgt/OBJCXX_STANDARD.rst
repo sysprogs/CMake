@@ -9,7 +9,33 @@ This property specifies the ObjC++ standard whose features are requested
 to build this target.  For some compilers, this results in adding a
 flag such as ``-std=gnu++11`` to the compile line.
 
-Supported values are ``98``, ``11``, ``14``, ``17``, ``20``, ``23``.
+Supported values are:
+
+``98``
+  Objective C++98
+
+``11``
+  Objective C++11
+
+``14``
+  Objective C++14
+
+``17``
+  Objective C++17
+
+``20``
+  Objective C++20
+
+``23``
+  .. versionadded:: 3.20
+
+  Objective C++23
+
+``26``
+  .. versionadded:: 3.25
+
+  Objective C++26. CMake 3.25 and later *recognize* ``26`` as a valid value,
+  no version has support for any compiler.
 
 If the value requested does not result in a compile flag being added for
 the compiler in use, a previous standard flag will be added instead.  This
@@ -27,7 +53,7 @@ Additionally, the :prop_tgt:`OBJCXX_EXTENSIONS` target property may be used to
 control whether compiler-specific extensions are enabled on a per-target basis.
 
 If the property is not set, and the project has set the :prop_tgt:`CXX_STANDARD`,
-the value of :prop_tgt:`CXX_STANDARD` is set for :prop_tgt:`OBJCXX_STANDARD`.
+the value of :prop_tgt:`CXX_STANDARD` is set for ``OBJCXX_STANDARD``.
 
 See the :manual:`cmake-compile-features(7)` manual for information on
 compile features and a list of supported compilers.

@@ -51,6 +51,97 @@ The :variable:`CMAKE_MINIMUM_REQUIRED_VERSION` variable may also be used
 to determine whether to report an error on use of deprecated macros or
 functions.
 
+Policies Introduced by CMake 3.28
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0155: C++ sources in targets with at least C++20 are scanned for imports when supported. </policy/CMP0155>
+   CMP0154: Generated files are private by default in targets using file sets. </policy/CMP0154>
+   CMP0153: The exec_program command should not be called. </policy/CMP0153>
+   CMP0152: file(REAL_PATH) resolves symlinks before collapsing ../ components.  </policy/CMP0152>
+
+Policies Introduced by CMake 3.27
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0151: AUTOMOC include directory is a system include directory by default. </policy/CMP0151>
+   CMP0150: ExternalProject_Add and FetchContent_Declare treat relative git repository paths as being relative to parent project's remote. </policy/CMP0150>
+   CMP0149: Visual Studio generators select latest Windows SDK by default. </policy/CMP0149>
+   CMP0148: The FindPythonInterp and FindPythonLibs modules are removed. </policy/CMP0148>
+   CMP0147: Visual Studio generators build custom commands in parallel. </policy/CMP0147>
+   CMP0146: The FindCUDA module is removed. </policy/CMP0146>
+   CMP0145: The Dart and FindDart modules are removed. </policy/CMP0145>
+   CMP0144: find_package uses upper-case PACKAGENAME_ROOT variables. </policy/CMP0144>
+
+Policies Introduced by CMake 3.26
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0143: USE_FOLDERS global property is treated as ON by default. </policy/CMP0143>
+
+Policies Introduced by CMake 3.25
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0142: The Xcode generator does not append per-config suffixes to library search paths. </policy/CMP0142>
+   CMP0141: MSVC debug information format flags are selected by an abstraction. </policy/CMP0141>
+   CMP0140: The return() command checks its arguments. </policy/CMP0140>
+
+Policies Introduced by CMake 3.24
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0139: The if() command supports path comparisons using PATH_EQUAL operator. </policy/CMP0139>
+   CMP0138: CheckIPOSupported uses flags from calling project. </policy/CMP0138>
+   CMP0137: try_compile() passes platform variables in project mode. </policy/CMP0137>
+   CMP0136: Watcom runtime library flags are selected by an abstraction. </policy/CMP0136>
+   CMP0135: ExternalProject ignores timestamps in archives by default for the URL download method. </policy/CMP0135>
+   CMP0134: Fallback to "HOST" Windows registry view when "TARGET" view is not usable. </policy/CMP0134>
+   CMP0133: The CPack module disables SLA by default in the CPack DragNDrop Generator. </policy/CMP0133>
+   CMP0132: Do not set compiler environment variables on first run. </policy/CMP0132>
+   CMP0131: LINK_LIBRARIES supports the LINK_ONLY generator expression. </policy/CMP0131>
+   CMP0130: while() diagnoses condition evaluation errors. </policy/CMP0130>
+
+Policies Introduced by CMake 3.23
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0129: Compiler id for MCST LCC compilers is now LCC, not GNU. </policy/CMP0129>
+
+Policies Introduced by CMake 3.22
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0128: Selection of language standard and extension flags improved. </policy/CMP0128>
+   CMP0127: cmake_dependent_option() supports full Condition Syntax. </policy/CMP0127>
+
+Policies Introduced by CMake 3.21
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0126: set(CACHE) does not remove a normal variable of the same name. </policy/CMP0126>
+   CMP0125: find_(path|file|library|program) have consistent behavior for cache variables. </policy/CMP0125>
+   CMP0124: foreach() loop variables are only available in the loop scope. </policy/CMP0124>
+   CMP0123: ARMClang cpu/arch compile and link flags must be set explicitly. </policy/CMP0123>
+   CMP0122: UseSWIG use standard library name conventions for csharp language. </policy/CMP0122>
+   CMP0121: The list command detects invalid indices. </policy/CMP0121>
+
 Policies Introduced by CMake 3.20
 =================================
 

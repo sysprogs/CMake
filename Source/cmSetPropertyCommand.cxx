@@ -9,6 +9,7 @@
 #include "cmExecutionStatus.h"
 #include "cmGlobalGenerator.h"
 #include "cmInstalledFile.h"
+#include "cmListFileCache.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmPolicies.h"
@@ -21,6 +22,7 @@
 #include "cmSystemTools.h"
 #include "cmTarget.h"
 #include "cmTest.h"
+#include "cmValue.h"
 #include "cmake.h"
 
 namespace {
@@ -56,7 +58,8 @@ bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
 bool HandleTestMode(cmExecutionStatus& status, std::set<std::string>& names,
                     const std::string& propertyName,
                     const std::string& propertyValue, bool appendAsString,
-                    bool appendMode, bool remove);
+                    bool appendMode, bool remove,
+                    cmMakefile* test_directory_makefile);
 bool HandleTest(cmTest* test, const std::string& propertyName,
                 const std::string& propertyValue, bool appendAsString,
                 bool appendMode, bool remove);
@@ -116,7 +119,7 @@ bool HandleSourceFileDirectoryScopes(
           "given non-existent target for TARGET_DIRECTORY ", target_name));
         return false;
       }
-      cmProp target_source_dir = target->GetProperty("BINARY_DIR");
+      cmValue target_source_dir = target->GetProperty("BINARY_DIR");
       cmMakefile* target_dir_mf =
         status.GetMakefile().GetGlobalGenerator()->FindMakefile(
           *target_source_dir);
@@ -179,6 +182,60 @@ bool HandleAndValidateSourceFileDirectoryScopes(
   scope_options_valid = SetPropertyCommand::HandleSourceFileDirectoryScopes(
     status, source_file_directories, source_file_target_directories,
     source_file_directory_makefiles);
+  return scope_options_valid;
+}
+
+bool HandleTestDirectoryScopes(cmExecutionStatus& status,
+                               std::string& test_directory,
+                               cmMakefile*& directory_makefile)
+{
+  cmMakefile* current_dir_mf = &status.GetMakefile();
+  if (!test_directory.empty()) {
+    const std::string absolute_dir_path = cmSystemTools::CollapseFullPath(
+      test_directory, current_dir_mf->GetCurrentSourceDirectory());
+    cmMakefile* dir_mf =
+      status.GetMakefile().GetGlobalGenerator()->FindMakefile(
+        absolute_dir_path);
+    if (!dir_mf) {
+      status.SetError(
+        cmStrCat("given non-existent DIRECTORY ", test_directory));
+      return false;
+    }
+    directory_makefile = dir_mf;
+  } else {
+    directory_makefile = current_dir_mf;
+  }
+  return true;
+}
+
+bool HandleTestDirectoryScopeValidation(cmExecutionStatus& status,
+                                        bool test_directory_option_enabled,
+                                        std::string& test_directory)
+{
+  // Validate source file directory scopes.
+  if (test_directory_option_enabled && test_directory.empty()) {
+    std::string errors = "called with incorrect number of arguments "
+                         "no value provided to the DIRECTORY option";
+    status.SetError(errors);
+    return false;
+  }
+  return true;
+}
+
+bool HandleAndValidateTestDirectoryScopes(cmExecutionStatus& status,
+                                          bool test_directory_option_enabled,
+                                          std::string& test_directory,
+                                          cmMakefile*& test_directory_makefile)
+{
+  bool scope_options_valid =
+    SetPropertyCommand::HandleTestDirectoryScopeValidation(
+      status, test_directory_option_enabled, test_directory);
+  if (!scope_options_valid) {
+    return false;
+  }
+
+  scope_options_valid = SetPropertyCommand::HandleTestDirectoryScopes(
+    status, test_directory, test_directory_makefile);
   return scope_options_valid;
 }
 
@@ -291,10 +348,10 @@ bool HandleAndValidateSourceFilePropertyGENERATED(
         sf->AppendProperty("GENERATED", propertyValue, true);
         break;
       case PropertyOp::Remove:
-        sf->SetProperty("GENERATED", nullptr);
+        sf->RemoveProperty("GENERATED");
         break;
       case PropertyOp::Set:
-        sf->SetProperty("GENERATED", propertyValue.c_str());
+        sf->SetProperty("GENERATED", propertyValue);
         break;
     }
   } else {
@@ -350,6 +407,9 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
   bool source_file_directory_option_enabled = false;
   bool source_file_target_option_enabled = false;
 
+  std::string test_directory;
+  bool test_directory_option_enabled = false;
+
   // Parse the rest of the arguments up to the values.
   enum Doing
   {
@@ -358,7 +418,8 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
     DoingProperty,
     DoingValues,
     DoingSourceDirectory,
-    DoingSourceTargetDirectory
+    DoingSourceTargetDirectory,
+    DoingTestDirectory,
   };
   Doing doing = DoingNames;
   const char* sep = "";
@@ -383,12 +444,19 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
                scope == cmProperty::SOURCE_FILE && arg == "TARGET_DIRECTORY") {
       doing = DoingSourceTargetDirectory;
       source_file_target_option_enabled = true;
+    } else if (doing != DoingProperty && doing != DoingValues &&
+               scope == cmProperty::TEST && arg == "DIRECTORY") {
+      doing = DoingTestDirectory;
+      test_directory_option_enabled = true;
     } else if (doing == DoingNames) {
       names.insert(arg);
     } else if (doing == DoingSourceDirectory) {
       source_file_directories.push_back(arg);
     } else if (doing == DoingSourceTargetDirectory) {
       source_file_target_directories.push_back(arg);
+    } else if (doing == DoingTestDirectory) {
+      test_directory = arg;
+      doing = DoingNone;
     } else if (doing == DoingProperty) {
       propertyName = arg;
       doing = DoingValues;
@@ -410,12 +478,17 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
   }
 
   std::vector<cmMakefile*> source_file_directory_makefiles;
-  bool file_scopes_handled =
+  bool source_file_scopes_handled =
     SetPropertyCommand::HandleAndValidateSourceFileDirectoryScopes(
       status, source_file_directory_option_enabled,
       source_file_target_option_enabled, source_file_directories,
       source_file_target_directories, source_file_directory_makefiles);
-  if (!file_scopes_handled) {
+  cmMakefile* test_directory_makefile;
+  bool test_scopes_handled =
+    SetPropertyCommand::HandleAndValidateTestDirectoryScopes(
+      status, test_directory_option_enabled, test_directory,
+      test_directory_makefile);
+  if (!(source_file_scopes_handled && test_scopes_handled)) {
     return false;
   }
   bool source_file_paths_should_be_absolute =
@@ -439,7 +512,8 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
                               source_file_paths_should_be_absolute);
     case cmProperty::TEST:
       return HandleTestMode(status, names, propertyName, propertyValue,
-                            appendAsString, appendMode, remove);
+                            appendAsString, appendMode, remove,
+                            test_directory_makefile);
     case cmProperty::CACHE:
       return HandleCacheMode(status, names, propertyName, propertyValue,
                              appendAsString, appendMode, remove);
@@ -474,7 +548,7 @@ bool HandleGlobalMode(cmExecutionStatus& status,
     if (remove) {
       cm->SetProperty(propertyName, nullptr);
     } else {
-      cm->SetProperty(propertyName, propertyValue.c_str());
+      cm->SetProperty(propertyName, propertyValue);
     }
   }
 
@@ -520,7 +594,7 @@ bool HandleDirectoryMode(cmExecutionStatus& status,
     if (remove) {
       mf->SetProperty(propertyName, nullptr);
     } else {
-      mf->SetProperty(propertyName, propertyValue.c_str());
+      mf->SetProperty(propertyName, propertyValue);
     }
   }
 
@@ -560,7 +634,8 @@ bool HandleTarget(cmTarget* target, cmMakefile& makefile,
 {
   // Set or append the property.
   if (appendMode) {
-    target->AppendProperty(propertyName, propertyValue, appendAsString);
+    target->AppendProperty(propertyName, propertyValue,
+                           makefile.GetBacktrace(), appendAsString);
   } else {
     if (remove) {
       target->SetProperty(propertyName, nullptr);
@@ -616,10 +691,9 @@ bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
   if (propertyName == "GENERATED") {
     SetPropertyCommand::PropertyOp op = (remove)
       ? SetPropertyCommand::PropertyOp::Remove
-      : (appendAsString)
-        ? SetPropertyCommand::PropertyOp::AppendAsString
-        : (appendMode) ? SetPropertyCommand::PropertyOp::Append
-                       : SetPropertyCommand::PropertyOp::Set;
+      : (appendAsString) ? SetPropertyCommand::PropertyOp::AppendAsString
+      : (appendMode)     ? SetPropertyCommand::PropertyOp::Append
+                         : SetPropertyCommand::PropertyOp::Set;
     return SetPropertyCommand::HandleAndValidateSourceFilePropertyGENERATED(
       sf, propertyValue, op);
   }
@@ -629,9 +703,9 @@ bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
     sf->AppendProperty(propertyName, propertyValue, appendAsString);
   } else {
     if (remove) {
-      sf->SetProperty(propertyName, nullptr);
+      sf->RemoveProperty(propertyName);
     } else {
-      sf->SetProperty(propertyName, propertyValue.c_str());
+      sf->SetProperty(propertyName, propertyValue);
     }
   }
   return true;
@@ -640,14 +714,14 @@ bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
 bool HandleTestMode(cmExecutionStatus& status, std::set<std::string>& names,
                     const std::string& propertyName,
                     const std::string& propertyValue, bool appendAsString,
-                    bool appendMode, bool remove)
+                    bool appendMode, bool remove, cmMakefile* test_makefile)
 {
   // Look for tests with all names given.
   std::set<std::string>::iterator next;
   for (auto ni = names.begin(); ni != names.end(); ni = next) {
     next = ni;
     ++next;
-    if (cmTest* test = status.GetMakefile().GetTest(*ni)) {
+    if (cmTest* test = test_makefile->GetTest(*ni)) {
       if (HandleTest(test, propertyName, propertyValue, appendAsString,
                      appendMode, remove)) {
         names.erase(ni);
@@ -681,7 +755,7 @@ bool HandleTest(cmTest* test, const std::string& propertyName,
     if (remove) {
       test->SetProperty(propertyName, nullptr);
     } else {
-      test->SetProperty(propertyName, propertyValue.c_str());
+      test->SetProperty(propertyName, propertyValue);
     }
   }
 
@@ -719,7 +793,7 @@ bool HandleCacheMode(cmExecutionStatus& status,
   for (std::string const& name : names) {
     // Get the source file.
     cmake* cm = status.GetMakefile().GetCMakeInstance();
-    cmProp existingValue = cm->GetState()->GetCacheEntryValue(name);
+    cmValue existingValue = cm->GetState()->GetCacheEntryValue(name);
     if (existingValue) {
       if (!HandleCacheEntry(name, status.GetMakefile(), propertyName,
                             propertyValue, appendAsString, appendMode,

@@ -4,8 +4,8 @@
 #include "cmDependsCompiler.h"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
-#include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -111,9 +111,13 @@ bool cmDependsCompiler::CheckDependencies(
           // copy depends for each target, except first one, which can be
           // moved
           for (auto index = entry.rules.size() - 1; index > 0; --index) {
-            dependencies[entry.rules[index]] = depends;
+            auto& rule_deps = dependencies[entry.rules[index]];
+            rule_deps.insert(rule_deps.end(), depends.cbegin(),
+                             depends.cend());
           }
-          dependencies[entry.rules.front()] = std::move(depends);
+          auto& rule_deps = dependencies[entry.rules.front()];
+          std::move(depends.cbegin(), depends.cend(),
+                    std::back_inserter(rule_deps));
         }
       } else {
         if (format == "msvc"_s) {
@@ -123,7 +127,7 @@ bool cmDependsCompiler::CheckDependencies(
           }
 
           std::string line;
-          if (!isValidPath) {
+          if (!isValidPath && !source.empty()) {
             // insert source as first dependency
             depends.push_back(source);
           }
@@ -131,7 +135,9 @@ bool cmDependsCompiler::CheckDependencies(
             depends.emplace_back(std::move(line));
           }
         } else if (format == "gcc"_s) {
-          auto deps = cmReadGccDepfile(depFile.c_str());
+          auto deps = cmReadGccDepfile(
+            depFile.c_str(), this->LocalGenerator->GetCurrentBinaryDirectory(),
+            GccDepfilePrependPaths::Deps);
           if (!deps) {
             continue;
           }
@@ -151,14 +157,16 @@ bool cmDependsCompiler::CheckDependencies(
           }
 
           // ensure source file is the first dependency
-          if (depends.front() != source) {
-            cm::erase(depends, source);
-            if (!isValidPath) {
-              depends.insert(depends.begin(), source);
+          if (!source.empty()) {
+            if (depends.front() != source) {
+              cm::erase(depends, source);
+              if (!isValidPath) {
+                depends.insert(depends.begin(), source);
+              }
+            } else if (isValidPath) {
+              // remove first dependency because it must not be filtered out
+              depends.erase(depends.begin());
             }
-          } else if (isValidPath) {
-            // remove first dependency because it must not be filtered out
-            depends.erase(depends.begin());
           }
         } else {
           // unknown format, ignore it
@@ -167,8 +175,10 @@ bool cmDependsCompiler::CheckDependencies(
 
         if (isValidPath) {
           cm::erase_if(depends, isValidPath);
-          // insert source as first dependency
-          depends.insert(depends.begin(), source);
+          if (!source.empty()) {
+            // insert source as first dependency
+            depends.insert(depends.begin(), source);
+          }
         }
 
         dependencies[target] = std::move(depends);
@@ -190,21 +200,19 @@ void cmDependsCompiler::WriteDependencies(
   bool supportLongLineDepend = static_cast<cmGlobalUnixMakefileGenerator3*>(
                                  this->LocalGenerator->GetGlobalGenerator())
                                  ->SupportsLongLineDependencies();
-  const auto& binDir = this->LocalGenerator->GetBinaryDirectory();
   cmDepends::DependencyMap makeDependencies(dependencies);
   std::unordered_set<cm::string_view> phonyTargets;
 
   // external dependencies file
   for (auto& node : makeDependencies) {
     auto target = this->LocalGenerator->ConvertToMakefilePath(
-      this->LocalGenerator->MaybeConvertToRelativePath(binDir, node.first));
+      this->LocalGenerator->MaybeRelativeToTopBinDir(node.first));
     auto& deps = node.second;
-    std::transform(
-      deps.cbegin(), deps.cend(), deps.begin(),
-      [this, &binDir](const std::string& dep) {
-        return this->LocalGenerator->ConvertToMakefilePath(
-          this->LocalGenerator->MaybeConvertToRelativePath(binDir, dep));
-      });
+    std::transform(deps.cbegin(), deps.cend(), deps.begin(),
+                   [this](const std::string& dep) {
+                     return this->LocalGenerator->ConvertToMakefilePath(
+                       this->LocalGenerator->MaybeRelativeToTopBinDir(dep));
+                   });
 
     bool first_dep = true;
     if (supportLongLineDepend) {

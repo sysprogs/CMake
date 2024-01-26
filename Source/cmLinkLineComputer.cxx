@@ -11,19 +11,13 @@
 #include "cmGeneratorTarget.h"
 #include "cmListFileCache.h"
 #include "cmOutputConverter.h"
-#include "cmStateDirectory.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
-#include "cmSystemTools.h"
 
 cmLinkLineComputer::cmLinkLineComputer(cmOutputConverter* outputConverter,
                                        cmStateDirectory const& stateDir)
   : StateDir(stateDir)
   , OutputConverter(outputConverter)
-  , ForResponse(false)
-  , UseWatcomQuote(false)
-  , UseNinjaMulti(false)
-  , Relink(false)
 {
 }
 
@@ -52,13 +46,7 @@ void cmLinkLineComputer::SetRelink(bool relink)
 std::string cmLinkLineComputer::ConvertToLinkReference(
   std::string const& lib) const
 {
-  std::string relLib = lib;
-
-  if (this->StateDir.ContainsBoth(this->StateDir.GetCurrentBinary(), lib)) {
-    relLib = cmSystemTools::ForceToRelativePath(
-      this->StateDir.GetCurrentBinary(), lib);
-  }
-  return relLib;
+  return this->OutputConverter->MaybeRelativeToCurBinDir(lib);
 }
 
 std::string cmLinkLineComputer::ComputeLinkLibs(cmComputeLinkInformation& cli)
@@ -77,16 +65,15 @@ void cmLinkLineComputer::ComputeLinkLibs(
   ItemVector const& items = cli.GetItems();
   for (auto const& item : items) {
     if (item.Target &&
-        item.Target->GetType() == cmStateEnums::INTERFACE_LIBRARY) {
+        (item.Target->GetType() == cmStateEnums::INTERFACE_LIBRARY ||
+         item.Target->GetType() == cmStateEnums::OBJECT_LIBRARY)) {
       continue;
     }
 
     BT<std::string> linkLib;
-    if (item.IsPath) {
-      linkLib.Value += cli.GetLibLinkFileFlag();
-      linkLib.Value += this->ConvertToOutputFormat(
-        this->ConvertToLinkReference(item.Value.Value));
-      linkLib.Backtrace = item.Value.Backtrace;
+    if (item.IsPath == cmComputeLinkInformation::ItemIsPath::Yes) {
+      linkLib = item.GetFormattedItem(this->ConvertToOutputFormat(
+        this->ConvertToLinkReference(item.Value.Value)));
     } else {
       linkLib = item.Value;
     }
@@ -101,13 +88,12 @@ std::string cmLinkLineComputer::ConvertToOutputFormat(std::string const& input)
   cmOutputConverter::OutputFormat shellFormat = cmOutputConverter::SHELL;
   if (this->ForResponse) {
     shellFormat = cmOutputConverter::RESPONSE;
-  } else if (this->UseWatcomQuote) {
-    shellFormat = cmOutputConverter::WATCOMQUOTE;
   } else if (this->UseNinjaMulti) {
     shellFormat = cmOutputConverter::NINJAMULTI;
   }
 
-  return this->OutputConverter->ConvertToOutputFormat(input, shellFormat);
+  return this->OutputConverter->ConvertToOutputFormat(input, shellFormat,
+                                                      this->UseWatcomQuote);
 }
 
 std::string cmLinkLineComputer::ConvertToOutputForExisting(
@@ -116,13 +102,12 @@ std::string cmLinkLineComputer::ConvertToOutputForExisting(
   cmOutputConverter::OutputFormat shellFormat = cmOutputConverter::SHELL;
   if (this->ForResponse) {
     shellFormat = cmOutputConverter::RESPONSE;
-  } else if (this->UseWatcomQuote) {
-    shellFormat = cmOutputConverter::WATCOMQUOTE;
   } else if (this->UseNinjaMulti) {
     shellFormat = cmOutputConverter::NINJAMULTI;
   }
 
-  return this->OutputConverter->ConvertToOutputForExisting(input, shellFormat);
+  return this->OutputConverter->ConvertToOutputForExisting(
+    input, shellFormat, this->UseWatcomQuote);
 }
 
 std::string cmLinkLineComputer::ComputeLinkPath(
@@ -207,16 +192,16 @@ std::string cmLinkLineComputer::ComputeRPath(cmComputeLinkInformation& cli)
 }
 
 std::string cmLinkLineComputer::ComputeFrameworkPath(
-  cmComputeLinkInformation& cli, std::string const& fwSearchFlag)
+  cmComputeLinkInformation& cli, cmValue fwSearchFlag)
 {
+  if (!fwSearchFlag) {
+    return std::string{};
+  }
+
   std::string frameworkPath;
-  if (!fwSearchFlag.empty()) {
-    std::vector<std::string> const& fwDirs = cli.GetFrameworkPaths();
-    for (std::string const& fd : fwDirs) {
-      frameworkPath += fwSearchFlag;
-      frameworkPath += this->ConvertToOutputFormat(fd);
-      frameworkPath += " ";
-    }
+  for (auto const& fd : cli.GetFrameworkPaths()) {
+    frameworkPath +=
+      cmStrCat(fwSearchFlag, this->ConvertToOutputFormat(fd), ' ');
   }
   return frameworkPath;
 }

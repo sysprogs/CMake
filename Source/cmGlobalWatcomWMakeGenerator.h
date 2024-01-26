@@ -9,12 +9,12 @@
 #include <string>
 #include <vector>
 
+#include "cmBuildOptions.h"
 #include "cmGlobalGeneratorFactory.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
 
 class cmMakefile;
 class cmake;
-struct cmDocumentationEntry;
 
 /** \class cmGlobalWatcomWMakeGenerator
  * \brief Write a NMake makefiles.
@@ -38,7 +38,7 @@ public:
   static std::string GetActualName() { return "Watcom WMake"; }
 
   /** Get the documentation entry for this generator.  */
-  static void GetDocumentation(cmDocumentationEntry& entry);
+  static cmDocumentationEntry GetDocumentation();
 
   /** Tell the generator about the target system.  */
   bool SetSystemName(std::string const& s, cmMakefile* mf) override;
@@ -53,11 +53,14 @@ public:
   bool AllowNotParallel() const override { return false; }
   bool AllowDeleteOnError() const override { return false; }
 
+  bool IsGNUMakeJobServerAware() const override { return false; }
+
 protected:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 

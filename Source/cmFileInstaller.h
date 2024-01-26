@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "cmFileCopier.h"
+#include "cmInstallMode.h"
 #include "cmInstallType.h"
 
 class cmExecutionStatus;
@@ -18,12 +19,13 @@ struct cmFileInstaller : public cmFileCopier
   ~cmFileInstaller() override;
 
 protected:
-  cmInstallType InstallType;
-  bool Optional;
-  bool MessageAlways;
-  bool MessageLazy;
-  bool MessageNever;
-  int DestDirLength;
+  cmInstallType InstallType = cmInstallType_FILES;
+  cmInstallMode InstallMode = cmInstallMode::COPY;
+  bool Optional = false;
+  bool MessageAlways = false;
+  bool MessageLazy = false;
+  bool MessageNever = false;
+  int DestDirLength = 0;
   std::string Rename;
 
   std::string Manifest;
@@ -35,7 +37,8 @@ protected:
   bool ReportMissing(const std::string& fromFile) override;
   bool Install(const std::string& fromFile,
                const std::string& toFile) override;
-
+  bool InstallFile(const std::string& fromFile, const std::string& toFile,
+                   MatchProperties match_properties) override;
   bool Parse(std::vector<std::string> const& args) override;
   enum
   {

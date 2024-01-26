@@ -201,6 +201,13 @@
     "flags": []
   },
   {
+    "name":  "DebugType",
+    "switch": "debug:embedded",
+    "comment": "",
+    "value": "embedded",
+    "flags": []
+  },
+  {
     "name":  "Optimize",
     "switch": "optimize",
     "comment": "",
@@ -363,52 +370,13 @@
   },
   {
     "name":  "LangVersion",
-    "switch": "langversion:ISO-1",
+    "switch": "langversion:",
     "comment": "",
-    "value": "ISO-1",
-    "flags": []
-  },
-  {
-    "name":  "LangVersion",
-    "switch": "langversion:ISO-2",
-    "comment": "",
-    "value": "ISO-2",
-    "flags": []
-  },
-  {
-    "name":  "LangVersion",
-    "switch": "langversion:3",
-    "comment": "",
-    "value": "3",
-    "flags": []
-  },
-  {
-    "name":  "LangVersion",
-    "switch": "langversion:4",
-    "comment": "",
-    "value": "4",
-    "flags": []
-  },
-  {
-    "name":  "LangVersion",
-    "switch": "langversion:5",
-    "comment": "",
-    "value": "5",
-    "flags": []
-  },
-  {
-    "name":  "LangVersion",
-    "switch": "langversion:6",
-    "comment": "",
-    "value": "6",
-    "flags": []
-  },
-  {
-    "name":  "LangVersion",
-    "switch": "langversion:default",
-    "comment": "",
-    "value": "default",
-    "flags": []
+    "value": "",
+    "flags": [
+      "UserValue",
+      "UserRequired"
+    ]
   },
   {
     "name":  "DelaySign",
@@ -509,21 +477,21 @@
     "flags": []
   },
   {
-    "name":  "NoStandardLib",
+    "name":  "NoStdLib",
     "switch": "nostdlib",
     "comment": "",
     "value": "true",
     "flags": []
   },
   {
-    "name":  "NoStandardLib",
+    "name":  "NoStdLib",
     "switch": "nostdlib-",
     "comment": "",
     "value": "false",
     "flags": []
   },
   {
-    "name":  "NoStandardLib",
+    "name":  "NoStdLib",
     "switch": "nostdlib+",
     "comment": "",
     "value": "true",

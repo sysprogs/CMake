@@ -5,14 +5,18 @@
 
 #include "cmCTestResourceAllocator.h"
 #include "cmCTestResourceSpec.h"
+#include "cmJSONState.h"
 
-static const cmCTestResourceSpec spec{ { {
-  /* clang-format off */
-  { "gpus", { { "0", 4 }, { "1", 8 }, { "2", 0 }, { "3", 8 } } },
-  /* clang-format on */
-} } };
+static const cmCTestResourceSpec spec{
+  { {
+    /* clang-format off */
+  { "gpus", { { "0", 4 }, { "1", 8 }, { "2", 0 }, { "3", 8 } }, },
+    /* clang-format on */
+  } },
+  cmJSONState()
+};
 
-bool testInitializeFromResourceSpec()
+static bool testInitializeFromResourceSpec()
 {
   bool retval = true;
 
@@ -39,7 +43,7 @@ bool testInitializeFromResourceSpec()
   return retval;
 }
 
-bool testAllocateResource()
+static bool testAllocateResource()
 {
   bool retval = true;
 
@@ -216,7 +220,7 @@ bool testAllocateResource()
   return retval;
 }
 
-bool testDeallocateResource()
+static bool testDeallocateResource()
 {
   bool retval = true;
 
@@ -370,7 +374,7 @@ bool testDeallocateResource()
   return retval;
 }
 
-bool testResourceFree()
+static bool testResourceFree()
 {
   bool retval = true;
 

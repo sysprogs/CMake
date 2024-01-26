@@ -6,6 +6,13 @@ include(RunCMake)
 unset(ENV{http_proxy})
 unset(ENV{https_proxy})
 
+if(RunCMake_GENERATOR STREQUAL "Borland Makefiles" OR
+   RunCMake_GENERATOR STREQUAL "Watcom WMake")
+  set(fs_delay 3)
+else()
+  set(fs_delay 1.125)
+endif()
+
 run_cmake(BadIndependentStep1)
 run_cmake(BadIndependentStep2)
 run_cmake(NoOptions)
@@ -61,6 +68,23 @@ if(NOT XCODE_VERSION OR XCODE_VERSION VERSION_LESS 12)
 endif()
 run_steps_CMP0114(NEW)
 
+function(__ep_test_source_dir_change)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/SourceDirChange-build)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  run_cmake(SourceDirChange)
+  run_cmake_command(SourceDirChange-build1 ${CMAKE_COMMAND} --build .)
+  # Because some file systems have timestamps with only one second resolution,
+  # we have to ensure we don't re-run the configure stage too quickly after the
+  # first build. Otherwise, the modified RepositoryInfo.txt files the next
+  # configure writes might still have the same timestamp as the previous one.
+  execute_process(COMMAND ${CMAKE_COMMAND} -E sleep ${fs_delay})
+  run_cmake_command(SourceDirChange-change ${CMAKE_COMMAND} -DSOURCE_DIR_CHANGE=YES .)
+  run_cmake_command(SourceDirChange-build2 ${CMAKE_COMMAND} --build .)
+endfunction()
+__ep_test_source_dir_change()
+
 # Run both cmake and build steps. We always do a clean before the
 # build to ensure that the download step re-runs each time.
 function(__ep_test_with_build testName)
@@ -88,12 +112,15 @@ function(__ep_test_with_build_with_server testName)
   if(EXISTS "${URL_FILE}")
     file(REMOVE "${URL_FILE}")
   endif()
+  if(NOT DOWNLOAD_SERVER_TIMEOUT)
+    set(DOWNLOAD_SERVER_TIMEOUT 30)
+  endif()
   execute_process(
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/DownloadServer.py --file "${URL_FILE}" ${ARGN}
     OUTPUT_FILE ${RunCMake_BINARY_DIR}/${testName}-python.txt
     ERROR_FILE ${RunCMake_BINARY_DIR}/${testName}-python.txt
     RESULT_VARIABLE result
-    TIMEOUT 30
+    TIMEOUT "${DOWNLOAD_SERVER_TIMEOUT}"
     )
   if(NOT result EQUAL 0)
     message(FATAL_ERROR "Failed to start download server:\n  ${result}")
@@ -112,14 +139,33 @@ function(__ep_test_with_build_with_server testName)
 
   file(READ ${URL_FILE} SERVER_URL)
   message(STATUS "URL : ${URL_FILE} - ${SERVER_URL}")
-  run_cmake_with_options(${testName} ${CMAKE_COMMAND} -DSERVER_URL=${SERVER_URL} )
+  run_cmake_with_options(${testName} -DSERVER_URL=${SERVER_URL})
   run_cmake_command(${testName}-clean ${CMAKE_COMMAND} --build . --target clean)
   run_cmake_command(${testName}-build ${CMAKE_COMMAND} --build .)
 endfunction()
 
+if(RunCMake_GENERATOR MATCHES "(MSYS|MinGW|Unix) Makefiles")
+  __ep_test_with_build(GNUMakeJobServerAware)
+endif()
+
+function(__ep_test_jobserver)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/DetectJobServer-build)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  run_cmake_with_options(DetectJobServer -DDETECT_JOBSERVER=${DETECT_JOBSERVER})
+  run_cmake_command(DetectJobServer-clean ${CMAKE_COMMAND} --build . --target clean)
+  run_cmake_command(DetectJobServer-build ${CMAKE_COMMAND} --build . -j4)
+endfunction()
+
+if(RunCMake_GENERATOR MATCHES "(MinGW|Unix) Makefiles")
+  __ep_test_jobserver()
+endif()
+
 __ep_test_with_build(MultiCommand)
 
 set(RunCMake_TEST_OUTPUT_MERGE 1)
+__ep_test_with_build(InstallBuilds)
 __ep_test_with_build(PreserveEmptyArgs)
 set(RunCMake_TEST_OUTPUT_MERGE 0)
 
@@ -149,6 +195,28 @@ endif()
 if(doSubstitutionTest)
     __ep_test_with_build(Substitutions)
 endif()
+
+function(__ep_test_BUILD_ALWAYS)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/BUILD_ALWAYS-build)
+  run_cmake(BUILD_ALWAYS)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/once-configure.cmake" [[message(STATUS "once: configure")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/once-build.cmake" [[message(STATUS "once: build")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/once-install.cmake" [[message(STATUS "once: install")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/always-configure.cmake" [[message(STATUS "always: configure")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/always-build.cmake" [[message(STATUS "always: build")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/always-install.cmake" [[message(STATUS "always: install")]])
+  run_cmake_command(BUILD_ALWAYS-build1 ${CMAKE_COMMAND} --build . --target always)
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/once-configure.cmake" [[message(FATAL_ERROR "once: configure should not run again")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/once-build.cmake" [[message(FATAL_ERROR "once: build should not run again")]])
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/once-install.cmake" [[message(FATAL_ERROR "once: install should not run again")]])
+  if(NOT RunCMake_GENERATOR MATCHES "^(Xcode|Visual Studio 9 )")
+    # The Xcode and VS 9 build systems decide to run this every time.
+    file(WRITE "${RunCMake_TEST_BINARY_DIR}/always-configure.cmake" [[message(FATAL_ERROR "always: configure should not run again")]])
+  endif()
+  run_cmake_command(BUILD_ALWAYS-build2 ${CMAKE_COMMAND} --build . --target always)
+endfunction()
+__ep_test_BUILD_ALWAYS()
 
 function(__ep_test_CONFIGURE_HANDLED_BY_BUILD)
   set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/CONFIGURE_HANDLED_BY_BUILD-build)

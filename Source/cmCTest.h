@@ -254,10 +254,10 @@ public:
    * Run command specialized for make and configure. Returns process status
    * and retVal is return value or exception.
    */
-  int RunMakeCommand(const std::string& command, std::string& output,
-                     int* retVal, const char* dir, cmDuration timeout,
-                     std::ostream& ofs,
-                     Encoding encoding = cmProcessOutput::Auto);
+  bool RunMakeCommand(const std::string& command, std::string& output,
+                      int* retVal, const char* dir, cmDuration timeout,
+                      std::ostream& ofs,
+                      Encoding encoding = cmProcessOutput::Auto);
 
   /** Return the current tag */
   std::string GetCurrentTag();
@@ -303,10 +303,10 @@ public:
    * environment variables prior to running the test. After running the test,
    * environment variables are restored to their previous values.
    */
-  int RunTest(std::vector<const char*> args, std::string* output, int* retVal,
-              std::ostream* logfile, cmDuration testTimeOut,
-              std::vector<std::string>* environment,
-              Encoding encoding = cmProcessOutput::Auto);
+  bool RunTest(const std::vector<std::string>& args, std::string* output,
+               int* retVal, std::ostream* logfile, cmDuration testTimeOut,
+               std::vector<std::string>* environment,
+               Encoding encoding = cmProcessOutput::Auto);
 
   /**
    * Get the handler object
@@ -358,6 +358,9 @@ public:
 
   /** Set the output log file name */
   void SetOutputLogFileName(const std::string& name);
+
+  /** Set the output JUnit file name */
+  void SetOutputJUnitFileName(const std::string& name);
 
   /** Set the visual studio or Xcode config type */
   void SetConfigType(const std::string& ct);
@@ -463,6 +466,8 @@ public:
 private:
   void SetPersistentOptionIfNotEmpty(const std::string& value,
                                      const std::string& optionName);
+  void AddPersistentMultiOptionIfNotEmpty(const std::string& value,
+                                          const std::string& optionName);
 
   int GenerateNotesFile(const std::string& files);
 
@@ -476,7 +481,7 @@ private:
    * call this method because it sets CTEST_COMMAND to drive a build
    * through the ctest command line.
    */
-  int Initialize(const char* binary_dir, cmCTestStartCommand* command);
+  int Initialize(const std::string& binary_dir, cmCTestStartCommand* command);
 
   /** parse the option after -D and convert it into the appropriate steps */
   bool AddTestsForDashboardType(std::string& targ);
@@ -533,6 +538,9 @@ private:
 
   int RunCMakeAndTest(std::string* output);
   int ExecuteTests();
+
+  /** return true iff change directory was successful */
+  bool TryToChangeDirectory(std::string const& dir);
 
   struct Private;
   std::unique_ptr<Private> Impl;

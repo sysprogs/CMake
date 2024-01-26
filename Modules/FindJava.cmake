@@ -90,50 +90,34 @@ if(_JAVA_HOME)
 endif()
 if (WIN32)
   macro (_JAVA_GET_INSTALLED_VERSIONS _KIND)
-    execute_process(COMMAND REG QUERY HKLM\\SOFTWARE\\JavaSoft\\${_KIND}
-      RESULT_VARIABLE _JAVA_RESULT
-      OUTPUT_VARIABLE _JAVA_VERSIONS
-      ERROR_QUIET)
-    if (NOT  _JAVA_RESULT)
-      string (REGEX MATCHALL "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\JavaSoft\\\\${_KIND}\\\\[0-9.]+" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
+    cmake_host_system_information(RESULT _JAVA_VERSIONS
+    QUERY WINDOWS_REGISTRY "HKLM/SOFTWARE/JavaSoft/${_KIND}"
+    SUBKEYS)
+    if (_JAVA_VERSIONS)
+      string (REGEX MATCHALL "[0-9._]+" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
+      string (REGEX REPLACE "([0-9._]+)" "\\1" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
       if (_JAVA_VERSIONS)
         # sort versions. Most recent first
-        ## handle version 9 apart from other versions to get correct ordering
-        set (_JAVA_V9 ${_JAVA_VERSIONS})
-        list (FILTER _JAVA_VERSIONS EXCLUDE REGEX "${_KIND}\\\\9")
-        list (SORT _JAVA_VERSIONS)
-        list (REVERSE _JAVA_VERSIONS)
-        list (FILTER _JAVA_V9 INCLUDE REGEX "${_KIND}\\\\9")
-        list (SORT _JAVA_V9)
-        list (REVERSE _JAVA_V9)
-        list (APPEND _JAVA_VERSIONS ${_JAVA_V9})
-        foreach (_JAVA_HINT IN LISTS _JAVA_VERSIONS)
-          list(APPEND _JAVA_HINTS "[${_JAVA_HINT};JavaHome]/bin")
+        list (SORT _JAVA_VERSIONS COMPARE NATURAL ORDER DESCENDING)
+        foreach (_JAVA_VERSION IN LISTS _JAVA_VERSIONS)
+          string(REPLACE "_" "." _JAVA_CMAKE_VERSION "${_JAVA_VERSION}")
+          if (Java_FIND_VERSION_EXACT
+              AND NOT _JAVA_CMAKE_VERSION MATCHES "^${Java_FIND_VERSION}")
+            continue()
+          endif()
+          list(APPEND _JAVA_HINTS "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\${_KIND}\\${_JAVA_VERSION};JavaHome]/bin")
         endforeach()
       endif()
     endif()
   endmacro()
 
-  # search for installed versions for version 9 and upper
+  # for version 9 and upper
   _JAVA_GET_INSTALLED_VERSIONS("JDK")
   _JAVA_GET_INSTALLED_VERSIONS("JRE")
 
-  list(APPEND _JAVA_HINTS
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.9;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.8;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.7;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.6;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.5;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.4;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Development Kit\\1.3;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.9;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.8;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.7;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.6;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.5;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.4;JavaHome]/bin"
-  "[HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft\\Java Runtime Environment\\1.3;JavaHome]/bin"
-  )
+  # for versions older than 9
+  _JAVA_GET_INSTALLED_VERSIONS("Java Development Kit")
+  _JAVA_GET_INSTALLED_VERSIONS("Java Runtime Environment")
 endif()
 
 # Hard-coded guesses should still go in PATHS. This ensures that the user
@@ -159,23 +143,25 @@ find_program(Java_JAVA_EXECUTABLE
 
 if(Java_JAVA_EXECUTABLE)
     execute_process(COMMAND "${Java_JAVA_EXECUTABLE}" -version
-      RESULT_VARIABLE res
-      OUTPUT_VARIABLE var
-      ERROR_VARIABLE var # sun-java output to stderr
+      RESULT_VARIABLE _java_res
+      OUTPUT_VARIABLE _java_var
+      ERROR_VARIABLE _java_var # sun-java output to stderr
       OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_STRIP_TRAILING_WHITESPACE)
-    if( res )
-      if(var MATCHES "Unable to locate a Java Runtime to invoke|No Java runtime present, requesting install")
-        set(Java_JAVA_EXECUTABLE Java_JAVA_EXECUTABLE-NOTFOUND)
-      elseif(${Java_FIND_REQUIRED})
-        message( FATAL_ERROR "Error executing java -version" )
-      else()
-        message( STATUS "Warning, could not run java -version")
+    if(_java_res)
+      if(NOT Java_FIND_QUIETLY)
+        message(STATUS "Java version check failed: "
+          "${Java_JAVA_EXECUTABLE} -version returned an error: \"${_java_var}\"")
+      endif()
+      if(_java_var MATCHES "Unable to locate a Java Runtime|No Java runtime present, requesting install")
+        # macOS distributes a java stub that provides an error message
+        set(Java_JAVA_EXECUTABLE "Java_JAVA_EXECUTABLE-NOTFOUND" CACHE PATH
+            "Path to the Java executable" FORCE)
       endif()
     else()
       # Extract version components (up to 4 levels) from "java -version" output.
       set(_java_version_regex [[(([0-9]+)(\.([0-9]+)(\.([0-9]+)(_([0-9]+))?)?)?.*)]])
-      if(var MATCHES "java version \"${_java_version_regex}\"")
+      if(_java_var MATCHES "java version \"${_java_version_regex}\"")
         # Sun, GCJ, older OpenJDK
         set(Java_VERSION_STRING "${CMAKE_MATCH_1}")
         set(Java_VERSION_MAJOR "${CMAKE_MATCH_2}")
@@ -190,7 +176,7 @@ if(Java_JAVA_EXECUTABLE)
           set(Java_VERSION_PATCH 0)
         endif()
         set(Java_VERSION_TWEAK "${CMAKE_MATCH_8}")
-      elseif(var MATCHES "openjdk version \"${_java_version_regex}\"")
+      elseif(_java_var MATCHES "openjdk version \"${_java_version_regex}\"")
         # OpenJDK
         set(Java_VERSION_STRING "${CMAKE_MATCH_1}")
         set(Java_VERSION_MAJOR "${CMAKE_MATCH_2}")
@@ -205,14 +191,14 @@ if(Java_JAVA_EXECUTABLE)
           set(Java_VERSION_PATCH 0)
         endif()
         set(Java_VERSION_TWEAK "${CMAKE_MATCH_8}")
-      elseif(var MATCHES "openjdk version \"([0-9]+)-[A-Za-z]+\"")
+      elseif(_java_var MATCHES "openjdk version \"([0-9]+)-[A-Za-z]+\"")
         # OpenJDK 9 early access builds or locally built
         set(Java_VERSION_STRING "1.${CMAKE_MATCH_1}.0")
         set(Java_VERSION_MAJOR "1")
         set(Java_VERSION_MINOR "${CMAKE_MATCH_1}")
         set(Java_VERSION_PATCH "0")
         set(Java_VERSION_TWEAK "")
-      elseif(var MATCHES "java full version \"kaffe-${_java_version_regex}\"")
+      elseif(_java_var MATCHES "java full version \"kaffe-${_java_version_regex}\"")
         # Kaffe style
         set(Java_VERSION_STRING "${CMAKE_MATCH_1}")
         set(Java_VERSION_MAJOR "${CMAKE_MATCH_2}")
@@ -221,7 +207,7 @@ if(Java_JAVA_EXECUTABLE)
         set(Java_VERSION_TWEAK "${CMAKE_MATCH_8}")
       else()
         if(NOT Java_FIND_QUIETLY)
-          string(REPLACE "\n" "\n  " ver_msg "\n${var}")
+          string(REPLACE "\n" "\n  " ver_msg "\n${_java_var}")
           message(WARNING "Java version not recognized:${ver_msg}\nPlease report.")
         endif()
         set(Java_VERSION_STRING "")
@@ -230,18 +216,21 @@ if(Java_JAVA_EXECUTABLE)
         set(Java_VERSION_PATCH "")
         set(Java_VERSION_TWEAK "")
       endif()
+      unset(_java_version_regex)
+      unset(_java_var)
       set(Java_VERSION "${Java_VERSION_MAJOR}")
       if(NOT "x${Java_VERSION}" STREQUAL "x")
-        foreach(c MINOR PATCH TWEAK)
-          if(NOT "x${Java_VERSION_${c}}" STREQUAL "x")
-            string(APPEND Java_VERSION ".${Java_VERSION_${c}}")
+        foreach(_java_c IN ITEMS "MINOR" "PATCH" "TWEAK")
+          if(NOT "x${Java_VERSION_${_java_c}}" STREQUAL "x")
+            string(APPEND Java_VERSION ".${Java_VERSION_${_java_c}}")
           else()
             break()
           endif()
         endforeach()
+        unset(_java_c)
       endif()
     endif()
-
+    unset(_java_res)
 endif()
 
 
@@ -284,7 +273,7 @@ find_program(Java_JARSIGNER_EXECUTABLE
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 if(Java_FIND_COMPONENTS)
   set(_JAVA_REQUIRED_VARS)
-  foreach(component ${Java_FIND_COMPONENTS})
+  foreach(component IN LISTS Java_FIND_COMPONENTS)
     # User just want to execute some Java byte-compiled
     If(component STREQUAL "Runtime")
       list(APPEND _JAVA_REQUIRED_VARS Java_JAVA_EXECUTABLE)
@@ -326,23 +315,24 @@ if(Java_FIND_COMPONENTS)
     VERSION_VAR Java_VERSION
     )
   if(Java_FOUND)
-    foreach(component ${Java_FIND_COMPONENTS})
+    foreach(component IN LISTS Java_FIND_COMPONENTS)
       set(Java_${component}_FOUND TRUE)
     endforeach()
   endif()
+  unset(_JAVA_REQUIRED_VARS)
 else()
   # Check for Development
   if(Java_VERSION VERSION_LESS "10")
     find_package_handle_standard_args(Java
       REQUIRED_VARS Java_JAVA_EXECUTABLE Java_JAR_EXECUTABLE Java_JAVAC_EXECUTABLE
                     Java_JAVAH_EXECUTABLE Java_JAVADOC_EXECUTABLE
-      VERSION_VAR Java_VERSION_STRING
+      VERSION_VAR Java_VERSION
       )
   else()
     find_package_handle_standard_args(Java
       REQUIRED_VARS Java_JAVA_EXECUTABLE Java_JAR_EXECUTABLE Java_JAVAC_EXECUTABLE
                     Java_JAVADOC_EXECUTABLE
-      VERSION_VAR Java_VERSION_STRING
+      VERSION_VAR Java_VERSION
       )
   endif()
 endif()
@@ -356,7 +346,7 @@ mark_as_advanced(
   Java_JAVADOC_EXECUTABLE
   Java_IDLJ_EXECUTABLE
   Java_JARSIGNER_EXECUTABLE
-  )
+)
 
 # LEGACY
 set(JAVA_RUNTIME ${Java_JAVA_EXECUTABLE})

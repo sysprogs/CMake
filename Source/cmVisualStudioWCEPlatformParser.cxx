@@ -2,29 +2,33 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmVisualStudioWCEPlatformParser.h"
 
+#include <algorithm>
+#include <cstring>
+#include <utility>
+
 #include "cmGlobalVisualStudioGenerator.h"
-#include "cmXMLParser.h"
+#include "cmStringAlgorithms.h"
+#include "cmSystemTools.h"
 
 int cmVisualStudioWCEPlatformParser::ParseVersion(const char* version)
 {
   const std::string registryBase =
     cmGlobalVisualStudioGenerator::GetRegistryBase(version);
-  const std::string vckey = registryBase + "\\Setup\\VC;ProductDir";
-  const std::string vskey = registryBase + "\\Setup\\VS;ProductDir";
+  const std::string vckey = cmStrCat(registryBase, "\\Setup\\VC;ProductDir");
+  const std::string vskey = cmStrCat(registryBase, "\\Setup\\VS;ProductDir");
 
-  if (!cmSystemTools::ReadRegistryValue(vckey.c_str(), this->VcInstallDir,
+  if (!cmSystemTools::ReadRegistryValue(vckey, this->VcInstallDir,
                                         cmSystemTools::KeyWOW64_32) ||
-      !cmSystemTools::ReadRegistryValue(vskey.c_str(), this->VsInstallDir,
+      !cmSystemTools::ReadRegistryValue(vskey, this->VsInstallDir,
                                         cmSystemTools::KeyWOW64_32)) {
     return 0;
   }
   cmSystemTools::ConvertToUnixSlashes(this->VcInstallDir);
   cmSystemTools::ConvertToUnixSlashes(this->VsInstallDir);
-  this->VcInstallDir.append("/");
-  this->VsInstallDir.append("/");
+  this->VcInstallDir.append("//");
 
   const std::string configFilename =
-    this->VcInstallDir + "vcpackages/WCE.VCPlatform.config";
+    cmStrCat(this->VcInstallDir, "vcpackages/WCE.VCPlatform.config");
 
   return this->ParseFile(configFilename.c_str());
 }
@@ -35,18 +39,17 @@ std::string cmVisualStudioWCEPlatformParser::GetOSVersion() const
     return OSMajorVersion;
   }
 
-  return OSMajorVersion + "." + OSMinorVersion;
+  return cmStrCat(OSMajorVersion, '.', OSMinorVersion);
 }
 
 const char* cmVisualStudioWCEPlatformParser::GetArchitectureFamily() const
 {
-  std::map<std::string, std::string>::const_iterator it =
-    this->Macros.find("ARCHFAM");
+  auto it = this->Macros.find("ARCHFAM");
   if (it != this->Macros.end()) {
     return it->second.c_str();
   }
 
-  return 0;
+  return nullptr;
 }
 
 void cmVisualStudioWCEPlatformParser::StartElement(const std::string& name,
@@ -58,14 +61,14 @@ void cmVisualStudioWCEPlatformParser::StartElement(const std::string& name,
 
   this->CharacterData.clear();
 
-  if (name == "PlatformData") {
+  if (name == "PlatformData"_s) {
     this->PlatformName.clear();
     this->OSMajorVersion.clear();
     this->OSMinorVersion.clear();
     this->Macros.clear();
   }
 
-  if (name == "Macro") {
+  if (name == "Macro"_s) {
     std::string macroName;
     std::string macroValue;
 
@@ -80,7 +83,7 @@ void cmVisualStudioWCEPlatformParser::StartElement(const std::string& name,
     if (!macroName.empty()) {
       this->Macros[macroName] = macroValue;
     }
-  } else if (name == "Directories") {
+  } else if (name == "Directories"_s) {
     for (const char** attr = attributes; *attr; attr += 2) {
       if (strcmp(attr[0], "Include") == 0) {
         this->Include = attr[1];
@@ -96,7 +99,7 @@ void cmVisualStudioWCEPlatformParser::StartElement(const std::string& name,
 void cmVisualStudioWCEPlatformParser::EndElement(const std::string& name)
 {
   if (!this->RequiredName) {
-    if (name == "PlatformName") {
+    if (name == "PlatformName"_s) {
       this->AvailablePlatforms.push_back(this->CharacterData);
     }
     return;
@@ -106,13 +109,13 @@ void cmVisualStudioWCEPlatformParser::EndElement(const std::string& name)
     return;
   }
 
-  if (name == "PlatformName") {
+  if (name == "PlatformName"_s) {
     this->PlatformName = this->CharacterData;
-  } else if (name == "OSMajorVersion") {
+  } else if (name == "OSMajorVersion"_s) {
     this->OSMajorVersion = this->CharacterData;
-  } else if (name == "OSMinorVersion") {
+  } else if (name == "OSMinorVersion"_s) {
     this->OSMinorVersion = this->CharacterData;
-  } else if (name == "Platform") {
+  } else if (name == "Platform"_s) {
     if (this->PlatformName == this->RequiredName) {
       this->FoundRequiredName = true;
     }

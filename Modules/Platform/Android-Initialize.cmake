@@ -10,6 +10,11 @@ if(CMAKE_ANDROID_NDK)
   include(${CMAKE_ANDROID_NDK}/build/cmake/hooks/pre/Android-Initialize.cmake OPTIONAL)
 endif()
 
+include(Platform/Linux-Initialize)
+unset(LINUX)
+
+set(ANDROID 1)
+
 # Support for NVIDIA Nsight Tegra Visual Studio Edition was previously
 # implemented in the CMake VS IDE generators.  Avoid interfering with
 # that functionality for now.
@@ -54,11 +59,6 @@ if(CMAKE_ANDROID_NDK_TOOLCHAIN_UNIFIED)
 
   if(NOT DEFINED CMAKE_FIND_ROOT_PATH_MODE_PACKAGE)
     set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
-  endif()
-
-  # Don't search paths in PATH environment variable.
-  if(NOT DEFINED CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH)
-    set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
   endif()
 
   # Allows CMake to find headers in the architecture-specific include directories.

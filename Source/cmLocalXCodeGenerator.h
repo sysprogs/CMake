@@ -4,6 +4,7 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include <iosfwd>
 #include <map>
 #include <string>
 
@@ -36,6 +37,8 @@ public:
   void ComputeObjectFilenames(
     std::map<cmSourceFile const*, std::string>& mapping,
     cmGeneratorTarget const* gt = nullptr) override;
+
+  void AddXCConfigSources(cmGeneratorTarget* target) override;
 
 private:
 };

@@ -4,9 +4,9 @@
 
 #include <ostream>
 
-#include <CoreFoundation/CoreFoundation.h>
+#include <cmext/string_view>
 
-#include "cmSystemTools.h"
+#include <CoreFoundation/CoreFoundation.h>
 
 const char* cmXCodeObject::PBXTypeNames[] = {
   /* clang-format needs this comment to break after the opening brace */
@@ -93,13 +93,13 @@ void cmXCodeObject::Print(std::ostream& out)
   out << this->Id;
   this->PrintComment(out);
   out << " = {";
-  if (separator == "\n") {
+  if (separator == "\n"_s) {
     out << separator;
   }
   cmXCodeObject::Indent(3 * indentFactor, out);
   out << "isa = " << PBXTypeNames[this->IsA] << ";" << separator;
   for (const auto& keyVal : this->ObjectAttributes) {
-    if (keyVal.first == "isa") {
+    if (keyVal.first == "isa"_s) {
       continue;
     }
 
@@ -144,7 +144,7 @@ void cmXCodeObject::PrintAttribute(std::ostream& out, int level,
 
     case ATTRIBUTE_GROUP: {
       out << name << " = {";
-      if (separator == "\n") {
+      if (separator == "\n"_s) {
         out << separator;
       }
       for (const auto& keyVal : object->ObjectAttributes) {
@@ -158,7 +158,7 @@ void cmXCodeObject::PrintAttribute(std::ostream& out, int level,
     case OBJECT_REF: {
       cmXCodeObject::PrintString(out, name);
       out << " = " << object->Object->Id;
-      if (object->Object->HasComment() && name != "remoteGlobalIDString") {
+      if (object->Object->HasComment() && name != "remoteGlobalIDString"_s) {
         object->Object->PrintComment(out);
       }
       out << ";" << separator;
@@ -182,7 +182,7 @@ void cmXCodeObject::PrintList(std::vector<cmXCodeObject*> const& objs,
 {
   cmXCodeObject::Indent(1, out);
   out << "objects = {\n";
-  for (auto obj : objs) {
+  for (auto* obj : objs) {
     if (obj->TypeValue == OBJECT) {
       obj->Print(out);
     }

@@ -13,4 +13,11 @@ function(get_test_prerequirements found_var config_file)
         "\nset(RPMBUILD_EXECUTABLE \"${RPMBUILD_EXECUTABLE}\")")
     set(${found_var} true PARENT_SCOPE)
   endif()
+
+  # optional tool for some tests
+  find_program(CPACK_OBJDUMP_EXECUTABLE objdump)
+  if(CPACK_OBJDUMP_EXECUTABLE)
+    file(APPEND "${config_file}"
+      "\nset(CPACK_OBJDUMP_EXECUTABLE \"${CPACK_OBJDUMP_EXECUTABLE}\")")
+  endif()
 endfunction()

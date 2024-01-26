@@ -1,5 +1,5 @@
 {
-    "version": 2,
+    "version": 6,
     "configurePresets": [
         {
             "name": "default",
@@ -48,7 +48,8 @@
                 "quiet": false,
                 "outputLogFile": "",
                 "labelSummary": true,
-                "subprojectSummary": true
+                "subprojectSummary": true,
+                "testOutputTruncation": "tail"
             },
             "filter": {
                 "include": {
@@ -169,6 +170,20 @@
             },
             "execution": {
                 "showOnly": "human"
+            }
+        },
+        {
+            "name": "outputLog",
+            "inherits": "minimal",
+            "output": {
+                "outputLogFile": "${sourceDir}/build/default/output.log"
+            }
+        },
+        {
+            "name": "outputJUnit",
+            "inherits": "minimal",
+            "output": {
+                "outputJUnitFile": "${sourceDir}/build/default/output.xml"
             }
         }
     ]

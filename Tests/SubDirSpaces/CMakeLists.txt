@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.5)
 project(SUBDIR)
 
 # Some systems do not seem to support rpath with spaces.

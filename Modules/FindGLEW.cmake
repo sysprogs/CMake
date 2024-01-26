@@ -63,11 +63,36 @@ This module defines the following variables:
 #]=======================================================================]
 
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
 
 find_package(GLEW CONFIG QUIET)
 
 if(GLEW_FOUND)
   find_package_handle_standard_args(GLEW DEFAULT_MSG GLEW_CONFIG)
+  get_target_property(GLEW_INCLUDE_DIRS GLEW::GLEW INTERFACE_INCLUDE_DIRECTORIES)
+  set(GLEW_INCLUDE_DIR ${GLEW_INCLUDE_DIRS})
+  get_target_property(_GLEW_DEFS GLEW::GLEW INTERFACE_COMPILE_DEFINITIONS)
+  if("${_GLEW_DEFS}" MATCHES "GLEW_STATIC")
+    get_target_property(GLEW_LIBRARY_DEBUG GLEW::GLEW IMPORTED_LOCATION_DEBUG)
+    get_target_property(GLEW_LIBRARY_RELEASE GLEW::GLEW IMPORTED_LOCATION_RELEASE)
+  else()
+    get_target_property(GLEW_LIBRARY_DEBUG GLEW::GLEW IMPORTED_IMPLIB_DEBUG)
+    get_target_property(GLEW_LIBRARY_RELEASE GLEW::GLEW IMPORTED_IMPLIB_RELEASE)
+  endif()
+  get_target_property(_GLEW_LINK_INTERFACE GLEW::GLEW IMPORTED_LINK_INTERFACE_LIBRARIES_RELEASE) # same for debug and release
+  list(APPEND GLEW_LIBRARIES ${_GLEW_LINK_INTERFACE})
+  list(APPEND GLEW_LIBRARY ${_GLEW_LINK_INTERFACE})
+  select_library_configurations(GLEW)
+  if("${_GLEW_DEFS}" MATCHES "GLEW_STATIC")
+    set(GLEW_STATIC_LIBRARIES ${GLEW_LIBRARIES})
+  else()
+    set(GLEW_SHARED_LIBRARIES ${GLEW_LIBRARIES})
+  endif()
+  unset(_GLEW_DEFS)
+  unset(_GLEW_LINK_INTERFACE)
+  unset(GLEW_LIBRARY)
+  unset(GLEW_LIBRARY_DEBUG)
+  unset(GLEW_LIBRARY_RELEASE)
   return()
 endif()
 
@@ -100,6 +125,10 @@ function(__glew_set_find_library_suffix shared_or_static)
   elseif(APPLE AND "${shared_or_static}" MATCHES "SHARED")
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".dylib;.so" PARENT_SCOPE)
   elseif(APPLE AND "${shared_or_static}" MATCHES "STATIC")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" PARENT_SCOPE)
+  elseif(WIN32 AND MINGW AND "${shared_or_static}" MATCHES "SHARED")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll.a" PARENT_SCOPE)
+  elseif(WIN32 AND MINGW AND "${shared_or_static}" MATCHES "STATIC")
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" PARENT_SCOPE)
   elseif(WIN32 AND "${shared_or_static}" MATCHES "SHARED")
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib" PARENT_SCOPE)
@@ -170,8 +199,6 @@ find_library(GLEW_STATIC_LIBRARY_DEBUG
 
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${__GLEW_CURRENT_FIND_LIBRARY_SUFFIXES})
 unset(__GLEW_CURRENT_FIND_LIBRARY_SUFFIXES)
-
-include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
 
 select_library_configurations(GLEW_SHARED)
 select_library_configurations(GLEW_STATIC)

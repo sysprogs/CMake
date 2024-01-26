@@ -38,6 +38,9 @@ macro(__windows_compiler_clang_gnu lang)
   set(CMAKE_${lang}_LINKER_WRAPPER_FLAG "-Xlinker" " ")
   set(CMAKE_${lang}_LINKER_WRAPPER_FLAG_SEP)
 
+  set(CMAKE_${lang}_LINKER_MANIFEST_FLAG " -Xlinker /MANIFESTINPUT:")
+  set(CMAKE_${lang}_COMPILE_OPTIONS_WARNING_AS_ERROR "-Werror")
+
   if("${CMAKE_${lang}_SIMULATE_VERSION}" MATCHES "^([0-9]+)\\.([0-9]+)")
     math(EXPR MSVC_VERSION "${CMAKE_MATCH_1}*100 + ${CMAKE_MATCH_2}")
   endif()
@@ -54,11 +57,16 @@ macro(__windows_compiler_clang_gnu lang)
   set(CMAKE_${lang}_USE_RESPONSE_FILE_FOR_LIBRARIES 1)
   set(CMAKE_${lang}_USE_RESPONSE_FILE_FOR_INCLUDES 1)
 
-  set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "-flto")
+  if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 3.9)
+    set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "-flto=thin")
+  else()
+    set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "-flto")
+  endif()
+
   set(_CMAKE_${lang}_IPO_SUPPORTED_BY_CMAKE YES)
   set(_CMAKE_${lang}_IPO_MAY_BE_SUPPORTED_BY_COMPILER YES)
-  set(CMAKE_${lang}_ARCHIVE_CREATE_IPO "<CMAKE_AR> cr <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_${lang}_ARCHIVE_APPEND_IPO "<CMAKE_AR> r <TARGET> <LINK_FLAGS> <OBJECTS>")
+  set(CMAKE_${lang}_ARCHIVE_CREATE_IPO "<CMAKE_AR> qc <TARGET> <LINK_FLAGS> <OBJECTS>")
+  set(CMAKE_${lang}_ARCHIVE_APPEND_IPO "<CMAKE_AR> q <TARGET> <LINK_FLAGS> <OBJECTS>")
   set(CMAKE_${lang}_ARCHIVE_FINISH_IPO "<CMAKE_RANLIB> <TARGET>")
 
   # Create archiving rules to support large object file lists for static libraries.
@@ -66,13 +74,13 @@ macro(__windows_compiler_clang_gnu lang)
   set(CMAKE_${lang}_ARCHIVE_APPEND "<CMAKE_AR> q <TARGET> <LINK_FLAGS> <OBJECTS>")
   set(CMAKE_${lang}_ARCHIVE_FINISH "<CMAKE_RANLIB> <TARGET>")
   set(CMAKE_${lang}_CREATE_SHARED_LIBRARY
-    "<CMAKE_${lang}_COMPILER> -fuse-ld=lld-link -nostartfiles -nostdlib <CMAKE_SHARED_LIBRARY_${lang}_FLAGS> <LANGUAGE_COMPILE_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_${lang}_FLAGS> -o <TARGET> ${CMAKE_GNULD_IMAGE_VERSION} -Xlinker /implib:<TARGET_IMPLIB> -Xlinker /pdb:<TARGET_PDB> -Xlinker /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <OBJECTS> <LINK_LIBRARIES>")
+    "<CMAKE_${lang}_COMPILER> -fuse-ld=lld-link -nostartfiles -nostdlib <CMAKE_SHARED_LIBRARY_${lang}_FLAGS> <LANGUAGE_COMPILE_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_${lang}_FLAGS> -o <TARGET> ${CMAKE_GNULD_IMAGE_VERSION} -Xlinker /MANIFEST:EMBED -Xlinker /implib:<TARGET_IMPLIB> -Xlinker /pdb:<TARGET_PDB> -Xlinker /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <OBJECTS> <LINK_LIBRARIES> <MANIFESTS>")
   set(CMAKE_${lang}_CREATE_SHARED_MODULE ${CMAKE_${lang}_CREATE_SHARED_LIBRARY})
   set(CMAKE_${lang}_LINK_EXECUTABLE
-    "<CMAKE_${lang}_COMPILER> -fuse-ld=lld-link -nostartfiles -nostdlib <FLAGS> <CMAKE_${lang}_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> -Xlinker /implib:<TARGET_IMPLIB> -Xlinker /pdb:<TARGET_PDB> -Xlinker /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> ${CMAKE_GNULD_IMAGE_VERSION} <LINK_LIBRARIES>")
+    "<CMAKE_${lang}_COMPILER> -fuse-ld=lld-link -nostartfiles -nostdlib <FLAGS> <CMAKE_${lang}_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> -Xlinker /MANIFEST:EMBED -Xlinker /implib:<TARGET_IMPLIB> -Xlinker /pdb:<TARGET_PDB> -Xlinker /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> ${CMAKE_GNULD_IMAGE_VERSION} <LINK_LIBRARIES> <MANIFESTS>")
 
-  set(CMAKE_CREATE_WIN32_EXE "-Xlinker /subsystem:windows")
-  set(CMAKE_CREATE_CONSOLE_EXE "-Xlinker /subsystem:console")
+  set(CMAKE_${lang}_CREATE_WIN32_EXE "-Xlinker /subsystem:windows")
+  set(CMAKE_${lang}_CREATE_CONSOLE_EXE "-Xlinker /subsystem:console")
 
   if(NOT "${lang}" STREQUAL "ASM")
     set(CMAKE_${lang}_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreaded         -Xclang -flto-visibility-public-std -D_MT -Xclang --dependent-lib=libcmt)
@@ -81,29 +89,48 @@ macro(__windows_compiler_clang_gnu lang)
     set(CMAKE_${lang}_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreadedDebugDLL -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd)
 
     if(CMAKE_MSVC_RUNTIME_LIBRARY_DEFAULT)
-      set(__ADDED_FLAGS "")
-      set(__ADDED_FLAGS_DEBUG "")
+      set(_RTL_FLAGS "")
+      set(_RTL_FLAGS_DEBUG "")
     else()
-      set(__ADDED_FLAGS_DEBUG "-D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd")
-      set(__ADDED_FLAGS "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt")
+      set(_RTL_FLAGS_DEBUG " -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd")
+      set(_RTL_FLAGS " -D_DLL -D_MT -Xclang --dependent-lib=msvcrt")
     endif()
 
-    string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -g -Xclang -gcodeview -O0 ${__ADDED_FLAGS_DEBUG}")
-    string(APPEND CMAKE_${lang}_FLAGS_MINSIZEREL_INIT " -Os -DNDEBUG ${__ADDED_FLAGS}")
-    string(APPEND CMAKE_${lang}_FLAGS_RELEASE_INIT " -O3 -DNDEBUG ${__ADDED_FLAGS}")
-    string(APPEND CMAKE_${lang}_FLAGS_RELWITHDEBINFO_INIT " -O2 -g -DNDEBUG -Xclang -gcodeview ${__ADDED_FLAGS}")
+    if(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT_DEFAULT)
+      set(_DBG_FLAGS "")
+    else()
+      set(_DBG_FLAGS " -g -Xclang -gcodeview")
+    endif()
+
+    string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -O0${_DBG_FLAGS}${_RTL_FLAGS_DEBUG}")
+    string(APPEND CMAKE_${lang}_FLAGS_MINSIZEREL_INIT " -Os -DNDEBUG${_RTL_FLAGS}")
+    string(APPEND CMAKE_${lang}_FLAGS_RELEASE_INIT " -O3 -DNDEBUG${_RTL_FLAGS}")
+    string(APPEND CMAKE_${lang}_FLAGS_RELWITHDEBINFO_INIT " -O2 -DNDEBUG${_DBG_FLAGS}${_RTL_FLAGS}")
+
+    set(CMAKE_${lang}_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_Embedded        -g -Xclang -gcodeview)
+    #set(CMAKE_${lang}_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_ProgramDatabase) # not supported by Clang
+    #set(CMAKE_${lang}_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_EditAndContinue) # not supported by Clang
   endif()
   set(CMAKE_INCLUDE_SYSTEM_FLAG_${lang} "-isystem ")
+  set(CMAKE_${lang}_LINKER_SUPPORTS_PDB ON)
 
   set(CMAKE_PCH_EXTENSION .pch)
   set(CMAKE_PCH_PROLOGUE "#pragma clang system_header")
   set(CMAKE_${lang}_COMPILE_OPTIONS_USE_PCH -Xclang -include-pch -Xclang <PCH_FILE> -Xclang -include -Xclang <PCH_HEADER>)
   set(CMAKE_${lang}_COMPILE_OPTIONS_CREATE_PCH -Xclang -emit-pch -Xclang -include -Xclang <PCH_HEADER> -x ${__pch_header_${lang}})
 
-  unset(__ADDED_FLAGS)
-  unset(__ADDED_FLAGS_DEBUG)
+  unset(_DBG_FLAGS)
+  unset(_RTL_FLAGS)
+  unset(_RTL_FLAGS_DEBUG)
   string(TOLOWER "${CMAKE_BUILD_TYPE}" BUILD_TYPE_LOWER)
   set(CMAKE_${lang}_STANDARD_LIBRARIES_INIT "-lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 -loldnames")
+
+  # Features for LINK_LIBRARY generator expression
+  if(MSVC_VERSION GREATER "1900")
+    ## WHOLE_ARCHIVE: Force loading all members of an archive
+    set(CMAKE_${lang}_LINK_LIBRARY_USING_WHOLE_ARCHIVE "LINKER:/WHOLEARCHIVE:<LIBRARY>")
+    set(CMAKE_${lang}_LINK_LIBRARY_USING_WHOLE_ARCHIVE_SUPPORTED TRUE)
+  endif()
 
   enable_language(RC)
 endmacro()
@@ -130,24 +157,36 @@ macro(__enable_llvm_rc_preprocessing clang_option_prefix extra_pp_flags)
   endif()
 endmacro()
 
+macro(__verify_same_language_values variable)
+  foreach(lang "C" "CXX" "HIP")
+    if(DEFINED CMAKE_${lang}_${variable})
+      list(APPEND __LANGUAGE_VALUES_${variable} "${CMAKE_${lang}_${variable}}")
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES __LANGUAGE_VALUES_${variable})
+  list(LENGTH __LANGUAGE_VALUES_${variable} __NUM_VALUES)
+
+  if(__NUM_VALUES GREATER 1)
+    message(FATAL_ERROR ${ARGN})
+  endif()
+  unset(__NUM_VALUES)
+  unset(__LANGUAGE_VALUES_${variable})
+endmacro()
 
 if("x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC"
-    OR "x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC")
+    OR "x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC"
+    OR "x${CMAKE_HIP_SIMULATE_ID}" STREQUAL "xMSVC")
 
-  if ( DEFINED CMAKE_C_COMPILER_ID AND DEFINED CMAKE_CXX_COMPILER_ID
-       AND NOT "x${CMAKE_C_COMPILER_ID}" STREQUAL "x${CMAKE_CXX_COMPILER_ID}")
-    message(FATAL_ERROR "The current configuration mixes Clang and MSVC or "
-            "some other CL compatible compiler tool. This is not supported. "
-            "Use either clang or MSVC as both C and C++ compilers.")
-  endif()
+  __verify_same_language_values(COMPILER_ID
+                                "The current configuration mixes Clang and MSVC or "
+                                "some other CL compatible compiler tool. This is not supported. "
+                                "Use either clang or MSVC as both C, C++ and/or HIP compilers.")
 
-  if ( DEFINED CMAKE_C_COMPILER_FRONTEND_VARIANT AND DEFINED CMAKE_CXX_COMPILER_FRONTEND_VARIANT
-       AND NOT "x${CMAKE_C_COMPILER_FRONTEND_VARIANT}" STREQUAL "x${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}")
-    message(FATAL_ERROR "The current configuration uses the Clang compiler "
-            "tool with mixed frontend variants, both the GNU and in MSVC CL "
-            "like variants. This is not supported. Use either clang/clang++ "
-            "or clang-cl as both C and C++ compilers.")
-  endif()
+  __verify_same_language_values(COMPILER_FRONTEND_VARIANT
+                                "The current configuration uses the Clang compiler "
+                                "tool with mixed frontend variants, both the GNU and in MSVC CL "
+                                "like variants. This is not supported. Use either clang/clang++ "
+                                "or clang-cl as both C, C++ and/or HIP compilers.")
 
   if(NOT CMAKE_RC_COMPILER_INIT)
     # Check if rc is already in the path
@@ -167,14 +206,19 @@ if("x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC"
     unset(__RC_COMPILER_PATH CACHE)
   endif()
 
-  if ( "x${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}" STREQUAL "xMSVC" OR "x${CMAKE_C_COMPILER_FRONTEND_VARIANT}" STREQUAL "xMSVC" )
+  if ( "x${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}" STREQUAL "xMSVC"
+      OR "x${CMAKE_C_COMPILER_FRONTEND_VARIANT}" STREQUAL "xMSVC"
+      OR "x${CMAKE_HIP_COMPILER_FRONTEND_VARIANT}" STREQUAL "xMSVC")
+
     include(Platform/Windows-MSVC)
     # Set the clang option forwarding prefix for clang-cl usage in the llvm-rc processing stage
     __enable_llvm_rc_preprocessing("-clang:" "")
     macro(__windows_compiler_clang_base lang)
       set(_COMPILE_${lang} "${_COMPILE_${lang}_MSVC}")
       __windows_compiler_msvc(${lang})
-      set(CMAKE_INCLUDE_SYSTEM_FLAG_${lang} "-imsvc ")
+      unset(CMAKE_${lang}_COMPILE_OPTIONS_MSVC_DEBUG_INFORMATION_FORMAT_EditAndContinue) # -ZI not supported by Clang
+      set(CMAKE_${lang}_COMPILE_OPTIONS_WARNING_AS_ERROR "-WX")
+      set(CMAKE_INCLUDE_SYSTEM_FLAG_${lang} "-imsvc")
     endmacro()
   else()
     cmake_policy(GET CMP0091 __WINDOWS_CLANG_CMP0091)
@@ -184,6 +228,14 @@ if("x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC"
       set(CMAKE_MSVC_RUNTIME_LIBRARY_DEFAULT "")
     endif()
     unset(__WINDOWS_CLANG_CMP0091)
+
+    cmake_policy(GET CMP0141 __WINDOWS_MSVC_CMP0141)
+    if(__WINDOWS_MSVC_CMP0141 STREQUAL "NEW")
+      set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT_DEFAULT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+    else()
+      set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT_DEFAULT "")
+    endif()
+    unset(__WINDOWS_MSVC_CMP0141)
 
     set(CMAKE_BUILD_TYPE_INIT Debug)
 

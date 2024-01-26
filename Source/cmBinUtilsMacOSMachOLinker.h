@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cmBinUtilsLinker.h"
@@ -24,9 +25,20 @@ public:
                         cmStateEnums::TargetType type) override;
 
 private:
+  struct FileInfo
+  {
+    std::vector<std::string> libs;
+    std::vector<std::string> rpaths;
+  };
+
   std::unique_ptr<cmBinUtilsMacOSMachOGetRuntimeDependenciesTool> Tool;
+  std::unordered_map<std::string, FileInfo> ScannedFileInfo;
+
+  const FileInfo* GetFileInfo(std::string const& file);
 
   bool ScanDependencies(std::string const& file,
+                        std::vector<std::string> const& libs,
+                        std::vector<std::string> const& rpaths,
                         std::string const& executablePath);
 
   bool GetFileDependencies(std::vector<std::string> const& names,

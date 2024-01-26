@@ -2,13 +2,14 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmGlobalMSYSMakefileGenerator.h"
 
+#include <cmext/string_view>
+
 #include "cmsys/FStream.hxx"
 
-#include "cmDocumentationEntry.h"
-#include "cmLocalUnixMakefileGenerator3.h"
 #include "cmMakefile.h"
-#include "cmMessageType.h"
 #include "cmState.h"
+#include "cmStringAlgorithms.h"
+#include "cmSystemTools.h"
 #include "cmake.h"
 
 cmGlobalMSYSMakefileGenerator::cmGlobalMSYSMakefileGenerator(cmake* cm)
@@ -32,7 +33,7 @@ std::string cmGlobalMSYSMakefileGenerator::FindMinGW(
   while (fin) {
     fin >> path;
     fin >> mount;
-    if (mount == "/mingw") {
+    if (mount == "/mingw"_s) {
       mingwBin = cmStrCat(path, "/bin");
     }
   }
@@ -42,47 +43,19 @@ std::string cmGlobalMSYSMakefileGenerator::FindMinGW(
 void cmGlobalMSYSMakefileGenerator::EnableLanguage(
   std::vector<std::string> const& l, cmMakefile* mf, bool optional)
 {
-  this->FindMakeProgram(mf);
-  const std::string& makeProgram =
-    mf->GetRequiredDefinition("CMAKE_MAKE_PROGRAM");
-  std::vector<std::string> locations;
-  std::string makeloc = cmSystemTools::GetProgramPath(makeProgram);
-  locations.push_back(this->FindMinGW(makeloc));
-  locations.push_back(makeloc);
-  locations.push_back("/mingw/bin");
-  locations.push_back("c:/mingw/bin");
-  std::string tgcc = cmSystemTools::FindProgram("gcc", locations);
-  std::string gcc = "gcc.exe";
-  if (!tgcc.empty()) {
-    gcc = tgcc;
-  }
-  std::string tgxx = cmSystemTools::FindProgram("g++", locations);
-  std::string gxx = "g++.exe";
-  if (!tgxx.empty()) {
-    gxx = tgxx;
-  }
-  std::string trc = cmSystemTools::FindProgram("windres", locations);
-  std::string rc = "windres.exe";
-  if (!trc.empty()) {
-    rc = trc;
-  }
   mf->AddDefinition("MSYS", "1");
-  mf->AddDefinition("CMAKE_GENERATOR_CC", gcc);
-  mf->AddDefinition("CMAKE_GENERATOR_CXX", gxx);
-  mf->AddDefinition("CMAKE_GENERATOR_RC", rc);
   this->cmGlobalUnixMakefileGenerator3::EnableLanguage(l, mf, optional);
 
   if (!mf->IsSet("CMAKE_AR") && !this->CMakeInstance->GetIsInTryCompile() &&
-      !(1 == l.size() && l[0] == "NONE")) {
+      !(1 == l.size() && l[0] == "NONE"_s)) {
     cmSystemTools::Error(
       "CMAKE_AR was not found, please set to archive program. " +
       mf->GetSafeDefinition("CMAKE_AR"));
   }
 }
 
-void cmGlobalMSYSMakefileGenerator::GetDocumentation(
-  cmDocumentationEntry& entry)
+cmDocumentationEntry cmGlobalMSYSMakefileGenerator::GetDocumentation()
 {
-  entry.Name = cmGlobalMSYSMakefileGenerator::GetActualName();
-  entry.Brief = "Generates MSYS makefiles.";
+  return { cmGlobalMSYSMakefileGenerator::GetActualName(),
+           "Generates MSYS makefiles." };
 }

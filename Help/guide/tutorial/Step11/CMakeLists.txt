@@ -3,12 +3,13 @@ cmake_minimum_required(VERSION 3.15)
 # set the project name and version
 project(Tutorial VERSION 1.0)
 
+# specify the C++ standard
 add_library(tutorial_compiler_flags INTERFACE)
 target_compile_features(tutorial_compiler_flags INTERFACE cxx_std_11)
 
 # add compiler warning flags just when building this project via
 # the BUILD_INTERFACE genex
-set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU>")
+set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 target_compile_options(tutorial_compiler_flags INTERFACE
   "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Wall;-Wextra;-Wshadow;-Wformat=2;-Wunused>>"
@@ -31,7 +32,7 @@ add_subdirectory(MathFunctions)
 
 # add the executable
 add_executable(Tutorial tutorial.cxx)
-target_link_libraries(Tutorial PUBLIC MathFunctions)
+target_link_libraries(Tutorial PUBLIC MathFunctions tutorial_compiler_flags)
 
 # add the binary tree to the search path for include files
 # so that we will find TutorialConfig.h
@@ -46,7 +47,7 @@ install(FILES "${PROJECT_BINARY_DIR}/TutorialConfig.h"
   )
 
 # enable testing
-enable_testing()
+include(CTest)
 
 # does the application run
 add_test(NAME Runs COMMAND Tutorial 25)
@@ -63,7 +64,7 @@ function(do_test target arg result)
   set_tests_properties(Comp${arg}
     PROPERTIES PASS_REGULAR_EXPRESSION ${result}
     )
-endfunction(do_test)
+endfunction()
 
 # do a bunch of result based tests
 do_test(Tutorial 4 "4 is 2")
@@ -71,11 +72,13 @@ do_test(Tutorial 9 "9 is 3")
 do_test(Tutorial 5 "5 is 2.236")
 do_test(Tutorial 7 "7 is 2.645")
 do_test(Tutorial 25 "25 is 5")
-do_test(Tutorial -25 "-25 is [-nan|nan|0]")
+do_test(Tutorial -25 "-25 is (-nan|nan|0)")
 do_test(Tutorial 0.0001 "0.0001 is 0.01")
 
+# setup installer
 include(InstallRequiredSystemLibraries)
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
 set(CPACK_PACKAGE_VERSION_MAJOR "${Tutorial_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${Tutorial_VERSION_MINOR}")
+set(CPACK_SOURCE_GENERATOR "TGZ")
 include(CPack)

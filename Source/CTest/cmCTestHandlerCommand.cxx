@@ -7,6 +7,7 @@
 #include <cstring>
 #include <sstream>
 
+#include <cm/string_view>
 #include <cmext/string_view>
 
 #include "cmCTest.h"
@@ -14,9 +15,9 @@
 #include "cmExecutionStatus.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmProperty.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmWorkingDirectory.h"
 
 namespace {
@@ -29,8 +30,8 @@ class SaveRestoreErrorState
 public:
   SaveRestoreErrorState()
   {
-    this->InitialErrorState = cmSystemTools::GetErrorOccuredFlag();
-    cmSystemTools::ResetErrorOccuredFlag(); // rest the error state
+    this->InitialErrorState = cmSystemTools::GetErrorOccurredFlag();
+    cmSystemTools::ResetErrorOccurredFlag(); // rest the error state
     this->CaptureCMakeErrorValue = false;
   }
   // if the function has a CAPTURE_CMAKE_ERROR then we should restore
@@ -44,21 +45,21 @@ public:
     // otherwise leave it be what it is
     if (!this->CaptureCMakeErrorValue) {
       if (this->InitialErrorState) {
-        cmSystemTools::SetErrorOccured();
+        cmSystemTools::SetErrorOccurred();
       }
       return;
     }
     // if we have saved the error in a return variable
     // then put things back exactly like they were
-    bool currentState = cmSystemTools::GetErrorOccuredFlag();
+    bool currentState = cmSystemTools::GetErrorOccurredFlag();
     // if the state changed during this command we need
     // to handle it, if not then nothing needs to be done
     if (currentState != this->InitialErrorState) {
       // restore the initial error state
       if (this->InitialErrorState) {
-        cmSystemTools::SetErrorOccured();
+        cmSystemTools::SetErrorOccurred();
       } else {
-        cmSystemTools::ResetErrorOccuredFlag();
+        cmSystemTools::ResetErrorOccurredFlag();
       }
     }
   }
@@ -81,15 +82,13 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
 
   // Process input arguments.
   std::vector<std::string> unparsedArguments;
-  std::vector<std::string> keywordsMissingValue;
-  std::vector<std::string> parsedKeywords;
-  this->Parse(args, &unparsedArguments, &keywordsMissingValue,
-              &parsedKeywords);
-  this->CheckArguments(keywordsMissingValue);
+  this->Parse(args, &unparsedArguments);
+  this->CheckArguments();
 
-  std::sort(parsedKeywords.begin(), parsedKeywords.end());
-  auto it = std::adjacent_find(parsedKeywords.begin(), parsedKeywords.end());
-  if (it != parsedKeywords.end()) {
+  std::sort(this->ParsedKeywords.begin(), this->ParsedKeywords.end());
+  auto it = std::adjacent_find(this->ParsedKeywords.begin(),
+                               this->ParsedKeywords.end());
+  if (it != this->ParsedKeywords.end()) {
     this->Makefile->IssueMessage(
       MessageType::FATAL_ERROR,
       cmStrCat("Called with more than one value for ", *it));
@@ -126,7 +125,7 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
   // CTEST_CONFIGURATION_TYPE script variable if it is defined.
   // The current script value trumps the -C argument on the command
   // line.
-  cmProp ctestConfigType =
+  cmValue ctestConfigType =
     this->Makefile->GetDefinition("CTEST_CONFIGURATION_TYPE");
   if (ctestConfigType) {
     this->CTest->SetConfigType(*ctestConfigType);
@@ -144,7 +143,7 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
         "BuildDirectory", cmSystemTools::CollapseFullPath(bdir), this->Quiet);
     } else {
       cmCTestLog(this->CTest, ERROR_MESSAGE,
-                 "CTEST_BINARY_DIRECTORY not set" << std::endl;);
+                 "CTEST_BINARY_DIRECTORY not set" << std::endl);
     }
   }
   if (!this->Source.empty()) {
@@ -161,11 +160,11 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
       this->Quiet);
   }
 
-  if (cmProp changeId = this->Makefile->GetDefinition("CTEST_CHANGE_ID")) {
+  if (cmValue changeId = this->Makefile->GetDefinition("CTEST_CHANGE_ID")) {
     this->CTest->SetCTestConfiguration("ChangeId", *changeId, this->Quiet);
   }
 
-  cmCTestLog(this->CTest, DEBUG, "Initialize handler" << std::endl;);
+  cmCTestLog(this->CTest, DEBUG, "Initialize handler" << std::endl);
   cmCTestGenericHandler* handler = this->InitializeHandler();
   if (!handler) {
     cmCTestLog(this->CTest, ERROR_MESSAGE,
@@ -212,7 +211,7 @@ bool cmCTestHandlerCommand::InitialPass(std::vector<std::string> const& args,
   // log the error message if there was an error
   if (captureCMakeError) {
     const char* returnString = "0";
-    if (cmSystemTools::GetErrorOccuredFlag()) {
+    if (cmSystemTools::GetErrorOccurredFlag()) {
       returnString = "-1";
       std::string const& err = status.GetError();
       // print out the error if it is not "unknown error" which means
@@ -233,6 +232,7 @@ void cmCTestHandlerCommand::ProcessAdditionalValues(cmCTestGenericHandler*)
 
 void cmCTestHandlerCommand::BindArguments()
 {
+  this->BindParsedKeywords(this->ParsedKeywords);
   this->Bind("APPEND"_s, this->Append);
   this->Bind("QUIET"_s, this->Quiet);
   this->Bind("RETURN_VALUE"_s, this->ReturnValue);
@@ -242,6 +242,6 @@ void cmCTestHandlerCommand::BindArguments()
   this->Bind("SUBMIT_INDEX"_s, this->SubmitIndex);
 }
 
-void cmCTestHandlerCommand::CheckArguments(std::vector<std::string> const&)
+void cmCTestHandlerCommand::CheckArguments()
 {
 }

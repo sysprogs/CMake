@@ -19,10 +19,9 @@ cmWIXAccessControlList::cmWIXAccessControlList(
 
 bool cmWIXAccessControlList::Apply()
 {
-  std::vector<std::string> entries;
-  this->InstalledFile.GetPropertyAsList("CPACK_WIX_ACL", entries);
+  auto entries = this->InstalledFile.GetPropertyAsList("CPACK_WIX_ACL");
 
-  for (std::string const& entry : entries) {
+  for (auto const& entry : entries) {
     this->CreatePermissionElement(entry);
   }
 
@@ -103,13 +102,14 @@ bool cmWIXAccessControlList::IsBooleanAttribute(std::string const& name)
     "Write",
     "WriteAttributes",
     "WriteExtendedAttributes",
-    0
+    nullptr
   };
 
   size_t i = 0;
   while (validAttributes[i]) {
-    if (name == validAttributes[i++])
+    if (name == validAttributes[i++]) {
       return true;
+    }
   }
 
   return false;
@@ -119,9 +119,8 @@ void cmWIXAccessControlList::EmitBooleanAttribute(std::string const& entry,
                                                   std::string const& name)
 {
   if (!this->IsBooleanAttribute(name)) {
-    std::ostringstream message;
-    message << "Unknown boolean attribute '" << name << "'";
-    this->ReportError(entry, message.str());
+    this->ReportError(entry,
+                      cmStrCat("Unknown boolean attribute '", name, '\''));
   }
 
   this->SourceWriter.AddAttribute(name, "yes");

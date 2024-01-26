@@ -6,7 +6,8 @@
 
 #include "cmGeneratorExpression.h"
 #include "cmInstallType.h"
-#include "cmStringAlgorithms.h"
+#include "cmList.h"
+#include "cmListFileCache.h"
 
 class cmLocalGenerator;
 
@@ -17,8 +18,7 @@ cmInstallFilesGenerator::cmInstallFilesGenerator(
   MessageLevel message, bool exclude_from_all, std::string rename,
   bool optional, cmListFileBacktrace backtrace)
   : cmInstallGenerator(dest, configurations, component, message,
-                       exclude_from_all, std::move(backtrace))
-  , LocalGenerator(nullptr)
+                       exclude_from_all, false, std::move(backtrace))
   , Files(files)
   , FilePermissions(std::move(file_permissions))
   , Rename(std::move(rename))
@@ -69,17 +69,15 @@ std::string cmInstallFilesGenerator::GetRename(std::string const& config) const
 std::vector<std::string> cmInstallFilesGenerator::GetFiles(
   std::string const& config) const
 {
-  std::vector<std::string> files;
   if (this->ActionsPerConfig) {
+    cmList files;
     for (std::string const& f : this->Files) {
-      cmExpandList(
-        cmGeneratorExpression::Evaluate(f, this->LocalGenerator, config),
-        files);
+      files.append(
+        cmGeneratorExpression::Evaluate(f, this->LocalGenerator, config));
     }
-  } else {
-    files = this->Files;
+    return std::move(files.data());
   }
-  return files;
+  return this->Files;
 }
 
 void cmInstallFilesGenerator::AddFilesInstallRule(

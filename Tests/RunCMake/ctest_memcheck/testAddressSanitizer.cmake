@@ -12,7 +12,7 @@ endif()
 # clear the log file
 file(REMOVE "${LOG_FILE}.2343")
 
-# create an example error from address santizer
+# create an example error from address sanitizer
 
 file(APPEND "${LOG_FILE}.2343"
 "=================================================================
@@ -42,7 +42,7 @@ Shadow byte legend (one shadow byte represents 8 application bytes):
   Addressable:           00
   Partially addressable: 01 02 03 04 05 06 07
   Heap left redzone:     fa
-  Heap righ redzone:     fb
+  Heap right redzone:    fb
   Freed Heap region:     fd
   Stack left redzone:    f1
   Stack mid redzone:     f2

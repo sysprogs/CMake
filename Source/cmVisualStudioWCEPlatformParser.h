@@ -4,11 +4,10 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include <cstddef>
 #include <map>
 #include <string>
 #include <vector>
-
-#include <stddef.h>
 
 #include "cmXMLParser.h"
 
@@ -17,9 +16,8 @@
 class cmVisualStudioWCEPlatformParser : public cmXMLParser
 {
 public:
-  cmVisualStudioWCEPlatformParser(const char* name = NULL)
+  cmVisualStudioWCEPlatformParser(const char* name = nullptr)
     : RequiredName(name)
-    , FoundRequiredName(false)
   {
   }
 
@@ -43,9 +41,9 @@ public:
   }
 
 protected:
-  virtual void StartElement(const std::string& name, const char** attributes);
-  void EndElement(const std::string& name);
-  void CharacterDataHandler(const char* data, int length);
+  void StartElement(const std::string& name, const char** attributes) override;
+  void EndElement(const std::string& name) override;
+  void CharacterDataHandler(const char* data, int length) override;
 
 private:
   std::string FixPaths(const std::string& paths) const;
@@ -62,7 +60,7 @@ private:
   std::vector<std::string> AvailablePlatforms;
 
   const char* RequiredName;
-  bool FoundRequiredName;
+  bool FoundRequiredName = false;
   std::string VcInstallDir;
   std::string VsInstallDir;
 };

@@ -1,12 +1,16 @@
 include(RunCMake)
 
+run_cmake_script(ConfigureLogScript)
+run_cmake_script(newline)
+
+run_cmake(ConfigureLog)
 run_cmake(defaultmessage)
 run_cmake(nomessage)
 run_cmake(message-internal-warning)
 run_cmake(nomessage-internal-warning)
 run_cmake(warnmessage)
 
-# Have to explicitly give the command for the working dir to be honoured
+# Have to explicitly give the command for the working dir to be honored
 set(RunCMake_TEST_COMMAND_WORKING_DIRECTORY /)
 run_cmake_command(
     warnmessage-rootdir

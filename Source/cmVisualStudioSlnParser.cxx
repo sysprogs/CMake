@@ -3,7 +3,12 @@
 #include "cmVisualStudioSlnParser.h"
 
 #include <cassert>
+#include <memory>
 #include <stack>
+#include <utility>
+#include <vector>
+
+#include <cmext/string_view>
 
 #include "cmsys/FStream.hxx"
 
@@ -77,19 +82,19 @@ bool cmVisualStudioSlnParser::ParsedLine::IsKeyValuePair() const
 
 std::string cmVisualStudioSlnParser::ParsedLine::GetArgVerbatim() const
 {
-  if (this->Arg.second)
-    return Quote + this->Arg.first + Quote;
-  else
-    return this->Arg.first;
+  if (this->Arg.second) {
+    return cmStrCat(Quote, this->Arg.first, Quote);
+  }
+  return this->Arg.first;
 }
 
 const std::string& cmVisualStudioSlnParser::ParsedLine::GetValue(
   size_t idxValue) const
 {
-  if (idxValue < this->Values.size())
+  if (idxValue < this->Values.size()) {
     return this->Values[idxValue].first;
-  else
-    return BadString;
+  }
+  return BadString;
 }
 
 std::string cmVisualStudioSlnParser::ParsedLine::GetValueVerbatim(
@@ -97,12 +102,12 @@ std::string cmVisualStudioSlnParser::ParsedLine::GetValueVerbatim(
 {
   if (idxValue < this->Values.size()) {
     const StringData& data = this->Values[idxValue];
-    if (data.second)
-      return Quote + data.first + Quote;
-    else
-      return data.first;
-  } else
-    return BadString;
+    if (data.second) {
+      return cmStrCat(Quote, data.first, Quote);
+    }
+    return data.first;
+  }
+  return BadString;
 }
 
 class cmVisualStudioSlnParser::State
@@ -137,17 +142,17 @@ private:
   std::stack<FileState> Stack;
   std::string EndIgnoreTag;
   DataGroupSet RequestedData;
-  size_t CurrentLine;
+  size_t CurrentLine = 0;
 
   void IgnoreUntilTag(const std::string& endTag);
 };
 
 cmVisualStudioSlnParser::State::State(DataGroupSet requestedData)
   : RequestedData(requestedData)
-  , CurrentLine(0)
 {
-  if (this->RequestedData.test(DataGroupProjectDependenciesBit))
+  if (this->RequestedData.test(DataGroupProjectDependenciesBit)) {
     this->RequestedData.set(DataGroupProjectsBit);
+  }
   this->Stack.push(FileStateStart);
 }
 
@@ -166,17 +171,12 @@ LineFormat cmVisualStudioSlnParser::State::NextLineFormat() const
     case FileStateTopLevel:
       return LineMultiValueTag;
     case FileStateProject:
-      return LineSingleValueTag;
-    case FileStateProjectDependencies:
-      return LineKeyValuePair;
     case FileStateGlobal:
       return LineSingleValueTag;
+    case FileStateProjectDependencies:
     case FileStateSolutionConfigurations:
-      return LineKeyValuePair;
     case FileStateProjectConfigurations:
-      return LineKeyValuePair;
     case FileStateSolutionFilters:
-      return LineKeyValuePair;
     case FileStateGlobalSection:
       return LineKeyValuePair;
     case FileStateIgnore:
@@ -203,7 +203,7 @@ bool cmVisualStudioSlnParser::State::Process(
       this->Stack.push(FileStateTopLevel);
       break;
     case FileStateTopLevel:
-      if (line.GetTag().compare("Project") == 0) {
+      if (line.GetTag() == "Project"_s) {
         if (line.GetValueCount() != 3) {
           result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
           return false;
@@ -215,115 +215,146 @@ bool cmVisualStudioSlnParser::State::Process(
             return false;
           }
           this->Stack.push(FileStateProject);
-        } else
+        } else {
           this->IgnoreUntilTag("EndProject");
-      } else if (line.GetTag().compare("Global") == 0)
+        }
+      } else if (line.GetTag() == "Global"_s) {
+
         this->Stack.push(FileStateGlobal);
-      else {
+      } else if (line.GetTag() == "VisualStudioVersion"_s) {
+        output.SetVisualStudioVersion(line.GetValue(0));
+      } else if (line.GetTag() == "MinimumVisualStudioVersion"_s) {
+        output.SetMinimumVisualStudioVersion(line.GetValue(0));
+      } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateProject:
-      if (line.GetTag().compare("EndProject") == 0)
+      if (line.GetTag() == "EndProject"_s) {
         this->Stack.pop();
-      else if (line.GetTag().compare("ProjectSection") == 0) {
-        if (line.GetArg().compare("ProjectDependencies") == 0 &&
-            line.GetValue(0).compare("postProject") == 0) {
-          if (this->RequestedData.test(DataGroupProjectDependenciesBit))
+      } else if (line.GetTag() == "ProjectSection"_s) {
+        if (line.GetArg() == "ProjectDependencies"_s &&
+            line.GetValue(0) == "postProject"_s) {
+          if (this->RequestedData.test(DataGroupProjectDependenciesBit)) {
             this->Stack.push(FileStateProjectDependencies);
-          else
+          } else {
             this->IgnoreUntilTag("EndProjectSection");
-        } else
+          }
+        } else {
           this->IgnoreUntilTag("EndProjectSection");
+        }
       } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateProjectDependencies:
-      if (line.GetTag().compare("EndProjectSection") == 0)
+      if (line.GetTag() == "EndProjectSection"_s) {
         this->Stack.pop();
-      else if (line.IsKeyValuePair())
+      } else if (line.IsKeyValuePair()) {
         // implement dependency storing here, once needed
         ;
-      else {
+      } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateGlobal:
-      if (line.GetTag().compare("EndGlobal") == 0)
+      if (line.GetTag() == "EndGlobal"_s) {
         this->Stack.pop();
-      else if (line.GetTag().compare("GlobalSection") == 0) {
-        if (line.GetArg().compare("SolutionConfigurationPlatforms") == 0 &&
-            line.GetValue(0).compare("preSolution") == 0) {
-          if (this->RequestedData.test(DataGroupSolutionConfigurationsBit))
+      } else if (line.GetTag() == "GlobalSection"_s) {
+        if (line.GetArg() == "SolutionConfigurationPlatforms"_s &&
+            line.GetValue(0) == "preSolution"_s) {
+          if (this->RequestedData.test(DataGroupSolutionConfigurationsBit)) {
             this->Stack.push(FileStateSolutionConfigurations);
-          else
+          } else {
             this->IgnoreUntilTag("EndGlobalSection");
-        } else if (line.GetArg().compare("ProjectConfigurationPlatforms") ==
-                     0 &&
-                   line.GetValue(0).compare("postSolution") == 0) {
-          if (this->RequestedData.test(DataGroupProjectConfigurationsBit))
+          }
+        } else if (line.GetArg() == "ProjectConfigurationPlatforms"_s &&
+                   line.GetValue(0) == "postSolution"_s) {
+          if (this->RequestedData.test(DataGroupProjectConfigurationsBit)) {
             this->Stack.push(FileStateProjectConfigurations);
-          else
+          } else {
             this->IgnoreUntilTag("EndGlobalSection");
-        } else if (line.GetArg().compare("NestedProjects") == 0 &&
-                   line.GetValue(0).compare("preSolution") == 0) {
-          if (this->RequestedData.test(DataGroupSolutionFiltersBit))
+          }
+        } else if (line.GetArg() == "NestedProjects"_s &&
+                   line.GetValue(0) == "preSolution"_s) {
+          if (this->RequestedData.test(DataGroupSolutionFiltersBit)) {
             this->Stack.push(FileStateSolutionFilters);
-          else
+          } else {
             this->IgnoreUntilTag("EndGlobalSection");
-        } else if (this->RequestedData.test(DataGroupGenericGlobalSectionsBit))
+          }
+        } else if (this->RequestedData.test(
+                     DataGroupGenericGlobalSectionsBit)) {
           this->Stack.push(FileStateGlobalSection);
-        else
+        } else {
           this->IgnoreUntilTag("EndGlobalSection");
+        }
       } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateSolutionConfigurations:
-      if (line.GetTag().compare("EndGlobalSection") == 0)
+      if (line.GetTag() == "EndGlobalSection"_s) {
         this->Stack.pop();
-      else if (line.IsKeyValuePair())
-        // implement configuration storing here, once needed
-        ;
-      else {
+      } else if (line.IsKeyValuePair()) {
+        output.AddConfiguration(line.GetValue(0));
+      } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateProjectConfigurations:
-      if (line.GetTag().compare("EndGlobalSection") == 0)
+      if (line.GetTag() == "EndGlobalSection"_s) {
         this->Stack.pop();
-      else if (line.IsKeyValuePair())
-        // implement configuration storing here, once needed
-        ;
-      else {
+      } else if (line.IsKeyValuePair()) {
+        std::vector<std::string> tagElements =
+          cmSystemTools::SplitString(line.GetTag(), '.');
+        if (tagElements.size() != 3 && tagElements.size() != 4) {
+          result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
+          return false;
+        }
+
+        std::string guid = tagElements[0];
+        std::string solutionConfiguration = tagElements[1];
+        std::string activeBuild = tagElements[2];
+        cm::optional<cmSlnProjectEntry> projectEntry =
+          output.GetProjectByGUID(guid);
+
+        if (!projectEntry) {
+          result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
+          return false;
+        }
+
+        if (activeBuild == "ActiveCfg"_s) {
+          projectEntry->AddProjectConfiguration(solutionConfiguration,
+                                                line.GetValue(0));
+        }
+      } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateSolutionFilters:
-      if (line.GetTag().compare("EndGlobalSection") == 0)
+      if (line.GetTag() == "EndGlobalSection"_s) {
         this->Stack.pop();
-      else if (line.IsKeyValuePair())
+      } else if (line.IsKeyValuePair()) {
         // implement filter storing here, once needed
         ;
-      else {
+      } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
       break;
     case FileStateGlobalSection:
-      if (line.GetTag().compare("EndGlobalSection") == 0)
+      if (line.GetTag() == "EndGlobalSection"_s) {
         this->Stack.pop();
-      else if (line.IsKeyValuePair())
+      } else if (line.IsKeyValuePair()) {
         // implement section storing here, once needed
         ;
-      else {
+      } else {
         result.SetError(ResultErrorInputStructure, this->GetCurrentLine());
         return false;
       }
@@ -358,11 +389,7 @@ void cmVisualStudioSlnParser::State::IgnoreUntilTag(const std::string& endTag)
   this->EndIgnoreTag = endTag;
 }
 
-cmVisualStudioSlnParser::ResultData::ResultData()
-  : Result(ResultOK)
-  , ResultLine(0)
-{
-}
+cmVisualStudioSlnParser::ResultData::ResultData() = default;
 
 void cmVisualStudioSlnParser::ResultData::Clear()
 {
@@ -452,8 +479,7 @@ bool cmVisualStudioSlnParser::GetParseHadBOM() const
 bool cmVisualStudioSlnParser::IsDataGroupSetSupported(
   DataGroupSet dataGroups) const
 {
-  return (dataGroups & DataGroupProjects) == dataGroups;
-  // only supporting DataGroupProjects for now
+  return (dataGroups & DataGroupProjects) != 0;
 }
 
 bool cmVisualStudioSlnParser::ParseImpl(std::istream& input, cmSlnData& output,
@@ -461,34 +487,41 @@ bool cmVisualStudioSlnParser::ParseImpl(std::istream& input, cmSlnData& output,
 {
   std::string line;
   // Does the .sln start with a Byte Order Mark?
-  if (!this->ParseBOM(input, line, state))
+  if (!this->ParseBOM(input, line, state)) {
     return false;
+  }
   do {
     line = cmTrimWhitespace(line);
-    if (line.empty())
+    if (line.empty()) {
       continue;
+    }
     ParsedLine parsedLine;
     switch (state.NextLineFormat()) {
       case LineMultiValueTag:
-        if (!this->ParseMultiValueTag(line, parsedLine, state))
+        if (!this->ParseMultiValueTag(line, parsedLine, state)) {
           return false;
+        }
         break;
       case LineSingleValueTag:
-        if (!this->ParseSingleValueTag(line, parsedLine, state))
+        if (!this->ParseSingleValueTag(line, parsedLine, state)) {
           return false;
+        }
         break;
       case LineKeyValuePair:
-        if (!this->ParseKeyValuePair(line, parsedLine, state))
+        if (!this->ParseKeyValuePair(line, parsedLine, state)) {
           return false;
+        }
         break;
       case LineVerbatim:
         parsedLine.CopyVerbatim(line);
         break;
     }
-    if (parsedLine.IsComment())
+    if (parsedLine.IsComment()) {
       continue;
-    if (!state.Process(parsedLine, output, this->LastResult))
+    }
+    if (!state.Process(parsedLine, output, this->LastResult)) {
       return false;
+    }
   } while (state.ReadLine(input, line));
   return state.Finished(this->LastResult);
 }
@@ -507,8 +540,9 @@ bool cmVisualStudioSlnParser::ParseBOM(std::istream& input, std::string& line,
     this->LastResult.SetError(ResultErrorReadingInput, 1);
     return false;
   }
-  if (!this->LastResult.HadBOM)
-    line = bom + line; // it wasn't a BOM, prepend it to first line
+  if (!this->LastResult.HadBOM) {
+    line = cmStrCat(bom, line); // it wasn't a BOM, prepend it to first line
+  }
   return true;
 }
 
@@ -518,9 +552,10 @@ bool cmVisualStudioSlnParser::ParseMultiValueTag(const std::string& line,
 {
   size_t idxEqualSign = line.find('=');
   auto fullTag = cm::string_view(line).substr(0, idxEqualSign);
-  if (!this->ParseTag(fullTag, parsedLine, state))
+  if (!this->ParseTag(fullTag, parsedLine, state)) {
     return false;
-  if (idxEqualSign != line.npos) {
+  }
+  if (idxEqualSign != std::string::npos) {
     size_t idxFieldStart = idxEqualSign + 1;
     if (idxFieldStart < line.size()) {
       size_t idxParsing = idxFieldStart;
@@ -528,24 +563,27 @@ bool cmVisualStudioSlnParser::ParseMultiValueTag(const std::string& line,
       for (;;) {
         idxParsing = line.find_first_of(",\"", idxParsing);
         bool fieldOver = false;
-        if (idxParsing == line.npos) {
+        if (idxParsing == std::string::npos) {
           fieldOver = true;
           if (inQuotes) {
             this->LastResult.SetError(ResultErrorInputStructure,
                                       state.GetCurrentLine());
             return false;
           }
-        } else if (line[idxParsing] == ',' && !inQuotes)
+        } else if (line[idxParsing] == ',' && !inQuotes) {
           fieldOver = true;
-        else if (line[idxParsing] == '"')
+        } else if (line[idxParsing] == '"') {
           inQuotes = !inQuotes;
+        }
         if (fieldOver) {
           if (!this->ParseValue(
                 line.substr(idxFieldStart, idxParsing - idxFieldStart),
-                parsedLine))
+                parsedLine)) {
             return false;
-          if (idxParsing == line.npos)
+          }
+          if (idxParsing == std::string::npos) {
             break; // end of last field
+          }
           idxFieldStart = idxParsing + 1;
         }
         ++idxParsing;
@@ -561,11 +599,13 @@ bool cmVisualStudioSlnParser::ParseSingleValueTag(const std::string& line,
 {
   size_t idxEqualSign = line.find('=');
   auto fullTag = cm::string_view(line).substr(0, idxEqualSign);
-  if (!this->ParseTag(fullTag, parsedLine, state))
+  if (!this->ParseTag(fullTag, parsedLine, state)) {
     return false;
-  if (idxEqualSign != line.npos) {
-    if (!this->ParseValue(line.substr(idxEqualSign + 1), parsedLine))
+  }
+  if (idxEqualSign != std::string::npos) {
+    if (!this->ParseValue(line.substr(idxEqualSign + 1), parsedLine)) {
       return false;
+    }
   }
   return true;
 }
@@ -575,7 +615,7 @@ bool cmVisualStudioSlnParser::ParseKeyValuePair(const std::string& line,
                                                 State& /*state*/)
 {
   size_t idxEqualSign = line.find('=');
-  if (idxEqualSign == line.npos) {
+  if (idxEqualSign == std::string::npos) {
     parsedLine.CopyVerbatim(line);
     return true;
   }
@@ -610,8 +650,9 @@ bool cmVisualStudioSlnParser::ParseTag(cm::string_view fullTag,
       return false;
     }
     parsedLine.SetQuotedArg(arg.substr(1, arg.size() - 2));
-  } else
+  } else {
     parsedLine.SetArg(arg);
+  }
   return true;
 }
 
@@ -619,11 +660,12 @@ bool cmVisualStudioSlnParser::ParseValue(const std::string& value,
                                          ParsedLine& parsedLine)
 {
   const std::string& trimmed = cmTrimWhitespace(value);
-  if (trimmed.empty())
+  if (trimmed.empty()) {
     parsedLine.AddValue(trimmed);
-  else if (trimmed.front() == '"' && trimmed.back() == '"')
+  } else if (trimmed.front() == '"' && trimmed.back() == '"') {
     parsedLine.AddQuotedValue(trimmed.substr(1, trimmed.size() - 2));
-  else
+  } else {
     parsedLine.AddValue(trimmed);
+  }
   return true;
 }

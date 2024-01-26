@@ -13,9 +13,8 @@
 
 #include "cmCTest.h"
 #include "cmCTestVC.h"
-#include "cmProcessTools.h"
+#include "cmList.h"
 #include "cmRange.h"
-#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 
 cmCTestP4::cmCTestP4(cmCTest* ct, std::ostream& log)
@@ -118,7 +117,6 @@ class cmCTestP4::DiffParser : public cmCTestVC::LineParser
 public:
   DiffParser(cmCTestP4* p4, const char* prefix)
     : P4(p4)
-    , AlreadyNotified(false)
   {
     this->SetLog(&this->P4->Log, prefix);
     this->RegexDiff.compile("^==== (.*)#[0-9]+ - (.*)");
@@ -126,7 +124,7 @@ public:
 
 private:
   cmCTestP4* P4;
-  bool AlreadyNotified;
+  bool AlreadyNotified = false;
   std::string CurrentPath;
   cmsys::RegularExpression RegexDiff;
 
@@ -151,17 +149,16 @@ cmCTestP4::User cmCTestP4::GetUserData(const std::string& username)
   auto it = this->Users.find(username);
 
   if (it == this->Users.end()) {
-    std::vector<char const*> p4_users;
+    std::vector<std::string> p4_users;
     this->SetP4Options(p4_users);
     p4_users.push_back("users");
     p4_users.push_back("-m");
     p4_users.push_back("1");
-    p4_users.push_back(username.c_str());
-    p4_users.push_back(nullptr);
+    p4_users.push_back(username);
 
     UserParser out(this, "users-out> ");
     OutputLogger err(this->Log, "users-err> ");
-    this->RunChild(&p4_users[0], &out, &err);
+    this->RunChild(p4_users, &out, &err);
 
     // The user should now be added to the map. Search again.
     it = this->Users.find(username);
@@ -193,7 +190,6 @@ public:
   DescribeParser(cmCTestP4* p4, const char* prefix)
     : LineParser('\n', false)
     , P4(p4)
-    , Section(SectionHeader)
   {
     this->SetLog(&this->P4->Log, prefix);
     this->RegexHeader.compile("^Change ([0-9]+) by (.+)@(.+) on (.*)$");
@@ -216,7 +212,7 @@ private:
     SectionDiff,
     SectionCount
   };
-  SectionType Section;
+  SectionType Section = SectionHeader;
   Revision Rev;
 
   bool ProcessLine() override
@@ -250,7 +246,8 @@ private:
       this->Rev = Revision();
     }
 
-    this->Section = SectionType((this->Section + 1) % SectionCount);
+    this->Section =
+      static_cast<SectionType>((this->Section + 1) % SectionCount);
   }
 
   void DoHeaderLine()
@@ -305,10 +302,10 @@ private:
   }
 };
 
-void cmCTestP4::SetP4Options(std::vector<char const*>& CommandOptions)
+void cmCTestP4::SetP4Options(std::vector<std::string>& CommandOptions)
 {
   if (this->P4Options.empty()) {
-    const char* p4 = this->CommandLineTool.c_str();
+    std::string p4 = this->CommandLineTool;
     this->P4Options.emplace_back(p4);
 
     // The CTEST_P4_CLIENT variable sets the P4 client used when issuing
@@ -330,15 +327,12 @@ void cmCTestP4::SetP4Options(std::vector<char const*>& CommandOptions)
     cm::append(this->P4Options, cmSystemTools::ParseArguments(opts));
   }
 
-  CommandOptions.clear();
-  for (std::string const& o : this->P4Options) {
-    CommandOptions.push_back(o.c_str());
-  }
+  CommandOptions = this->P4Options;
 }
 
 std::string cmCTestP4::GetWorkingRevision()
 {
-  std::vector<char const*> p4_identify;
+  std::vector<std::string> p4_identify;
   this->SetP4Options(p4_identify);
 
   p4_identify.push_back("changes");
@@ -347,14 +341,13 @@ std::string cmCTestP4::GetWorkingRevision()
   p4_identify.push_back("-t");
 
   std::string source = this->SourceDirectory + "/...#have";
-  p4_identify.push_back(source.c_str());
-  p4_identify.push_back(nullptr);
+  p4_identify.push_back(source);
 
   std::string rev;
   IdentifyParser out(this, "p4_changes-out> ", rev);
   OutputLogger err(this->Log, "p4_changes-err> ");
 
-  bool result = this->RunChild(&p4_identify[0], &out, &err);
+  bool result = this->RunChild(p4_identify, &out, &err);
 
   // If there was a problem contacting the server return "<unknown>"
   if (!result) {
@@ -390,7 +383,7 @@ bool cmCTestP4::NoteNewRevision()
 
 bool cmCTestP4::LoadRevisions()
 {
-  std::vector<char const*> p4_changes;
+  std::vector<std::string> p4_changes;
   this->SetP4Options(p4_changes);
 
   // Use 'p4 changes ...@old,new' to get a list of changelists
@@ -411,38 +404,36 @@ bool cmCTestP4::LoadRevisions()
     .append(this->NewRevision);
 
   p4_changes.push_back("changes");
-  p4_changes.push_back(range.c_str());
-  p4_changes.push_back(nullptr);
+  p4_changes.push_back(range);
 
   ChangesParser out(this, "p4_changes-out> ");
   OutputLogger err(this->Log, "p4_changes-err> ");
 
   this->ChangeLists.clear();
-  this->RunChild(&p4_changes[0], &out, &err);
+  this->RunChild(p4_changes, &out, &err);
 
   if (this->ChangeLists.empty()) {
     return true;
   }
 
   // p4 describe -s ...@1111111,2222222
-  std::vector<char const*> p4_describe;
+  std::vector<std::string> p4_describe;
   for (std::string const& i : cmReverseRange(this->ChangeLists)) {
     this->SetP4Options(p4_describe);
     p4_describe.push_back("describe");
     p4_describe.push_back("-s");
-    p4_describe.push_back(i.c_str());
-    p4_describe.push_back(nullptr);
+    p4_describe.push_back(i);
 
     DescribeParser outDescribe(this, "p4_describe-out> ");
     OutputLogger errDescribe(this->Log, "p4_describe-err> ");
-    this->RunChild(&p4_describe[0], &outDescribe, &errDescribe);
+    this->RunChild(p4_describe, &outDescribe, &errDescribe);
   }
   return true;
 }
 
 bool cmCTestP4::LoadModifications()
 {
-  std::vector<char const*> p4_diff;
+  std::vector<std::string> p4_diff;
   this->SetP4Options(p4_diff);
 
   p4_diff.push_back("diff");
@@ -450,30 +441,26 @@ bool cmCTestP4::LoadModifications()
   // Ideally we would use -Od but not all clients support it
   p4_diff.push_back("-dn");
   std::string source = this->SourceDirectory + "/...";
-  p4_diff.push_back(source.c_str());
-  p4_diff.push_back(nullptr);
+  p4_diff.push_back(source);
 
   DiffParser out(this, "p4_diff-out> ");
   OutputLogger err(this->Log, "p4_diff-err> ");
-  this->RunChild(&p4_diff[0], &out, &err);
+  this->RunChild(p4_diff, &out, &err);
   return true;
 }
 
 bool cmCTestP4::UpdateCustom(const std::string& custom)
 {
-  std::vector<std::string> p4_custom_command = cmExpandedList(custom, true);
+  cmList p4_custom_command{ custom, cmList::EmptyElements::Yes };
 
-  std::vector<char const*> p4_custom;
-  p4_custom.reserve(p4_custom_command.size() + 1);
-  for (std::string const& i : p4_custom_command) {
-    p4_custom.push_back(i.c_str());
-  }
-  p4_custom.push_back(nullptr);
+  std::vector<std::string> p4_custom;
+  p4_custom.reserve(p4_custom_command.size());
+  cm::append(p4_custom, p4_custom_command);
 
   OutputLogger custom_out(this->Log, "p4_customsync-out> ");
   OutputLogger custom_err(this->Log, "p4_customsync-err> ");
 
-  return this->RunUpdateCommand(&p4_custom[0], &custom_out, &custom_err);
+  return this->RunUpdateCommand(p4_custom, &custom_out, &custom_err);
 }
 
 bool cmCTestP4::UpdateImpl()
@@ -490,7 +477,7 @@ bool cmCTestP4::UpdateImpl()
     return false;
   }
 
-  std::vector<char const*> p4_sync;
+  std::vector<std::string> p4_sync;
   this->SetP4Options(p4_sync);
 
   p4_sync.push_back("sync");
@@ -501,9 +488,7 @@ bool cmCTestP4::UpdateImpl()
     opts = this->CTest->GetCTestConfiguration("P4UpdateOptions");
   }
   std::vector<std::string> args = cmSystemTools::ParseArguments(opts);
-  for (std::string const& arg : args) {
-    p4_sync.push_back(arg.c_str());
-  }
+  cm::append(p4_sync, args);
 
   std::string source = this->SourceDirectory + "/...";
 
@@ -517,11 +502,10 @@ bool cmCTestP4::UpdateImpl()
     source.append("@\"").append(date).append("\"");
   }
 
-  p4_sync.push_back(source.c_str());
-  p4_sync.push_back(nullptr);
+  p4_sync.push_back(source);
 
   OutputLogger out(this->Log, "p4_sync-out> ");
   OutputLogger err(this->Log, "p4_sync-err> ");
 
-  return this->RunUpdateCommand(&p4_sync[0], &out, &err);
+  return this->RunUpdateCommand(p4_sync, &out, &err);
 }

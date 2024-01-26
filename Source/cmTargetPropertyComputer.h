@@ -6,38 +6,35 @@
 
 #include <string>
 
-#include "cmListFileCache.h"
-#include "cmProperty.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 
-class cmMessenger;
+class cmMakefile;
 
 class cmTargetPropertyComputer
 {
 public:
   template <typename Target>
-  static cmProp GetProperty(Target const* tgt, const std::string& prop,
-                            cmMessenger* messenger,
-                            cmListFileBacktrace const& context)
+  static cmValue GetProperty(Target const* tgt, const std::string& prop,
+                             cmMakefile const& mf)
   {
-    if (cmProp loc = GetLocation(tgt, prop, messenger, context)) {
+    if (cmValue loc = GetLocation(tgt, prop, mf)) {
       return loc;
     }
-    if (cmSystemTools::GetFatalErrorOccured()) {
+    if (cmSystemTools::GetFatalErrorOccurred()) {
       return nullptr;
     }
     if (prop == "SOURCES") {
-      return GetSources(tgt, messenger, context);
+      return GetSources(tgt, mf);
     }
     return nullptr;
   }
 
 private:
   static bool HandleLocationPropertyPolicy(std::string const& tgtName,
-                                           cmMessenger* messenger,
-                                           cmListFileBacktrace const& context);
+                                           cmMakefile const& mf);
 
   template <typename Target>
   static const std::string& ComputeLocationForBuild(Target const* tgt);
@@ -46,9 +43,8 @@ private:
                                             std::string const& config);
 
   template <typename Target>
-  static cmProp GetLocation(Target const* tgt, std::string const& prop,
-                            cmMessenger* messenger,
-                            cmListFileBacktrace const& context)
+  static cmValue GetLocation(Target const* tgt, std::string const& prop,
+                             cmMakefile const& mf)
 
   {
     // Watch for special "computed" properties that are dependent on
@@ -61,22 +57,20 @@ private:
       static const std::string propLOCATION = "LOCATION";
       if (prop == propLOCATION) {
         if (!tgt->IsImported() &&
-            !HandleLocationPropertyPolicy(tgt->GetName(), messenger,
-                                          context)) {
+            !HandleLocationPropertyPolicy(tgt->GetName(), mf)) {
           return nullptr;
         }
-        return &ComputeLocationForBuild(tgt);
+        return cmValue(ComputeLocationForBuild(tgt));
       }
 
       // Support "LOCATION_<CONFIG>".
       if (cmHasLiteralPrefix(prop, "LOCATION_")) {
         if (!tgt->IsImported() &&
-            !HandleLocationPropertyPolicy(tgt->GetName(), messenger,
-                                          context)) {
+            !HandleLocationPropertyPolicy(tgt->GetName(), mf)) {
           return nullptr;
         }
         std::string configName = prop.substr(9);
-        return &ComputeLocation(tgt, configName);
+        return cmValue(ComputeLocation(tgt, configName));
       }
 
       // Support "<CONFIG>_LOCATION".
@@ -85,11 +79,10 @@ private:
         std::string configName(prop.c_str(), prop.size() - 9);
         if (configName != "IMPORTED") {
           if (!tgt->IsImported() &&
-              !HandleLocationPropertyPolicy(tgt->GetName(), messenger,
-                                            context)) {
+              !HandleLocationPropertyPolicy(tgt->GetName(), mf)) {
             return nullptr;
           }
-          return &ComputeLocation(tgt, configName);
+          return cmValue(ComputeLocation(tgt, configName));
         }
       }
     }
@@ -97,6 +90,5 @@ private:
   }
 
   template <typename Target>
-  static cmProp GetSources(Target const* tgt, cmMessenger* messenger,
-                           cmListFileBacktrace const& context);
+  static cmValue GetSources(Target const* tgt, cmMakefile const& mf);
 };

@@ -27,13 +27,13 @@ static bool parsedRight(cmVisualStudioSlnParser& parser,
   return false;
 }
 
-int testVisualStudioSlnParser(int, char* [])
+int testVisualStudioSlnParser(int, char*[])
 {
   cmVisualStudioSlnParser parser;
 
   // Test clean parser
   if (parser.GetParseResult() != cmVisualStudioSlnParser::ResultOK) {
-    std::cerr << "cmVisualStudioSlnParser initialisation failed" << std::endl;
+    std::cerr << "cmVisualStudioSlnParser initialization failed" << std::endl;
     return 1;
   }
 
@@ -80,7 +80,6 @@ int testVisualStudioSlnParser(int, char* [])
       "cmsysProcessFwd9x",
       "cmsysTestDynload",
       "cmsysTestProcess",
-      "cmsysTestSharedForward",
       "cmsysTestsC",
       "cmsysTestsCxx",
       "cmsys_c",

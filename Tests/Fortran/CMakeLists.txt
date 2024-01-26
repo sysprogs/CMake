@@ -1,4 +1,7 @@
 cmake_minimum_required (VERSION 3.1)
+if(POLICY CMP0129)
+  cmake_policy(SET CMP0129 NEW)
+endif()
 project(testf C CXX Fortran)
 
 message("CTEST_FULL_OUTPUT ")
@@ -14,7 +17,7 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "^(XL|VisualAge)$")
   # We do not implement SHARED Fortran libs on AIX yet!
   # Workaround: Set LINKER_LANGUAGE to C, which uses 'xlc' and Fortran implicits.
   set(_SHARED STATIC)
-elseif(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "GNU|LCC")
   # g77 2.96 does not support shared libs on Itanium because g2c is not -fPIC
   execute_process(COMMAND ${CMAKE_Fortran_COMPILER} --version
                   OUTPUT_VARIABLE output ERROR_VARIABLE output)
@@ -26,7 +29,7 @@ endif()
 # Pick a module .def file with the properly mangled symbol name.
 set(world_def "")
 if(WIN32 AND NOT CYGWIN)
-  if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+  if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU|LCC|LLVMFlang")
     set(world_def world_gnu.def)
   elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel" OR
       CMAKE_GENERATOR MATCHES "Visual Studio") # Intel plugin
@@ -46,7 +49,7 @@ function(test_fortran_c_interface_module)
   FortranCInterface_VERIFY()
   FortranCInterface_VERIFY(CXX)
   if(CMAKE_Fortran_COMPILER_SUPPORTS_F90)
-    if(NOT CMAKE_Fortran_COMPILER_ID MATCHES "SunPro|PathScale|Absoft")
+    if(NOT CMAKE_Fortran_COMPILER_ID MATCHES "SunPro|PathScale|Absoft|Fujitsu|LCC")
       set(module_expected 1)
     endif()
     if(FortranCInterface_MODULE_FOUND OR module_expected)
@@ -120,7 +123,7 @@ endfunction()
 # if the id's match or the compilers are compatible, then
 # call the test_fortran_c_interface_module function
 if("${CMAKE_Fortran_COMPILER_ID}:${CMAKE_C_COMPILER_ID}" MATCHES
-    "(Intel(LLVM)?:MSVC|Absoft:GNU)"
+    "(Intel(LLVM)?:MSVC|Absoft:GNU|LLVMFlang:(GNU|Clang))"
     OR ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "${CMAKE_C_COMPILER_ID}" ))
   test_fortran_c_interface_module()
 else()
@@ -131,7 +134,7 @@ else()
   # as a language, cmake needs language specific versions
   # of these variables....
   if(WIN32 AND CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    set(CMAKE_CREATE_CONSOLE_EXE )
+    set(CMAKE_Fortran_CREATE_CONSOLE_EXE )
     set(CMAKE_LIBRARY_PATH_FLAG "-L")
     set(CMAKE_LINK_LIBRARY_FLAG "-l")
     set(CMAKE_LINK_LIBRARY_SUFFIX )

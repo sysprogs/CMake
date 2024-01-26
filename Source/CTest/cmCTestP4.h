@@ -34,20 +34,12 @@ private:
     std::string Name;
     std::string EMail;
     std::string AccessTime;
-
-    User()
-      : UserName()
-      , Name()
-      , EMail()
-      , AccessTime()
-    {
-    }
   };
   std::map<std::string, User> Users;
   std::vector<std::string> P4Options;
 
   User GetUserData(const std::string& username);
-  void SetP4Options(std::vector<char const*>& options);
+  void SetP4Options(std::vector<std::string>& options);
 
   std::string GetWorkingRevision();
   bool NoteOldRevision() override;

@@ -2,13 +2,26 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
+#include <iosfwd>
+#include <map>
 #include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "cmGlobalGeneratorFactory.h"
+#include <cm3p/json/value.h>
+
 #include "cmGlobalVisualStudioGenerator.h"
+#include "cmValue.h"
 
-class cmTarget;
+class cmGeneratorTarget;
 struct cmIDEFlagTable;
+class cmLocalGenerator;
+class cmMakefile;
+class cmake;
+template <typename T>
+class BT;
 
 /** \class cmGlobalVisualStudio7Generator
  * \brief Write a Unix makefiles.
@@ -18,7 +31,7 @@ struct cmIDEFlagTable;
 class cmGlobalVisualStudio7Generator : public cmGlobalVisualStudioGenerator
 {
 public:
-  ~cmGlobalVisualStudio7Generator();
+  ~cmGlobalVisualStudio7Generator() override;
 
   //! Create a local generator appropriate to this Global Generator
   std::unique_ptr<cmLocalGenerator> CreateLocalGenerator(
@@ -56,7 +69,8 @@ public:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
     const std::string& makeProgram, const std::string& projectName,
     const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, bool fast, int jobs, bool verbose,
+    const std::string& config, int jobs, bool verbose,
+    const cmBuildOptions& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 
@@ -92,6 +106,7 @@ public:
   bool FindMakeProgram(cmMakefile* mf) override;
 
   /** Is the Microsoft Assembler enabled?  */
+  bool IsMarmasmEnabled() const { return this->MarmasmEnabled; }
   bool IsMasmEnabled() const { return this->MasmEnabled; }
   bool IsNasmEnabled() const { return this->NasmEnabled; }
 
@@ -99,6 +114,8 @@ public:
   virtual std::string Encoding();
 
   cmIDEFlagTable const* ExtraFlagTable;
+
+  virtual bool SupportsCxxModuleDyndep() const { return false; }
 
 protected:
   cmGlobalVisualStudio7Generator(cmake* cm,
@@ -134,15 +151,13 @@ protected:
   virtual void WriteTargetsToSolution(
     std::ostream& fout, cmLocalGenerator* root,
     OrderedTargetDependSet const& projectTargets);
-  virtual void WriteTargetDepends(
-    std::ostream& fout, OrderedTargetDependSet const& projectTargets);
   virtual void WriteTargetConfigurations(
     std::ostream& fout, std::vector<std::string> const& configs,
     OrderedTargetDependSet const& projectTargets);
 
   virtual void WriteExternalProject(
     std::ostream& fout, const std::string& name, const std::string& path,
-    const char* typeGuid,
+    cmValue typeGuid,
     const std::set<BT<std::pair<std::string, bool>>>& dependencies) = 0;
 
   std::string ConvertToSolutionPath(const std::string& path);
@@ -162,6 +177,7 @@ protected:
   // Set during OutputSLNFile with the name of the current project.
   // There is one SLN file per project.
   std::string CurrentProject;
+  bool MarmasmEnabled;
   bool MasmEnabled;
   bool NasmEnabled;
 

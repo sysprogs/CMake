@@ -2,23 +2,26 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmLocalVisualStudio10Generator.h"
 
-#include <cmext/algorithm>
+#include <cmext/string_view>
 
 #include <cm3p/expat.h>
 
-#include "cmAlgorithms.h"
-#include "cmGeneratorTarget.h"
+#include "cmGlobalGenerator.h"
 #include "cmGlobalVisualStudio10Generator.h"
-#include "cmMakefile.h"
+#include "cmGlobalVisualStudioGenerator.h"
+#include "cmStateTypes.h"
+#include "cmStringAlgorithms.h"
 #include "cmVisualStudio10TargetGenerator.h"
 #include "cmXMLParser.h"
 #include "cmake.h"
 
+class cmGeneratorTarget;
+
 class cmVS10XMLParser : public cmXMLParser
 {
 public:
-  virtual void EndElement(const std::string& /* name */) {}
-  virtual void CharacterDataHandler(const char* data, int length)
+  void EndElement(const std::string& /* name */) override {}
+  void CharacterDataHandler(const char* data, int length) override
   {
     if (this->DoGUID) {
       if (data[0] == '{') {
@@ -30,17 +33,17 @@ public:
       this->DoGUID = false;
     }
   }
-  virtual void StartElement(const std::string& name, const char**)
+  void StartElement(const std::string& name, const char**) override
   {
     // once the GUID is found do nothing
     if (!this->GUID.empty()) {
       return;
     }
-    if ("ProjectGUID" == name || "ProjectGuid" == name) {
+    if (name == "ProjectGUID"_s || name == "ProjectGuid"_s) {
       this->DoGUID = true;
     }
   }
-  int InitializeParser()
+  int InitializeParser() override
   {
     this->DoGUID = false;
     int ret = cmXMLParser::InitializeParser();
@@ -62,9 +65,7 @@ cmLocalVisualStudio10Generator::cmLocalVisualStudio10Generator(
 {
 }
 
-cmLocalVisualStudio10Generator::~cmLocalVisualStudio10Generator()
-{
-}
+cmLocalVisualStudio10Generator::~cmLocalVisualStudio10Generator() = default;
 
 void cmLocalVisualStudio10Generator::GenerateTarget(cmGeneratorTarget* target)
 {
@@ -94,7 +95,7 @@ void cmLocalVisualStudio10Generator::ReadAndStoreExternalGUID(
   std::string guidStoreName = cmStrCat(name, "_GUID_CMAKE");
   // save the GUID in the cache
   this->GlobalGenerator->GetCMakeInstance()->AddCacheEntry(
-    guidStoreName, parser.GUID.c_str(), "Stored GUID", cmStateEnums::INTERNAL);
+    guidStoreName, parser.GUID, "Stored GUID", cmStateEnums::INTERNAL);
 }
 
 const char* cmLocalVisualStudio10Generator::ReportErrorLabel() const

@@ -5,10 +5,10 @@ install_targets
 
   Use the :command:`install(TARGETS)` command instead.
 
-This command has been superceded by the :command:`install` command.  It is
+This command has been superseded by the :command:`install` command.  It is
 provided for compatibility with older CMake code.
 
-::
+.. code-block:: cmake
 
   install_targets(<dir> [RUNTIME_DIRECTORY dir] target target)
 

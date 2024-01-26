@@ -10,15 +10,14 @@
 
 #include <cmext/string_view>
 
-#include <cm3p/json/reader.h>
 #include <cm3p/json/value.h>
 
-#include "cmsys/FStream.hxx"
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmJSONHelpers.h"
 
 namespace {
+using JSONHelperBuilder = cmJSONHelperBuilder;
 const cmsys::RegularExpression IdentifierRegex{ "^[a-z_][a-z0-9_]*$" };
 const cmsys::RegularExpression IdRegex{ "^[a-z0-9_]+$" };
 
@@ -34,172 +33,104 @@ struct TopVersion
 };
 
 auto const VersionFieldHelper =
-  cmJSONIntHelper<cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_VERSION);
+  JSONHelperBuilder::Int(cmCTestResourceSpecErrors::INVALID_VERSION);
 
-auto const VersionHelper =
-  cmJSONRequiredHelper<Version, cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::NO_VERSION,
-    cmJSONObjectHelper<Version, cmCTestResourceSpec::ReadFileResult>(
-      cmCTestResourceSpec::ReadFileResult::READ_OK,
-      cmCTestResourceSpec::ReadFileResult::INVALID_VERSION)
-      .Bind("major"_s, &Version::Major, VersionFieldHelper)
-      .Bind("minor"_s, &Version::Minor, VersionFieldHelper));
+auto const VersionHelper = JSONHelperBuilder::Required<Version>(
+  cmCTestResourceSpecErrors::NO_VERSION,
+  JSONHelperBuilder::Object<Version>()
+    .Bind("major"_s, &Version::Major, VersionFieldHelper)
+    .Bind("minor"_s, &Version::Minor, VersionFieldHelper));
 
-auto const RootVersionHelper =
-  cmJSONObjectHelper<TopVersion, cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_ROOT)
-    .Bind("version"_s, &TopVersion::Version, VersionHelper, false);
+auto const RootVersionHelper = JSONHelperBuilder::Object<TopVersion>().Bind(
+  "version"_s, &TopVersion::Version, VersionHelper, false);
 
-cmCTestResourceSpec::ReadFileResult ResourceIdHelper(std::string& out,
-                                                     const Json::Value* value)
+bool ResourceIdHelper(std::string& out, const Json::Value* value,
+                      cmJSONState* state)
 {
-  auto result = cmJSONStringHelper(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_RESOURCE)(out, value);
-  if (result != cmCTestResourceSpec::ReadFileResult::READ_OK) {
-    return result;
+  if (!JSONHelperBuilder::String(cmCTestResourceSpecErrors::INVALID_RESOURCE)(
+        out, value, state)) {
+    return false;
   }
   cmsys::RegularExpressionMatch match;
   if (!IdRegex.find(out.c_str(), match)) {
-    return cmCTestResourceSpec::ReadFileResult::INVALID_RESOURCE;
+    cmCTestResourceSpecErrors::INVALID_RESOURCE(value, state);
+    return false;
   }
-  return cmCTestResourceSpec::ReadFileResult::READ_OK;
+  return true;
 }
 
 auto const ResourceHelper =
-  cmJSONObjectHelper<cmCTestResourceSpec::Resource,
-                     cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_RESOURCE)
+  JSONHelperBuilder::Object<cmCTestResourceSpec::Resource>()
     .Bind("id"_s, &cmCTestResourceSpec::Resource::Id, ResourceIdHelper)
-    .Bind("slots"_s, &cmCTestResourceSpec::Resource::Capacity,
-          cmJSONUIntHelper(
-            cmCTestResourceSpec::ReadFileResult::READ_OK,
-            cmCTestResourceSpec::ReadFileResult::INVALID_RESOURCE, 1),
-          false);
+    .Bind(
+      "slots"_s, &cmCTestResourceSpec::Resource::Capacity,
+      JSONHelperBuilder::UInt(cmCTestResourceSpecErrors::INVALID_RESOURCE, 1),
+      false);
 
 auto const ResourceListHelper =
-  cmJSONVectorHelper<cmCTestResourceSpec::Resource,
-                     cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_RESOURCE_TYPE,
-    ResourceHelper);
+  JSONHelperBuilder::Vector<cmCTestResourceSpec::Resource>(
+    cmCTestResourceSpecErrors::INVALID_RESOURCE_TYPE, ResourceHelper);
 
 auto const ResourceMapHelper =
-  cmJSONMapFilterHelper<std::vector<cmCTestResourceSpec::Resource>,
-                        cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_SOCKET_SPEC,
-    ResourceListHelper, [](const std::string& key) -> bool {
+  JSONHelperBuilder::MapFilter<std::vector<cmCTestResourceSpec::Resource>>(
+    cmCTestResourceSpecErrors::INVALID_SOCKET_SPEC, ResourceListHelper,
+    [](const std::string& key) -> bool {
       cmsys::RegularExpressionMatch match;
       return IdentifierRegex.find(key.c_str(), match);
     });
 
-auto const SocketSetHelper = cmJSONVectorHelper<
+auto const SocketSetHelper = JSONHelperBuilder::Vector<
   std::map<std::string, std::vector<cmCTestResourceSpec::Resource>>>(
-  cmCTestResourceSpec::ReadFileResult::READ_OK,
-  cmCTestResourceSpec::ReadFileResult::INVALID_SOCKET_SPEC, ResourceMapHelper);
+  cmCTestResourceSpecErrors::INVALID_SOCKET_SPEC, ResourceMapHelper);
 
-cmCTestResourceSpec::ReadFileResult SocketHelper(
-  cmCTestResourceSpec::Socket& out, const Json::Value* value)
+bool SocketHelper(cmCTestResourceSpec::Socket& out, const Json::Value* value,
+                  cmJSONState* state)
 {
   std::vector<
     std::map<std::string, std::vector<cmCTestResourceSpec::Resource>>>
     sockets;
-  cmCTestResourceSpec::ReadFileResult result = SocketSetHelper(sockets, value);
-  if (result != cmCTestResourceSpec::ReadFileResult::READ_OK) {
-    return result;
+  if (!SocketSetHelper(sockets, value, state)) {
+    return false;
   }
   if (sockets.size() > 1) {
-    return cmCTestResourceSpec::ReadFileResult::INVALID_SOCKET_SPEC;
+    cmCTestResourceSpecErrors::INVALID_SOCKET_SPEC(value, state);
+    return false;
   }
   if (sockets.empty()) {
     out.Resources.clear();
   } else {
     out.Resources = std::move(sockets[0]);
   }
-  return cmCTestResourceSpec::ReadFileResult::READ_OK;
+  return true;
 }
 
 auto const LocalRequiredHelper =
-  cmJSONRequiredHelper<cmCTestResourceSpec::Socket,
-                       cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::INVALID_SOCKET_SPEC, SocketHelper);
+  JSONHelperBuilder::Required<cmCTestResourceSpec::Socket>(
+    cmCTestResourceSpecErrors::INVALID_SOCKET_SPEC, SocketHelper);
 
-auto const RootHelper =
-  cmJSONObjectHelper<cmCTestResourceSpec, cmCTestResourceSpec::ReadFileResult>(
-    cmCTestResourceSpec::ReadFileResult::READ_OK,
-    cmCTestResourceSpec::ReadFileResult::INVALID_ROOT)
-    .Bind("local", &cmCTestResourceSpec::LocalSocket, LocalRequiredHelper,
-          false);
+auto const RootHelper = JSONHelperBuilder::Object<cmCTestResourceSpec>().Bind(
+  "local", &cmCTestResourceSpec::LocalSocket, LocalRequiredHelper, false);
 }
 
-cmCTestResourceSpec::ReadFileResult cmCTestResourceSpec::ReadFromJSONFile(
-  const std::string& filename)
+bool cmCTestResourceSpec::ReadFromJSONFile(const std::string& filename)
 {
-  cmsys::ifstream fin(filename.c_str());
-  if (!fin) {
-    return ReadFileResult::FILE_NOT_FOUND;
-  }
-
   Json::Value root;
-  Json::CharReaderBuilder builder;
-  if (!Json::parseFromStream(builder, fin, &root, nullptr)) {
-    return ReadFileResult::JSON_PARSE_ERROR;
+
+  this->parseState = cmJSONState(filename, &root);
+  if (!this->parseState.errors.empty()) {
+    return false;
   }
 
   TopVersion version;
-  ReadFileResult result;
-  if ((result = RootVersionHelper(version, &root)) !=
-      ReadFileResult::READ_OK) {
+  bool result;
+  if ((result = RootVersionHelper(version, &root, &parseState)) != true) {
     return result;
   }
   if (version.Version.Major != 1 || version.Version.Minor != 0) {
-    return ReadFileResult::UNSUPPORTED_VERSION;
+    return false;
   }
 
-  return RootHelper(*this, &root);
-}
-
-const char* cmCTestResourceSpec::ResultToString(ReadFileResult result)
-{
-  switch (result) {
-    case ReadFileResult::READ_OK:
-      return "OK";
-
-    case ReadFileResult::FILE_NOT_FOUND:
-      return "File not found";
-
-    case ReadFileResult::JSON_PARSE_ERROR:
-      return "JSON parse error";
-
-    case ReadFileResult::INVALID_ROOT:
-      return "Invalid root object";
-
-    case ReadFileResult::NO_VERSION:
-      return "No version specified";
-
-    case ReadFileResult::INVALID_VERSION:
-      return "Invalid version object";
-
-    case ReadFileResult::UNSUPPORTED_VERSION:
-      return "Unsupported version";
-
-    case ReadFileResult::INVALID_SOCKET_SPEC:
-      return "Invalid socket object";
-
-    case ReadFileResult::INVALID_RESOURCE_TYPE:
-      return "Invalid resource type object";
-
-    case ReadFileResult::INVALID_RESOURCE:
-      return "Invalid resource object";
-
-    default:
-      return "Unknown";
-  }
+  return RootHelper(*this, &root, &parseState);
 }
 
 bool cmCTestResourceSpec::operator==(const cmCTestResourceSpec& other) const

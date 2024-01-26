@@ -2,8 +2,12 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmGlobalJOMMakefileGenerator.h"
 
-#include "cmDocumentationEntry.h"
-#include "cmLocalUnixMakefileGenerator3.h"
+#include <ostream>
+
+#include <cmext/algorithm>
+#include <cmext/string_view>
+
+#include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
 #include "cmState.h"
 #include "cmake.h"
@@ -32,17 +36,17 @@ void cmGlobalJOMMakefileGenerator::EnableLanguage(
   this->cmGlobalUnixMakefileGenerator3::EnableLanguage(l, mf, optional);
 }
 
-void cmGlobalJOMMakefileGenerator::GetDocumentation(
-  cmDocumentationEntry& entry)
+cmDocumentationEntry cmGlobalJOMMakefileGenerator::GetDocumentation()
 {
-  entry.Name = cmGlobalJOMMakefileGenerator::GetActualName();
-  entry.Brief = "Generates JOM makefiles.";
+  return { cmGlobalJOMMakefileGenerator::GetActualName(),
+           "Generates JOM makefiles." };
 }
 
-void cmGlobalJOMMakefileGenerator::PrintCompilerAdvice(
-  std::ostream& os, std::string const& lang, const char* envVar) const
+void cmGlobalJOMMakefileGenerator::PrintCompilerAdvice(std::ostream& os,
+                                                       std::string const& lang,
+                                                       cmValue envVar) const
 {
-  if (lang == "CXX" || lang == "C") {
+  if (lang == "CXX"_s || lang == "C"_s) {
     /* clang-format off */
     os <<
       "To use the JOM generator with Visual C++, cmake must be run from a "
@@ -58,7 +62,8 @@ std::vector<cmGlobalGenerator::GeneratedMakeCommand>
 cmGlobalJOMMakefileGenerator::GenerateBuildCommand(
   const std::string& makeProgram, const std::string& projectName,
   const std::string& projectDir, std::vector<std::string> const& targetNames,
-  const std::string& config, bool fast, int jobs, bool verbose,
+  const std::string& config, int jobs, bool verbose,
+  const cmBuildOptions& buildOptions,
   std::vector<std::string> const& makeOptions)
 {
   std::vector<std::string> jomMakeOptions;
@@ -76,6 +81,6 @@ cmGlobalJOMMakefileGenerator::GenerateBuildCommand(
   }
 
   return cmGlobalUnixMakefileGenerator3::GenerateBuildCommand(
-    makeProgram, projectName, projectDir, targetNames, config, fast, jobs,
-    verbose, jomMakeOptions);
+    makeProgram, projectName, projectDir, targetNames, config, jobs, verbose,
+    buildOptions, jomMakeOptions);
 }

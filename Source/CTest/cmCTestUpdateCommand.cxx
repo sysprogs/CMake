@@ -75,12 +75,11 @@ cmCTestGenericHandler* cmCTestUpdateCommand::InitializeHandler()
 
   cmCTestUpdateHandler* handler = this->CTest->GetUpdateHandler();
   handler->Initialize();
-  handler->SetCommand(this);
   if (source_dir.empty()) {
     this->SetError("source directory not specified. Please use SOURCE tag");
     return nullptr;
   }
-  handler->SetOption("SourceDirectory", source_dir.c_str());
+  handler->SetOption("SourceDirectory", source_dir);
   handler->SetQuiet(this->Quiet);
   return handler;
 }

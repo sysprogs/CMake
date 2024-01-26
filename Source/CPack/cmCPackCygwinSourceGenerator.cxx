@@ -9,6 +9,7 @@
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
 #include "cmake.h"
 
 // Includes needed for implementation of RenameFile.  This is not in
@@ -25,9 +26,7 @@ cmCPackCygwinSourceGenerator::cmCPackCygwinSourceGenerator()
 {
 }
 
-cmCPackCygwinSourceGenerator::~cmCPackCygwinSourceGenerator()
-{
-}
+cmCPackCygwinSourceGenerator::~cmCPackCygwinSourceGenerator() = default;
 
 int cmCPackCygwinSourceGenerator::InitializeInternal()
 {
@@ -49,7 +48,7 @@ int cmCPackCygwinSourceGenerator::PackageFiles()
   // Now create a tar file that contains the above .tar.bz2 file
   // and the CPACK_CYGWIN_PATCH_FILE and CPACK_TOPLEVEL_DIRECTORY
   // files
-  std::string compressOutFile = packageDirFileName;
+  const std::string& compressOutFile = packageDirFileName;
   // at this point compressOutFile is the full path to
   // _CPack_Package/.../package-2.5.0.tar.bz2
   // we want to create a tar _CPack_Package/.../package-2.5.0-1-src.tar.bz2
@@ -94,14 +93,15 @@ int cmCPackCygwinSourceGenerator::PackageFiles()
   }
   std::string outerTarFile =
     cmStrCat(this->GetOption("CPACK_TEMPORARY_DIRECTORY"), '-');
-  const char* patch = this->GetOption("CPACK_CYGWIN_PATCH_NUMBER");
+  cmValue patch = this->GetOption("CPACK_CYGWIN_PATCH_NUMBER");
   if (!patch) {
     cmCPackLogger(cmCPackLog::LOG_WARNING,
                   "CPACK_CYGWIN_PATCH_NUMBER"
                     << " not specified, defaulting to 1\n");
-    patch = "1";
+    outerTarFile += '1';
+  } else {
+    outerTarFile += patch;
   }
-  outerTarFile += patch;
   outerTarFile += "-src.tar.bz2";
   std::string tmpDir = this->GetOption("CPACK_TOPLEVEL_DIRECTORY");
   std::string buildScript =
@@ -145,14 +145,15 @@ const char* cmCPackCygwinSourceGenerator::GetPackagingInstallPrefix()
 const char* cmCPackCygwinSourceGenerator::GetOutputExtension()
 {
   this->OutputExtension = "-";
-  const char* patch = this->GetOption("CPACK_CYGWIN_PATCH_NUMBER");
+  cmValue patch = this->GetOption("CPACK_CYGWIN_PATCH_NUMBER");
   if (!patch) {
     cmCPackLogger(cmCPackLog::LOG_WARNING,
                   "CPACK_CYGWIN_PATCH_NUMBER"
                     << " not specified, defaulting to 1\n");
-    patch = "1";
+    this->OutputExtension += '1';
+  } else {
+    this->OutputExtension += patch;
   }
-  this->OutputExtension += patch;
   this->OutputExtension += "-src.tar.bz2";
   return this->OutputExtension.c_str();
 }

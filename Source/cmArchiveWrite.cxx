@@ -2,11 +2,16 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmArchiveWrite.h"
 
-#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <limits>
 #include <sstream>
+#include <string>
+#include <thread>
+
+#include <cm/algorithm>
 
 #include <cm3p/archive.h>
 #include <cm3p/archive_entry.h>
@@ -63,7 +68,7 @@ public:
   ~Entry() { archive_entry_free(this->Object); }
   Entry(const Entry&) = delete;
   Entry& operator=(const Entry&) = delete;
-  operator struct archive_entry*() { return this->Object; }
+  operator struct archive_entry *() { return this->Object; }
 };
 
 struct cmArchiveWrite::Callback
@@ -87,9 +92,21 @@ cmArchiveWrite::cmArchiveWrite(std::ostream& os, Compress c,
   : Stream(os)
   , Archive(archive_write_new())
   , Disk(archive_read_disk_new())
-  , Verbose(false)
   , Format(format)
 {
+  // Upstream fixed an issue with their integer parsing in 3.4.0
+  // which would cause spurious errors to be raised from `strtoull`.
+
+  if (numThreads < 1) {
+    int upperLimit = (numThreads == 0) ? std::numeric_limits<int>::max()
+                                       : std::abs(numThreads);
+
+    numThreads =
+      cm::clamp<int>(std::thread::hardware_concurrency(), 1, upperLimit);
+  }
+
+  std::string sNumThreads = std::to_string(numThreads);
+
   switch (c) {
     case CompressNone:
       if (archive_write_add_filter_none(this->Archive) != ARCHIVE_OK) {
@@ -144,17 +161,24 @@ cmArchiveWrite::cmArchiveWrite(std::ostream& os, Compress c,
                                cm_archive_error_string(this->Archive));
         return;
       }
-      {
-        char sNumThreads[8];
-        snprintf(sNumThreads, sizeof(sNumThreads), "%d", numThreads);
-        sNumThreads[7] = '\0'; // for safety
-        if (archive_write_set_filter_option(this->Archive, "xz", "threads",
-                                            sNumThreads) != ARCHIVE_OK) {
-          this->Error = cmStrCat("archive_compressor_xz_options: ",
-                                 cm_archive_error_string(this->Archive));
-          return;
-        }
+
+#if ARCHIVE_VERSION_NUMBER >= 3004000
+
+#  ifdef _AIX
+      // FIXME: Using more than 2 threads creates an empty archive.
+      // Enforce this limit pending further investigation.
+      if (numThreads > 2) {
+        numThreads = 2;
+        sNumThreads = std::to_string(numThreads);
       }
+#  endif
+      if (archive_write_set_filter_option(this->Archive, "xz", "threads",
+                                          sNumThreads.c_str()) != ARCHIVE_OK) {
+        this->Error = cmStrCat("archive_compressor_xz_options: ",
+                               cm_archive_error_string(this->Archive));
+        return;
+      }
+#endif
 
       break;
     case CompressZstd:
@@ -163,6 +187,15 @@ cmArchiveWrite::cmArchiveWrite(std::ostream& os, Compress c,
                                cm_archive_error_string(this->Archive));
         return;
       }
+
+#if ARCHIVE_VERSION_NUMBER >= 3006000
+      if (archive_write_set_filter_option(this->Archive, "zstd", "threads",
+                                          sNumThreads.c_str()) != ARCHIVE_OK) {
+        this->Error = cmStrCat("archive_compressor_zstd_options: ",
+                               cm_archive_error_string(this->Archive));
+        return;
+      }
+#endif
       break;
   }
 
@@ -225,6 +258,9 @@ cmArchiveWrite::cmArchiveWrite(std::ostream& os, Compress c,
 
 bool cmArchiveWrite::Open()
 {
+  if (!this->Error.empty()) {
+    return false;
+  }
   if (archive_write_open(
         this->Archive, this, nullptr,
         reinterpret_cast<archive_write_callback*>(&Callback::Write),
@@ -423,18 +459,5 @@ bool cmArchiveWrite::AddData(const char* file, size_t size)
                            "\": ", cmSystemTools::GetLastSystemError());
     return false;
   }
-  return true;
-}
-
-bool cmArchiveWrite::SetFilterOption(const char* module, const char* key,
-                                     const char* value)
-{
-  if (archive_write_set_filter_option(this->Archive, module, key, value) !=
-      ARCHIVE_OK) {
-    this->Error = "archive_write_set_filter_option: ";
-    this->Error += cm_archive_error_string(this->Archive);
-    return false;
-  }
-
   return true;
 }
