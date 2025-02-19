@@ -24,6 +24,7 @@
 
 class cmCustomCommand;
 class cmFileSet;
+class cmFindPackageStack;
 class cmGlobalGenerator;
 class cmInstallTargetGenerator;
 class cmMakefile;
@@ -77,6 +78,7 @@ public:
 
   //! Set/Get the name of the target
   const std::string& GetName() const;
+  const std::string& GetTemplateName() const;
 
   //! Get the policy map
   cmPolicies::PolicyMap const& GetPolicyMap() const;
@@ -172,6 +174,11 @@ public:
   void AddUtility(std::string const& name, bool cross,
                   cmMakefile const* mf = nullptr);
   void AddUtility(BT<std::pair<std::string, bool>> util);
+
+  void AddCodegenDependency(std::string const& name);
+
+  std::set<std::string> const& GetCodegenDeps() const;
+
   //! Get the utilities used by this target
   std::set<BT<std::pair<std::string, bool>>> const& GetUtilities() const;
 
@@ -228,6 +235,9 @@ public:
   //! Return whether this target is a shared library Framework on Apple.
   bool IsFrameworkOnApple() const;
 
+  //! Return whether to archive shared library or not on AIX.
+  bool IsArchivedAIXSharedLibrary() const;
+
   //! Return whether this target is an executable Bundle on Apple.
   bool IsAppBundleOnApple() const;
 
@@ -238,6 +248,9 @@ public:
 
   //! Get a backtrace from the creation of the target.
   cmListFileBacktrace const& GetBacktrace() const;
+
+  //! Get a find_package call stack from the creation of the target.
+  cmFindPackageStack const& GetFindPackageStack() const;
 
   void InsertInclude(BT<std::string> const& entry, bool before = false);
   void InsertCompileOption(BT<std::string> const& entry, bool before = false);
@@ -324,9 +337,6 @@ public:
   bool HasFileSets() const;
 
 private:
-  template <typename ValueType>
-  void StoreProperty(const std::string& prop, ValueType value);
-
   // Internal representation details.
   friend class cmGeneratorTarget;
 

@@ -94,8 +94,8 @@ const std::string& cmGlobalVisualStudio7Generator::GetIntelProjectVersion()
     cmSystemTools::ReadRegistryValue(vskey, intelVersion,
                                      cmSystemTools::KeyWOW64_32);
     unsigned int intelVersionNumber = ~0u;
-    sscanf(intelVersion.c_str(), "%u", &intelVersionNumber);
-    if (intelVersionNumber >= 11) {
+    if (sscanf(intelVersion.c_str(), "%u", &intelVersionNumber) != 1 ||
+        intelVersionNumber >= 11) {
       // Default to latest known project file version.
       intelVersion = "11.0";
     } else if (intelVersionNumber == 10) {
@@ -309,46 +309,6 @@ void cmGlobalVisualStudio7Generator::Generate()
     this->CallVisualStudioMacro(MacroReload,
                                 GetSLNFile(this->LocalGenerators[0].get()));
   }
-
-  if (this->Version == VSVersion::VS9 &&
-      !this->CMakeInstance->GetIsInTryCompile()) {
-    std::string cmakeWarnVS9;
-    if (cmValue cached = this->CMakeInstance->GetState()->GetCacheEntryValue(
-          "CMAKE_WARN_VS9")) {
-      this->CMakeInstance->MarkCliAsUsed("CMAKE_WARN_VS9");
-      cmakeWarnVS9 = *cached;
-    } else {
-      cmSystemTools::GetEnv("CMAKE_WARN_VS9", cmakeWarnVS9);
-    }
-    if (cmakeWarnVS9.empty() || !cmIsOff(cmakeWarnVS9)) {
-      this->CMakeInstance->IssueMessage(
-        MessageType::WARNING,
-        "The \"Visual Studio 9 2008\" generator is deprecated "
-        "and will be removed in a future version of CMake."
-        "\n"
-        "Add CMAKE_WARN_VS9=OFF to the cache to disable this warning.");
-    }
-  }
-
-  if (this->Version == VSVersion::VS12 &&
-      !this->CMakeInstance->GetIsInTryCompile()) {
-    std::string cmakeWarnVS12;
-    if (cmValue cached = this->CMakeInstance->GetState()->GetCacheEntryValue(
-          "CMAKE_WARN_VS12")) {
-      this->CMakeInstance->MarkCliAsUsed("CMAKE_WARN_VS12");
-      cmakeWarnVS12 = *cached;
-    } else {
-      cmSystemTools::GetEnv("CMAKE_WARN_VS12", cmakeWarnVS12);
-    }
-    if (cmakeWarnVS12.empty() || !cmIsOff(cmakeWarnVS12)) {
-      this->CMakeInstance->IssueMessage(
-        MessageType::WARNING,
-        "The \"Visual Studio 12 2013\" generator is deprecated "
-        "and will be removed in a future version of CMake."
-        "\n"
-        "Add CMAKE_WARN_VS12=OFF to the cache to disable this warning.");
-    }
-  }
 }
 
 void cmGlobalVisualStudio7Generator::OutputSLNFile(
@@ -403,8 +363,7 @@ void cmGlobalVisualStudio7Generator::WriteTargetConfigurations(
         std::string mapping;
 
         // On VS 19 and above, always map .NET SDK projects to "Any CPU".
-        if (target->IsDotNetSdkTarget() &&
-            this->GetVersion() >= VSVersion::VS16 &&
+        if (target->IsDotNetSdkTarget() && this->Version >= VSVersion::VS16 &&
             !cmGlobalVisualStudio7Generator::IsReservedTarget(
               target->GetName())) {
           mapping = "Any CPU";
@@ -740,7 +699,7 @@ std::set<std::string> cmGlobalVisualStudio7Generator::IsPartOfDefaultBuild(
   }
   // inspect EXCLUDE_FROM_DEFAULT_BUILD[_<CONFIG>] properties
   for (std::string const& i : configs) {
-    if (cmIsOff(target->GetFeature("EXCLUDE_FROM_DEFAULT_BUILD", i))) {
+    if (target->GetFeature("EXCLUDE_FROM_DEFAULT_BUILD", i).IsOff()) {
       activeConfigs.insert(i);
     }
   }

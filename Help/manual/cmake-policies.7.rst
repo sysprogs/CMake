@@ -51,6 +51,52 @@ The :variable:`CMAKE_MINIMUM_REQUIRED_VERSION` variable may also be used
 to determine whether to report an error on use of deprecated macros or
 functions.
 
+Policies Introduced by CMake 3.31
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0180: project() always sets <PROJECT-NAME>_* as normal variables. </policy/CMP0180>
+   CMP0179: De-duplication of static libraries on link lines keeps first occurrence. </policy/CMP0179>
+   CMP0178: Test command lines preserve empty arguments. </policy/CMP0178>
+   CMP0177: install() DESTINATION paths are normalized. </policy/CMP0177>
+   CMP0176: execute_process() ENCODING is UTF-8 by default. </policy/CMP0176>
+   CMP0175: add_custom_command() rejects invalid arguments. </policy/CMP0175>
+   CMP0174: cmake_parse_arguments(PARSE_ARGV) defines a variable for an empty string after a single-value keyword. </policy/CMP0174>
+   CMP0173: The CMakeFindFrameworks module is removed. </policy/CMP0173>
+   CMP0172: The CPack module enables per-machine installation by default in the CPack WIX Generator. </policy/CMP0172>
+   CMP0171: 'codegen' is a reserved target name. </policy/CMP0171>
+
+Policies Introduced by CMake 3.30
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0170: FETCHCONTENT_FULLY_DISCONNECTED requirements are enforced. </policy/CMP0170>
+   CMP0169: FetchContent_Populate(depName) single-argument signature is deprecated. </policy/CMP0169>
+   CMP0168: FetchContent implements steps directly instead of through a sub-build. </policy/CMP0168>
+   CMP0167: The FindBoost module is removed. </policy/CMP0167>
+   CMP0166: TARGET_PROPERTY evaluates link properties transitively over private dependencies of static libraries. </policy/CMP0166>
+   CMP0165: enable_language() must not be called before project(). </policy/CMP0165>
+   CMP0164: add_library() rejects SHARED libraries when not supported by the platform. </policy/CMP0164>
+   CMP0163: The GENERATED source file property is now visible in all directories. </policy/CMP0163>
+   CMP0162: Visual Studio generators add UseDebugLibraries indicators by default. </policy/CMP0162>
+
+Policies Introduced by CMake 3.29
+=================================
+
+.. toctree::
+   :maxdepth: 1
+
+   CMP0161: CPACK_PRODUCTBUILD_DOMAINS defaults to true. </policy/CMP0161>
+   CMP0160: More read-only target properties now error when trying to set them. </policy/CMP0160>
+   CMP0159: file(STRINGS) with REGEX updates CMAKE_MATCH_<n>. </policy/CMP0159>
+   CMP0158: add_test() honors CMAKE_CROSSCOMPILING_EMULATOR only when cross-compiling. </policy/CMP0158>
+   CMP0157: Swift compilation mode is selected by an abstraction. </policy/CMP0157>
+   CMP0156: De-duplicate libraries on link lines based on linker capabilities. </policy/CMP0156>
+
 Policies Introduced by CMake 3.28
 =================================
 
@@ -105,7 +151,7 @@ Policies Introduced by CMake 3.24
    CMP0138: CheckIPOSupported uses flags from calling project. </policy/CMP0138>
    CMP0137: try_compile() passes platform variables in project mode. </policy/CMP0137>
    CMP0136: Watcom runtime library flags are selected by an abstraction. </policy/CMP0136>
-   CMP0135: ExternalProject ignores timestamps in archives by default for the URL download method. </policy/CMP0135>
+   CMP0135: ExternalProject and FetchContent ignore timestamps in archives by default for the URL download method. </policy/CMP0135>
    CMP0134: Fallback to "HOST" Windows registry view when "TARGET" view is not usable. </policy/CMP0134>
    CMP0133: The CPack module disables SLA by default in the CPack DragNDrop Generator. </policy/CMP0133>
    CMP0132: Do not set compiler environment variables on first run. </policy/CMP0132>
@@ -150,7 +196,7 @@ Policies Introduced by CMake 3.20
 
    CMP0120: The WriteCompilerDetectionHeader module is removed. </policy/CMP0120>
    CMP0119: LANGUAGE source file property explicitly compiles as language. </policy/CMP0119>
-   CMP0118: The GENERATED source file property is now visible in all directories. </policy/CMP0118>
+   CMP0118: GENERATED sources may be used across directories without manual marking. </policy/CMP0118>
    CMP0117: MSVC RTTI flag /GR is not added to CMAKE_CXX_FLAGS by default. </policy/CMP0117>
    CMP0116: Ninja generators transform DEPFILEs from add_custom_command(). </policy/CMP0116>
    CMP0115: Source file extensions must be explicit. </policy/CMP0115>
@@ -190,7 +236,7 @@ Policies Introduced by CMake 3.17
    CMP0102: mark_as_advanced() does nothing if a cache entry does not exist. </policy/CMP0102>
    CMP0101: target_compile_options honors BEFORE keyword in all scopes. </policy/CMP0101>
    CMP0100: Let AUTOMOC and AUTOUIC process .hh header files. </policy/CMP0100>
-   CMP0099: Link properties are transitive over private dependency on static libraries. </policy/CMP0099>
+   CMP0099: Link properties are transitive over private dependencies of static libraries. </policy/CMP0099>
    CMP0098: FindFLEX runs flex in CMAKE_CURRENT_BINARY_DIR when executing. </policy/CMP0098>
 
 Policies Introduced by CMake 3.16

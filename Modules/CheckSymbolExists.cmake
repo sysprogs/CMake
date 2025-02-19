@@ -41,6 +41,8 @@ the way the check is run:
 
 .. include:: /module/CMAKE_REQUIRED_LIBRARIES.txt
 
+.. include:: /module/CMAKE_REQUIRED_LINK_DIRECTORIES.txt
+
 .. include:: /module/CMAKE_REQUIRED_QUIET.txt
 
 For example:
@@ -75,14 +77,28 @@ macro(CHECK_SYMBOL_EXISTS SYMBOL FILES VARIABLE)
 endmacro()
 
 macro(__CHECK_SYMBOL_EXISTS_FILTER_FLAGS LANG)
-    set(__CMAKE_${LANG}_FLAGS_SAVED "${CMAKE_${LANG}_FLAGS}")
-    string(REGEX REPLACE "(^| )-Werror([= ][^ ]*)?( |$)" " " CMAKE_${LANG}_FLAGS "${CMAKE_${LANG}_FLAGS}")
-    string(REGEX REPLACE "(^| )-pedantic-errors( |$)" " " CMAKE_${LANG}_FLAGS "${CMAKE_${LANG}_FLAGS}")
+    if(CMAKE_TRY_COMPILE_CONFIGURATION)
+      string(TOUPPER "${CMAKE_TRY_COMPILE_CONFIGURATION}" _tc_config)
+    else()
+      set(_tc_config "DEBUG")
+    endif()
+    foreach(v CMAKE_${LANG}_FLAGS CMAKE_${LANG}_FLAGS_${_tc_config})
+      set(__${v}_SAVED "${${v}}")
+      string(REGEX REPLACE "(^| )-Werror([= ][^-][^ ]*)?( |$)" " " ${v} "${${v}}")
+      string(REGEX REPLACE "(^| )-pedantic-errors( |$)" " " ${v} "${${v}}")
+    endforeach()
 endmacro()
 
 macro(__CHECK_SYMBOL_EXISTS_RESTORE_FLAGS LANG)
-    set(CMAKE_${LANG}_FLAGS "${__CMAKE_${LANG}_FLAGS_SAVED}")
-    unset(__CMAKE_${LANG}_FLAGS_SAVED)
+    if(CMAKE_TRY_COMPILE_CONFIGURATION)
+      string(TOUPPER "${CMAKE_TRY_COMPILE_CONFIGURATION}" _tc_config)
+    else()
+      set(_tc_config "DEBUG")
+    endif()
+    foreach(v CMAKE_${LANG}_FLAGS CMAKE_${LANG}_FLAGS_${_tc_config})
+      set(${v} "${__${v}_SAVED}")
+      unset(__${v}_SAVED)
+    endforeach()
 endmacro()
 
 macro(__CHECK_SYMBOL_EXISTS_IMPL SOURCEFILE SYMBOL FILES VARIABLE)
@@ -106,6 +122,13 @@ macro(__CHECK_SYMBOL_EXISTS_IMPL SOURCEFILE SYMBOL FILES VARIABLE)
         "-DINCLUDE_DIRECTORIES:STRING=${CMAKE_REQUIRED_INCLUDES}")
     else()
       set(CMAKE_SYMBOL_EXISTS_INCLUDES)
+    endif()
+
+    if(CMAKE_REQUIRED_LINK_DIRECTORIES)
+      set(_CSE_LINK_DIRECTORIES
+        "-DLINK_DIRECTORIES:STRING=${CMAKE_REQUIRED_LINK_DIRECTORIES}")
+    else()
+      set(_CSE_LINK_DIRECTORIES)
     endif()
     foreach(FILE ${FILES})
       string(APPEND _CSE_SOURCE
@@ -145,7 +168,9 @@ int main(int argc, char** argv)
       CMAKE_FLAGS
       -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_SYMBOL_EXISTS_FLAGS}
       "${CMAKE_SYMBOL_EXISTS_INCLUDES}"
+      "${_CSE_LINK_DIRECTORIES}"
       )
+    unset(_CSE_LINK_DIRECTORIES)
     if(${VARIABLE})
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_PASS "found")

@@ -30,11 +30,26 @@ values:
 If no explicit :prop_tgt:`UNITY_BUILD_MODE` has been specified, CMake will
 default to ``BATCH``.
 
-Unity builds are not currently supported for all languages.  CMake version
-|release| supports combining ``C`` and ``CXX`` source files.  For targets that
-mix source files from more than one language, CMake will separate the languages
-such that each generated unity source file only contains sources for a single
-language.
+Unity builds are supported for the following languages:
+
+``C``
+  .. versionadded:: 3.16
+
+``CXX``
+  .. versionadded:: 3.16
+
+``CUDA``
+  .. versionadded:: 3.31
+
+``OBJC``
+  .. versionadded:: 3.29
+
+``OBJCXX``
+  .. versionadded:: 3.29
+
+For targets that mix source files from more than one language, CMake
+separates the languages such that each generated unity source file only
+contains sources for a single language.
 
 This property is initialized by the value of the :variable:`CMAKE_UNITY_BUILD`
 variable when a target is created.
@@ -63,6 +78,11 @@ a number of measures to help address such problems:
   :prop_sf:`COMPILE_DEFINITIONS`, :prop_sf:`COMPILE_FLAGS`, or
   :prop_sf:`INCLUDE_DIRECTORIES` source property will not be combined
   into a unity source.
+
+* Any source file which is scanned for C++ module sources via
+  :prop_tgt:`CXX_SCAN_FOR_MODULES`, :prop_sf:`CXX_SCAN_FOR_MODULES`, or
+  membership of a ``CXX_MODULES`` file set will not be combined into a unity
+  source.  See :manual:`cmake-cxxmodules(7)` for details.
 
 * Projects can prevent an individual source file from being combined into
   a unity source by setting its :prop_sf:`SKIP_UNITY_BUILD_INCLUSION`

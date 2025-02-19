@@ -5,6 +5,8 @@
 #include <cstring>
 #include <map>
 #include <ostream>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -16,6 +18,121 @@
 #include "cmSystemTools.h"
 #include "cmValue.h"
 #include "cmWorkingDirectory.h"
+
+enum class DeduplicateStatus
+{
+  Skip,
+  Add,
+  Error
+};
+
+/**
+ * @class cmCPackArchiveGenerator::Deduplicator
+ * @brief A utility class for deduplicating files, folders, and symlinks.
+ *
+ * This class is responsible for identifying duplicate files, folders, and
+ * symlinks when generating an archive. It keeps track of the paths that have
+ * been processed and helps in deciding whether a new path should be added,
+ * skipped, or flagged as an error.
+ */
+class cmCPackArchiveGenerator::Deduplicator
+{
+private:
+  /**
+   * @brief Compares a file with already processed files.
+   *
+   * @param path The path of the file to compare.
+   * @param localTopLevel The top-level directory for the file.
+   * @return DeduplicateStatus indicating whether to add, skip, or flag an
+   * error for the file.
+   */
+  DeduplicateStatus CompareFile(const std::string& path,
+                                const std::string& localTopLevel)
+  {
+    auto fileItr = this->Files.find(path);
+    if (fileItr != this->Files.end()) {
+      return cmSystemTools::FilesDiffer(path, fileItr->second)
+        ? DeduplicateStatus::Error
+        : DeduplicateStatus::Skip;
+    }
+
+    this->Files[path] = cmStrCat(localTopLevel, "/", path);
+    return DeduplicateStatus::Add;
+  }
+
+  /**
+   * @brief Compares a folder with already processed folders.
+   *
+   * @param path The path of the folder to compare.
+   * @return DeduplicateStatus indicating whether to add or skip the folder.
+   */
+  DeduplicateStatus CompareFolder(const std::string& path)
+  {
+    if (this->Folders.find(path) != this->Folders.end()) {
+      return DeduplicateStatus::Skip;
+    }
+
+    this->Folders.emplace(path);
+    return DeduplicateStatus::Add;
+  }
+
+  /**
+   * @brief Compares a symlink with already processed symlinks.
+   *
+   * @param path The path of the symlink to compare.
+   * @return DeduplicateStatus indicating whether to add, skip, or flag an
+   * error for the symlink.
+   */
+  DeduplicateStatus CompareSymlink(const std::string& path)
+  {
+    auto symlinkItr = this->Symlink.find(path);
+    std::string symlinkValue;
+    auto status = cmSystemTools::ReadSymlink(path, symlinkValue);
+    if (!status.IsSuccess()) {
+      return DeduplicateStatus::Error;
+    }
+
+    if (symlinkItr != this->Symlink.end()) {
+      return symlinkValue == symlinkItr->second ? DeduplicateStatus::Skip
+                                                : DeduplicateStatus::Error;
+    }
+
+    this->Symlink[path] = symlinkValue;
+    return DeduplicateStatus::Add;
+  }
+
+public:
+  /**
+   * @brief Determines the deduplication status of a given path.
+   *
+   * This method identifies whether the given path is a file, folder, or
+   * symlink and then delegates to the appropriate comparison method.
+   *
+   * @param path The path to check for deduplication.
+   * @param localTopLevel The top-level directory for the path.
+   * @return DeduplicateStatus indicating the action to take for the given
+   * path.
+   */
+  DeduplicateStatus IsDeduplicate(const std::string& path,
+                                  const std::string& localTopLevel)
+  {
+    DeduplicateStatus status;
+    if (cmSystemTools::FileIsDirectory(path)) {
+      status = this->CompareFolder(path);
+    } else if (cmSystemTools::FileIsSymlink(path)) {
+      status = this->CompareSymlink(path);
+    } else {
+      status = this->CompareFile(path, localTopLevel);
+    }
+
+    return status;
+  }
+
+private:
+  std::unordered_map<std::string, std::string> Symlink;
+  std::unordered_set<std::string> Folders;
+  std::unordered_map<std::string, std::string> Files;
+};
 
 cmCPackGenerator* cmCPackArchiveGenerator::Create7ZGenerator()
 {
@@ -110,13 +227,14 @@ int cmCPackArchiveGenerator::InitializeInternal()
 }
 
 int cmCPackArchiveGenerator::addOneComponentToArchive(
-  cmArchiveWrite& archive, cmCPackComponent* component)
+  cmArchiveWrite& archive, cmCPackComponent* component,
+  Deduplicator* deduplicator)
 {
   cmCPackLogger(cmCPackLog::LOG_VERBOSE,
                 "   - packaging component: " << component->Name << std::endl);
   // Add the files of this component to the archive
   std::string localToplevel(this->GetOption("CPACK_TEMPORARY_DIRECTORY"));
-  localToplevel += "/" + component->Name;
+  localToplevel += "/" + this->GetSanitizedDirOrFileName(component->Name);
   // Change to local toplevel
   cmWorkingDirectory workdir(localToplevel);
   if (workdir.Failed()) {
@@ -139,8 +257,25 @@ int cmCPackArchiveGenerator::addOneComponentToArchive(
   }
   for (std::string const& file : component->Files) {
     std::string rp = filePrefix + file;
-    cmCPackLogger(cmCPackLog::LOG_DEBUG, "Adding file: " << rp << std::endl);
-    archive.Add(rp, 0, nullptr, false);
+
+    DeduplicateStatus status = DeduplicateStatus::Add;
+    if (deduplicator) {
+      status = deduplicator->IsDeduplicate(rp, localToplevel);
+    }
+
+    if (!deduplicator || status == DeduplicateStatus::Add) {
+      cmCPackLogger(cmCPackLog::LOG_DEBUG, "Adding file: " << rp << std::endl);
+      archive.Add(rp, 0, nullptr, false);
+    } else if (status == DeduplicateStatus::Error) {
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "ERROR The data in files with the "
+                    "same filename is different.");
+      return 0;
+    } else {
+      cmCPackLogger(cmCPackLog::LOG_DEBUG,
+                    "Passing file: " << rp << std::endl);
+    }
+
     if (!archive) {
       cmCPackLogger(cmCPackLog::LOG_ERROR,
                     "ERROR while packaging files: " << archive.GetError()
@@ -197,6 +332,8 @@ int cmCPackArchiveGenerator::PackageComponents(bool ignoreGroup)
       std::string packageFileName = std::string(this->toplevel) + "/" +
         this->GetArchiveComponentFileName(compG.first, true);
 
+      Deduplicator deduplicator;
+
       // open a block in order to automatically close archive
       // at the end of the block
       {
@@ -204,7 +341,7 @@ int cmCPackArchiveGenerator::PackageComponents(bool ignoreGroup)
         // now iterate over the component of this group
         for (cmCPackComponent* comp : (compG.second).Components) {
           // Add the files of this component to the archive
-          this->addOneComponentToArchive(archive, comp);
+          this->addOneComponentToArchive(archive, comp, &deduplicator);
         }
       }
       // add the generated package to package file names list
@@ -213,25 +350,21 @@ int cmCPackArchiveGenerator::PackageComponents(bool ignoreGroup)
     // Handle Orphan components (components not belonging to any groups)
     for (auto& comp : this->Components) {
       // Does the component belong to a group?
-      if (comp.second.Group == nullptr) {
+      if (!comp.second.Group) {
         cmCPackLogger(
           cmCPackLog::LOG_VERBOSE,
           "Component <"
             << comp.second.Name
             << "> does not belong to any group, package it separately."
             << std::endl);
-        std::string localToplevel(
-          this->GetOption("CPACK_TEMPORARY_DIRECTORY"));
         std::string packageFileName = std::string(this->toplevel);
-
-        localToplevel += "/" + comp.first;
         packageFileName +=
           "/" + this->GetArchiveComponentFileName(comp.first, false);
 
         {
           DECLARE_AND_OPEN_ARCHIVE(packageFileName, archive);
           // Add the files of this component to the archive
-          this->addOneComponentToArchive(archive, &(comp.second));
+          this->addOneComponentToArchive(archive, &(comp.second), nullptr);
         }
         // add the generated package to package file names list
         this->packageFileNames.push_back(std::move(packageFileName));
@@ -242,17 +375,14 @@ int cmCPackArchiveGenerator::PackageComponents(bool ignoreGroup)
   // We build 1 package per component
   else {
     for (auto& comp : this->Components) {
-      std::string localToplevel(this->GetOption("CPACK_TEMPORARY_DIRECTORY"));
       std::string packageFileName = std::string(this->toplevel);
-
-      localToplevel += "/" + comp.first;
       packageFileName +=
         "/" + this->GetArchiveComponentFileName(comp.first, false);
 
       {
         DECLARE_AND_OPEN_ARCHIVE(packageFileName, archive);
         // Add the files of this component to the archive
-        this->addOneComponentToArchive(archive, &(comp.second));
+        this->addOneComponentToArchive(archive, &(comp.second), nullptr);
       }
       // add the generated package to package file names list
       this->packageFileNames.push_back(std::move(packageFileName));
@@ -282,10 +412,12 @@ int cmCPackArchiveGenerator::PackageComponentsAllInOne()
                   << std::endl);
   DECLARE_AND_OPEN_ARCHIVE(packageFileNames[0], archive);
 
+  Deduplicator deduplicator;
+
   // The ALL COMPONENTS in ONE package case
   for (auto& comp : this->Components) {
     // Add the files of this component to the archive
-    this->addOneComponentToArchive(archive, &(comp.second));
+    this->addOneComponentToArchive(archive, &(comp.second), &deduplicator);
   }
 
   // archive goes out of scope so it will finalized and closed.

@@ -169,6 +169,11 @@ void cmMakefileLibraryTargetGenerator::WriteSharedLibraryRules(bool relink)
   std::string linkRuleVar =
     cmStrCat("CMAKE_", linkLanguage, "_CREATE_SHARED_LIBRARY");
 
+  if (this->GeneratorTarget->IsArchivedAIXSharedLibrary()) {
+    linkRuleVar =
+      cmStrCat("CMAKE_", linkLanguage, "_CREATE_SHARED_LIBRARY_ARCHIVE");
+  }
+
   std::string extraFlags;
   this->GetTargetLinkFlags(extraFlags, linkLanguage);
   this->LocalGenerator->AddConfigVariableFlags(
@@ -217,6 +222,9 @@ void cmMakefileLibraryTargetGenerator::WriteModuleLibraryRules(bool relink)
   this->LocalGenerator->AppendModuleDefinitionFlag(
     extraFlags, this->GeneratorTarget, linkLineComputer.get(),
     this->GetConfigName());
+
+  this->UseLWYU = this->LocalGenerator->AppendLWYUFlags(
+    extraFlags, this->GeneratorTarget, linkLanguage);
 
   this->WriteLibraryRules(linkRuleVar, extraFlags, relink);
 }
@@ -440,6 +448,8 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
                          this->GeneratorTarget->GetName() + "\".");
     return;
   }
+
+  auto linker = this->GeneratorTarget->GetLinkerTool(this->GetConfigName());
 
   // Build list of dependencies.
   std::vector<std::string> depends;
@@ -766,6 +776,7 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     vars.CMTargetType =
       cmState::GetTargetTypeName(this->GeneratorTarget->GetType()).c_str();
     vars.Language = linkLanguage.c_str();
+    vars.Linker = linker.c_str();
     vars.AIXExports = aixExports.c_str();
     vars.Objects = buildObjs.c_str();
     std::string objectDir = this->GeneratorTarget->GetSupportDirectory();
@@ -782,7 +793,8 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     vars.LinkLibraries = linkLibs.c_str();
     vars.ObjectsQuoted = buildObjs.c_str();
     std::string targetOutSOName;
-    if (this->GeneratorTarget->HasSOName(this->GetConfigName())) {
+    if (this->GeneratorTarget->HasSOName(this->GetConfigName()) ||
+        this->GeneratorTarget->IsArchivedAIXSharedLibrary()) {
       vars.SONameFlag = this->Makefile->GetSONameFlag(linkLanguage);
       targetOutSOName = this->LocalGenerator->ConvertToOutputFormat(
         this->TargetNames.SharedObject, cmOutputConverter::SHELL);
@@ -972,6 +984,9 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     auto genStubsRule =
       this->Makefile->GetDefinition("CMAKE_CREATE_TEXT_STUBS");
     cmList genStubs_commands{ genStubsRule };
+    this->LocalGenerator->CreateCDCommand(
+      genStubs_commands, this->Makefile->GetCurrentBinaryDirectory(),
+      this->LocalGenerator->GetBinaryDirectory());
 
     std::string TBDFullPath =
       cmStrCat(outpathImp, this->TargetNames.ImportOutput);

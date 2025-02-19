@@ -1,7 +1,7 @@
 #
 # Wrapping
 #
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project (CustomCommand)
 
 add_subdirectory(GeneratedHeader)
@@ -214,11 +214,13 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated_extern.cxx
 
 add_executable(CustomCommandUsingTargetTest main.cxx ${CMAKE_CURRENT_BINARY_DIR}/generated_extern.cxx )
 
+add_executable(CustomCommandUsingTargetTestAlias ALIAS CustomCommandUsingTargetTest )
+
 add_custom_target(RunTarget
   COMMAND generator_extern ${CMAKE_CURRENT_BINARY_DIR}/run_target.cxx
   )
 
-add_custom_command(TARGET CustomCommandUsingTargetTest POST_BUILD
+add_custom_command(TARGET CustomCommandUsingTargetTestAlias POST_BUILD
                    COMMAND dummy_generator ${CMAKE_CURRENT_BINARY_DIR}/generated_dummy.cxx)
 
 add_subdirectory(GeneratorInExtraDir)
@@ -410,6 +412,10 @@ add_custom_target(do_check_command_line ALL
   COMMENT "Checking custom target command line escapes ($dollar-signs$)"
   )
 add_dependencies(do_check_command_line check_command_line)
+add_custom_command(TARGET do_check_command_line POST_BUILD VERBATIM
+  COMMAND ${CMAKE_COMMAND} -E echo "POST_BUILD command with $dollar-signs$"
+  COMMENT "Checking custom target POST_BUILD command line escapes ($dollar-signs$)"
+)
 
 add_custom_target(pre_check_command_line
   COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_CURRENT_BINARY_DIR}/check_mark.txt
@@ -586,3 +592,12 @@ add_custom_target(drive_mac_fw ALL DEPENDS mac_fw.txt)
 # Test empty COMMANDs are omitted
 add_executable(empty_command empty_command.cxx)
 add_custom_command(TARGET empty_command POST_BUILD COMMAND $<0:date>)
+
+# Test OUTPUT allows filenames containing "#" on generators that support this
+if(NOT CMAKE_GENERATOR MATCHES "Borland Makefiles")
+  add_custom_target(file_with_hash ALL DEPENDS "${PROJECT_BINARY_DIR}/hash#in#name.txt")
+  add_custom_command(
+    OUTPUT "${PROJECT_BINARY_DIR}/hash#in#name.txt"
+    COMMAND ${CMAKE_COMMAND} -E touch "${PROJECT_BINARY_DIR}/hash#in#name.txt"
+  )
+endif()

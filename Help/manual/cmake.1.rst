@@ -31,7 +31,7 @@ Synopsis
   cmake --find-package [<options>]
 
  `Run a Workflow Preset`_
-  cmake --workflow [<options>]
+  cmake --workflow <options>
 
  `View Help`_
   cmake --help[-<topic>]
@@ -213,6 +213,13 @@ Options
  This removes any existing ``CMakeCache.txt`` file and associated
  ``CMakeFiles/`` directory, and recreates them from scratch.
 
+ .. versionchanged:: 3.30
+
+   For dependencies previously populated by :module:`FetchContent` with the
+   ``NEW`` setting for policy :policy:`CMP0168`, their stamp and script files
+   from any previous run will be removed. The download, update, and patch
+   steps will therefore be forced to re-execute.
+
 .. option:: -L[A][H]
 
  List non-advanced cached variables.
@@ -223,6 +230,17 @@ Options
  changed with :option:`-D <cmake -D>` option.  Changing some of the variables
  may result in more variables being created.  If ``A`` is specified, then it
  will display also advanced variables.  If ``H`` is specified, it will also
+ display help for each variable.
+
+.. option:: -LR[A][H] <regex>
+
+ .. versionadded:: 3.31
+
+ Show specific non-advanced cached variables
+
+ Show non-``INTERNAL`` nor :prop_cache:`ADVANCED` variables from the CMake
+ ``CACHE`` that match the given regex. If ``A`` is specified, then it
+ will also show advanced variables.  If ``H`` is specified, it will also
  display help for each variable.
 
 .. option:: -N
@@ -248,7 +266,17 @@ Options
  from the top of a binary tree for a CMake project it will dump
  additional information such as the cache, log files etc.
 
+.. option:: --print-config-dir
+
+ .. versionadded:: 3.31
+
+ Print CMake config directory for user-wide FileAPI queries.
+
+ See :envvar:`CMAKE_CONFIG_DIR` for more details.
+
 .. option:: --log-level=<level>
+
+ .. versionadded:: 3.16
 
  Set the log ``<level>``.
 
@@ -507,27 +535,33 @@ Options
 
 .. option:: --preset <preset>, --preset=<preset>
 
- Reads a :manual:`preset <cmake-presets(7)>` from
- ``<path-to-source>/CMakePresets.json`` and
- ``<path-to-source>/CMakeUserPresets.json``. The preset may specify the
- generator and the build directory, and a list of variables and other
- arguments to pass to CMake. The current working directory must contain
- CMake preset files. The :manual:`CMake GUI <cmake-gui(1)>` can
- also recognize ``CMakePresets.json`` and ``CMakeUserPresets.json`` files. For
- full details on these files, see :manual:`cmake-presets(7)`.
+ Reads a :manual:`preset <cmake-presets(7)>` from ``CMakePresets.json`` and
+ ``CMakeUserPresets.json`` files, which must be located in the same directory
+ as the top level ``CMakeLists.txt`` file. The preset may specify the
+ generator, the build directory, a list of variables, and other arguments to
+ pass to CMake. At least one of ``CMakePresets.json`` or
+ ``CMakeUserPresets.json`` must be present.
+ The :manual:`CMake GUI <cmake-gui(1)>` also recognizes and supports
+ ``CMakePresets.json`` and ``CMakeUserPresets.json`` files. For full details
+ on these files, see :manual:`cmake-presets(7)`.
 
- The presets are read before all other command line options. The options
- specified by the preset (variables, generator, etc.) can all be overridden by
- manually specifying them on the command line. For example, if the preset sets
- a variable called ``MYVAR`` to ``1``, but the user sets it to ``2`` with a
- ``-D`` argument, the value ``2`` is preferred.
+ The presets are read before all other command line options, although the
+ :option:`-S <cmake -S>` option can be used to specify the source directory
+ containing the ``CMakePresets.json`` and ``CMakeUserPresets.json`` files.
+ If :option:`-S <cmake -S>` is not given, the current directory is assumed to
+ be the top level source directory and must contain the presets files. The
+ options specified by the chosen preset (variables, generator, etc.) can all
+ be overridden by manually specifying them on the command line. For example,
+ if the preset sets a variable called ``MYVAR`` to ``1``, but the user sets
+ it to ``2`` with a ``-D`` argument, the value ``2`` is preferred.
 
 .. option:: --list-presets[=<type>]
 
  Lists the available presets of the specified ``<type>``.  Valid values for
  ``<type>`` are ``configure``, ``build``, ``test``, ``package``, or ``all``.
  If ``<type>`` is omitted, ``configure`` is assumed.  The current working
- directory must contain CMake preset files.
+ directory must contain CMake preset files unless the :option:`-S <cmake -S>`
+ option is used to specify a different top level source directory.
 
 .. option:: --debugger
 
@@ -732,6 +766,15 @@ The options are:
 
   This option can be omitted if :envvar:`VERBOSE` environment variable is set.
 
+.. option:: -j <jobs>, --parallel <jobs>
+
+  .. versionadded:: 3.31
+
+  Install in parallel using the given number of jobs. Only available if
+  :prop_gbl:`INSTALL_PARALLEL` is enabled. The
+  :envvar:`CMAKE_INSTALL_PARALLEL_LEVEL` environment variable specifies a
+  default parallel level when this option is not provided.
+
 Run :option:`cmake --install` with no options for quick help.
 
 Open a Project
@@ -890,6 +933,10 @@ Available commands are:
     of ``cat`` does not support any options, so using a option starting with
     ``-`` will result in an error. Use ``--`` to indicate the end of options, in
     case a file starts with ``-``.
+
+  .. versionadded:: 3.29
+
+    ``cat`` can now print the standard input by passing the ``-`` argument.
 
 .. program:: cmake-E
 
@@ -1311,6 +1358,7 @@ The following ``cmake -E`` commands are available only on Windows:
 
   Write Windows registry value.
 
+.. _`Find-Package Tool Mode`:
 
 Run the Find-Package Tool
 =========================
@@ -1346,7 +1394,7 @@ build steps in order:
 
 .. code-block:: shell
 
-  cmake --workflow [<options>]
+  cmake --workflow <options>
 
 The options are:
 
@@ -1363,6 +1411,15 @@ The options are:
   must contain CMake preset files.
   See :manual:`preset <cmake-presets(7)>` for more details.
 
+  .. versionchanged:: 3.31
+    When following immediately after the ``--workflow`` option,
+    the ``--preset`` argument can be omitted and just the ``<preset>``
+    name can be given.  This means the following syntax is valid:
+
+    .. code-block:: console
+
+      $ cmake --workflow my-preset
+
 .. option:: --list-presets
 
   Lists the available workflow presets. The current working directory must
@@ -1370,9 +1427,8 @@ The options are:
 
 .. option:: --fresh
 
-  Perform a fresh configuration of the build tree.
-  This removes any existing ``CMakeCache.txt`` file and associated
-  ``CMakeFiles/`` directory, and recreates them from scratch.
+  Perform a fresh configuration of the build tree, which has the same effect
+  as :option:`cmake --fresh`.
 
 View Help
 =========

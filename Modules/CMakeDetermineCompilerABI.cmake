@@ -6,6 +6,7 @@
 # This is used internally by CMake and should not be included by user
 # code.
 
+include(${CMAKE_ROOT}/Modules/Internal/CMakeDetermineLinkerId.cmake)
 include(${CMAKE_ROOT}/Modules/CMakeParseImplicitIncludeInfo.cmake)
 include(${CMAKE_ROOT}/Modules/CMakeParseImplicitLinkInfo.cmake)
 include(${CMAKE_ROOT}/Modules/CMakeParseLibraryArchitecture.cmake)
@@ -19,30 +20,47 @@ function(CMAKE_DETERMINE_COMPILER_ABI lang src)
     set(BIN "${CMAKE_PLATFORM_INFO_DIR}/CMakeDetermineCompilerABI_${lang}.bin")
     set(CMAKE_FLAGS )
     set(COMPILE_DEFINITIONS )
+    set(LINK_OPTIONS )
     if(DEFINED CMAKE_${lang}_VERBOSE_FLAG)
-      set(CMAKE_FLAGS "-DEXE_LINKER_FLAGS=${CMAKE_${lang}_VERBOSE_FLAG}")
+      set(LINK_OPTIONS "${CMAKE_${lang}_VERBOSE_FLAG}")
       set(COMPILE_DEFINITIONS "${CMAKE_${lang}_VERBOSE_FLAG}")
     endif()
     if(DEFINED CMAKE_${lang}_VERBOSE_COMPILE_FLAG)
       set(COMPILE_DEFINITIONS "${CMAKE_${lang}_VERBOSE_COMPILE_FLAG}")
     endif()
+    if(DEFINED CMAKE_${lang}_VERBOSE_LINK_FLAG)
+      list(APPEND LINK_OPTIONS "${CMAKE_${lang}_VERBOSE_LINK_FLAG}")
+    endif()
     if(lang MATCHES "^(CUDA|HIP)$")
-      if(CMAKE_${lang}_ARCHITECTURES STREQUAL "native")
+      if(CMAKE_CUDA_ARCHITECTURES STREQUAL "native")
         # We are about to detect the native architectures, so we do
         # not yet know them.  Use all architectures during detection.
         set(CMAKE_${lang}_ARCHITECTURES "all")
       endif()
       set(CMAKE_${lang}_RUNTIME_LIBRARY "Static")
     endif()
+    if(lang STREQUAL "CXX")
+      set(CMAKE_${lang}_SCAN_FOR_MODULES OFF)
+    endif()
     if(NOT "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xMSVC")
       # Avoid adding our own platform standard libraries for compilers
       # from which we might detect implicit link libraries.
       list(APPEND CMAKE_FLAGS "-DCMAKE_${lang}_STANDARD_LIBRARIES=")
     endif()
+    list(JOIN LINK_OPTIONS " " LINK_OPTIONS)
+    list(APPEND CMAKE_FLAGS "-DEXE_LINKER_FLAGS=${LINK_OPTIONS}")
+
     __TestCompiler_setTryCompileTargetType()
 
     # Avoid failing ABI detection on warnings.
-    string(REGEX REPLACE "(^| )-Werror([= ][^-][^ ]*)?( |$)" " " CMAKE_${lang}_FLAGS "${CMAKE_${lang}_FLAGS}")
+    if(CMAKE_TRY_COMPILE_CONFIGURATION)
+      string(TOUPPER "${CMAKE_TRY_COMPILE_CONFIGURATION}" _tc_config)
+    else()
+      set(_tc_config "DEBUG")
+    endif()
+    foreach(v CMAKE_${lang}_FLAGS CMAKE_${lang}_FLAGS_${_tc_config})
+      string(REGEX REPLACE "(^| )-Werror([= ][^-][^ ]*)?( |$)" " " ${v} "${${v}}")
+    endforeach()
 
     # Save the current LC_ALL, LC_MESSAGES, and LANG environment variables
     # and set them to "C" that way GCC's "search starts here" text is in
@@ -53,7 +71,6 @@ function(CMAKE_DETERMINE_COMPILER_ABI lang src)
     set(ENV{LC_ALL}      C)
     set(ENV{LC_MESSAGES} C)
     set(ENV{LANG}        C)
-
     try_compile(CMAKE_${lang}_ABI_COMPILED
       SOURCES ${src}
       CMAKE_FLAGS ${CMAKE_FLAGS}
@@ -82,7 +99,45 @@ function(CMAKE_DETERMINE_COMPILER_ABI lang src)
     # Load the resulting information strings.
     if(CMAKE_${lang}_ABI_COMPILED)
       message(CHECK_PASS "done")
+      if(CMAKE_HOST_APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_OSX_ARCHITECTURES MATCHES "\\$")
+        file(READ_MACHO "${BIN}" ARCHITECTURES archs CAPTURE_ERROR macho_error) # undocumented file() subcommand
+        if (NOT macho_error)
+          # sort and prune the list of found architectures
+          set(arch_list_sorted ${archs})
+          list(SORT arch_list_sorted)
+          list(REMOVE_DUPLICATES arch_list_sorted)
+          # sort and prune the list of requested architectures
+          set(requested_arch_list ${CMAKE_OSX_ARCHITECTURES})
+          list(SORT requested_arch_list)
+          list(REMOVE_DUPLICATES requested_arch_list)
+          message(CONFIGURE_LOG
+            "Effective list of requested architectures (possibly empty)  : \"${requested_arch_list}\"\n"
+            "Effective list of architectures found in the ABI info binary: \"${arch_list_sorted}\"\n")
+          # If all generated architectures were known to READ_MACHO (i.e. libmacho):
+          # Compare requested and found:
+          # - if no architecture(s) were requested explicitly, just check if READ_MACHO returned
+          #   an architecture for the ABI info binary.
+          # - otherwise, check if the requested and found lists are equal
+          if(arch_list_sorted MATCHES "unknown")
+            # Rare but not impossible: a host with a toolchain capable of generating binaries with
+            # architectures that the system libmacho is too old to know. Report the found archs as
+            # usual, warn about the unknowns and skip the comparison with CMAKE_OSX_ARCHITECTURES.
+            message(WARNING "The ${lang} compiler generates universal binaries with at least 1 architecture not known to the host")
+          elseif(requested_arch_list AND arch_list_sorted
+              AND NOT "${requested_arch_list}" STREQUAL "${arch_list_sorted}")
+            # inform the user of the mismatch but show the raw input and output lists
+            message(FATAL_ERROR
+              "The ${lang} compiler targets architectures:\n"
+              "  \"${archs}\"\n"
+              "but CMAKE_OSX_ARCHITECTURES is\n"
+              "  \"${CMAKE_OSX_ARCHITECTURES}\"\n")
+          endif()
+        endif()
+      endif()
+      cmake_policy(PUSH)
+      cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
       file(STRINGS "${BIN}" ABI_STRINGS LIMIT_COUNT 32 REGEX "INFO:[A-Za-z0-9_]+\\[[^]]*\\]")
+      cmake_policy(POP)
       set(ABI_SIZEOF_DPTR "NOTFOUND")
       set(ABI_BYTE_ORDER "NOTFOUND")
       set(ABI_NAME "NOTFOUND")
@@ -146,39 +201,42 @@ function(CMAKE_DETERMINE_COMPILER_ABI lang src)
         set(implicit_libs "${CMAKE_${lang}_IMPLICIT_LINK_LIBRARIES}")
         set(implicit_fwks "${CMAKE_${lang}_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES}")
       else()
-        # Parse implicit linker information for this language, if available.
-        set(implicit_dirs "")
-        set(implicit_objs "")
-        set(implicit_libs "")
-        set(implicit_fwks "")
-        if(CMAKE_${lang}_VERBOSE_FLAG)
-          CMAKE_PARSE_IMPLICIT_LINK_INFO("${OUTPUT}" implicit_libs implicit_dirs implicit_fwks log
-            "${CMAKE_${lang}_IMPLICIT_OBJECT_REGEX}"
-            COMPUTE_IMPLICIT_OBJECTS implicit_objs
-            LANGUAGE ${lang})
-          message(CONFIGURE_LOG
-            "Parsed ${lang} implicit link information:\n${log}\n\n")
-        endif()
-        # for VS IDE Intel Fortran we have to figure out the
-        # implicit link path for the fortran run time using
-        # a try-compile
-        if("${lang}" MATCHES "Fortran"
-            AND "${CMAKE_GENERATOR}" MATCHES "Visual Studio")
-          message(CHECK_START "Determine Intel Fortran Compiler Implicit Link Path")
-          # Build a sample project which reports symbols.
-          try_compile(IFORT_LIB_PATH_COMPILED
-            PROJECT IntelFortranImplicit
-            SOURCE_DIR ${CMAKE_ROOT}/Modules/IntelVSImplicitPath
-            BINARY_DIR ${CMAKE_BINARY_DIR}/CMakeFiles/IntelVSImplicitPath
-            CMAKE_FLAGS
-            "-DCMAKE_Fortran_FLAGS:STRING=${CMAKE_Fortran_FLAGS}"
-            OUTPUT_VARIABLE _output)
-          file(WRITE
-            "${CMAKE_BINARY_DIR}/CMakeFiles/IntelVSImplicitPath/output.txt"
-            "${_output}")
-          include(${CMAKE_BINARY_DIR}/CMakeFiles/IntelVSImplicitPath/output.cmake OPTIONAL)
-          message(CHECK_PASS "done")
-        endif()
+      # Parse implicit linker information for this language, if available.
+      set(implicit_dirs "")
+      set(implicit_objs "")
+      set(implicit_libs "")
+      set(implicit_fwks "")
+      set(compute_artifacts COMPUTE_LINKER linker_tool)
+      if(CMAKE_${lang}_VERBOSE_FLAG)
+        list(APPEND compute_artifacts COMPUTE_IMPLICIT_LIBS implicit_libs
+                                      COMPUTE_IMPLICIT_DIRS implicit_dirs
+                                      COMPUTE_IMPLICIT_FWKS implicit_fwks
+                                      COMPUTE_IMPLICIT_OBJECTS implicit_objs)
+      endif()
+      cmake_parse_implicit_link_info2("${OUTPUT}" log "${CMAKE_${lang}_IMPLICIT_OBJECT_REGEX}"
+        ${compute_artifacts} LANGUAGE ${lang})
+      message(CONFIGURE_LOG
+          "Parsed ${lang} implicit link information:\n${log}\n\n")
+      # for VS IDE Intel Fortran we have to figure out the
+      # implicit link path for the fortran run time using
+      # a try-compile
+      if("${lang}" MATCHES "Fortran"
+          AND "${CMAKE_GENERATOR}" MATCHES "Visual Studio")
+        message(CHECK_START "Determine Intel Fortran Compiler Implicit Link Path")
+        # Build a sample project which reports symbols.
+        try_compile(IFORT_LIB_PATH_COMPILED
+          PROJECT IntelFortranImplicit
+          SOURCE_DIR ${CMAKE_ROOT}/Modules/IntelVSImplicitPath
+          BINARY_DIR ${CMAKE_BINARY_DIR}/CMakeFiles/IntelVSImplicitPath
+          CMAKE_FLAGS
+          "-DCMAKE_Fortran_FLAGS:STRING=${CMAKE_Fortran_FLAGS}"
+          OUTPUT_VARIABLE _output)
+        file(WRITE
+          "${CMAKE_BINARY_DIR}/CMakeFiles/IntelVSImplicitPath/output.txt"
+          "${_output}")
+        include(${CMAKE_BINARY_DIR}/CMakeFiles/IntelVSImplicitPath/output.cmake OPTIONAL)
+        message(CHECK_PASS "done")
+      endif()
       endif()
 
       # Implicit link libraries cannot be used explicitly for multiple
@@ -192,6 +250,12 @@ function(CMAKE_DETERMINE_COMPILER_ABI lang src)
       if(DEFINED ENV{CMAKE_${lang}_IMPLICIT_LINK_DIRECTORIES_EXCLUDE})
         list(REMOVE_ITEM implicit_dirs $ENV{CMAKE_${lang}_IMPLICIT_LINK_DIRECTORIES_EXCLUDE})
       endif()
+
+      set(CMAKE_${lang}_COMPILER_LINKER "${linker_tool}" PARENT_SCOPE)
+      cmake_determine_linker_id(${lang} "${linker_tool}")
+      set(CMAKE_${lang}_COMPILER_LINKER_ID "${CMAKE_${lang}_COMPILER_LINKER_ID}" PARENT_SCOPE)
+      set(CMAKE_${lang}_COMPILER_LINKER_VERSION ${CMAKE_${lang}_COMPILER_LINKER_VERSION} PARENT_SCOPE)
+      set(CMAKE_${lang}_COMPILER_LINKER_FRONTEND_VARIANT ${CMAKE_${lang}_COMPILER_LINKER_FRONTEND_VARIANT} PARENT_SCOPE)
 
       set(CMAKE_${lang}_IMPLICIT_LINK_LIBRARIES "${implicit_libs}" PARENT_SCOPE)
       set(CMAKE_${lang}_IMPLICIT_LINK_DIRECTORIES "${implicit_dirs}" PARENT_SCOPE)

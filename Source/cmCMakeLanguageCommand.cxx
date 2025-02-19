@@ -345,25 +345,16 @@ bool cmCMakeLanguageCommandGET_EXPERIMENTAL_FEATURE_ENABLED(
   auto const& featureName = expandedArgs[1];
   auto const& variableName = expandedArgs[2];
 
-  auto feature = cmExperimental::Feature::Sentinel;
-  for (std::size_t i = 0;
-       i < static_cast<std::size_t>(cmExperimental::Feature::Sentinel); i++) {
-    if (cmExperimental::DataForFeature(static_cast<cmExperimental::Feature>(i))
-          .Name == featureName) {
-      feature = static_cast<cmExperimental::Feature>(i);
-      break;
+  if (auto feature = cmExperimental::FeatureByName(featureName)) {
+    if (cmExperimental::HasSupportEnabled(makefile, *feature)) {
+      makefile.AddDefinition(variableName, "TRUE");
+    } else {
+      makefile.AddDefinition(variableName, "FALSE");
     }
-  }
-  if (feature == cmExperimental::Feature::Sentinel) {
+  } else {
     return FatalError(status,
                       cmStrCat("Experimental feature name \"", featureName,
                                "\" does not exist."));
-  }
-
-  if (cmExperimental::HasSupportEnabled(makefile, feature)) {
-    makefile.AddDefinition(variableName, "TRUE");
-  } else {
-    makefile.AddDefinition(variableName, "FALSE");
   }
 
   return true;
@@ -397,6 +388,32 @@ bool cmCMakeLanguageCommand(std::vector<cmListFileArgument> const& args,
 
   if (!moreArgs()) {
     return FatalError(status, "called with incorrect number of arguments");
+  }
+  if (expArgs[expArg] == "EXIT"_s) {
+    ++expArg; // consume "EXIT".
+
+    if (!moreArgs()) {
+      return FatalError(status, "EXIT requires one argument");
+    }
+
+    auto workingMode =
+      status.GetMakefile().GetCMakeInstance()->GetWorkingMode();
+    if (workingMode != cmake::SCRIPT_MODE) {
+      return FatalError(status, "EXIT can be used only in SCRIPT mode");
+    }
+
+    long retCode = 0;
+
+    if (!cmStrToLong(expArgs[expArg], &retCode)) {
+      return FatalError(status,
+                        cmStrCat("EXIT requires one integral argument, got \"",
+                                 expArgs[expArg], '\"'));
+    }
+
+    if (workingMode == cmake::SCRIPT_MODE) {
+      status.SetExitCode(static_cast<int>(retCode));
+    }
+    return true;
   }
 
   if (expArgs[expArg] == "SET_DEPENDENCY_PROVIDER"_s) {

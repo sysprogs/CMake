@@ -46,7 +46,7 @@ char const* const GRAPHVIZ_NODE_SHAPE_UTILITY = "box";
 
 const char* getShapeForTarget(const cmLinkItem& item)
 {
-  if (item.Target == nullptr) {
+  if (!item.Target) {
     return GRAPHVIZ_NODE_SHAPE_LIBRARY_UNKNOWN;
   }
 
@@ -284,7 +284,8 @@ void cmGraphVizWriter::Write()
       // Reserved targets have inconsistent names across platforms (e.g. 'all'
       // vs. 'ALL_BUILD'), which can disrupt the traversal ordering.
       // We don't need or want them anyway.
-      if (!cmGlobalGenerator::IsReservedTarget(gt->GetName())) {
+      if (!cmGlobalGenerator::IsReservedTarget(gt->GetName()) &&
+          !cmHasLiteralPrefix(gt->GetName(), "__cmake_")) {
         sortedGeneratorTargets.insert(gt.get());
       }
     }
@@ -472,7 +473,7 @@ bool cmGraphVizWriter::ItemExcluded(cmLinkItem const& item)
     return true;
   }
 
-  if (item.Target == nullptr) {
+  if (!item.Target) {
     return !this->GenerateForExternals;
   }
 

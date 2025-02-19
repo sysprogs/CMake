@@ -9,22 +9,25 @@
 
 #include "cmCTest.h"
 #include "cmCurl.h"
+#include "cmList.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmValue.h"
+
+namespace {
+const bool TLS_VERIFY_DEFAULT = true;
+const int TLS_VERSION_DEFAULT = CURL_SSLVERSION_TLSv1_2;
+}
 
 cmCTestCurl::cmCTestCurl(cmCTest* ctest)
+  : CTest(ctest)
+  , CurlOpts(ctest)
 {
-  this->CTest = ctest;
   this->SetProxyType();
-  this->UseHttp10 = false;
+  cmCurlInitOnce();
   // In windows, this will init the winsock stuff
   ::curl_global_init(CURL_GLOBAL_ALL);
-  // default is to verify https
-  this->VerifyPeerOff = false;
-  this->VerifyHostOff = false;
-  this->Quiet = false;
-  this->TimeOutSeconds = 0;
-  this->Curl = curl_easy_init();
+  this->Curl = cm_curl_easy_init();
 }
 
 cmCTestCurl::~cmCTestCurl()
@@ -59,15 +62,30 @@ size_t curlDebugCallback(CURL* /*unused*/, curl_infotype /*unused*/,
 }
 }
 
-void cmCTestCurl::SetCurlOptions(std::vector<std::string> const& args)
+cmCTestCurlOpts::cmCTestCurlOpts(cmCTest* ctest)
 {
-  for (std::string const& arg : args) {
-    if (arg == "CURLOPT_SSL_VERIFYPEER_OFF") {
-      this->VerifyPeerOff = true;
+  this->TLSVersionOpt =
+    cmCurlParseTLSVersion(ctest->GetCTestConfiguration("TLSVersion"));
+  if (!this->TLSVersionOpt.has_value()) {
+    this->TLSVersionOpt = TLS_VERSION_DEFAULT;
+  }
+
+  std::string tlsVerify = ctest->GetCTestConfiguration("TLSVerify");
+  if (!tlsVerify.empty()) {
+    this->TLSVerifyOpt = cmIsOn(tlsVerify);
+  } else {
+    cmList args{ ctest->GetCTestConfiguration("CurlOptions") };
+    for (std::string const& arg : args) {
+      if (arg == "CURLOPT_SSL_VERIFYPEER_OFF") {
+        this->TLSVerifyOpt = false;
+      }
+      if (arg == "CURLOPT_SSL_VERIFYHOST_OFF") {
+        this->VerifyHostOff = true;
+      }
     }
-    if (arg == "CURLOPT_SSL_VERIFYHOST_OFF") {
-      this->VerifyHostOff = true;
-    }
+  }
+  if (!this->TLSVerifyOpt.has_value()) {
+    this->TLSVerifyOpt = TLS_VERIFY_DEFAULT;
   }
 }
 
@@ -77,10 +95,15 @@ bool cmCTestCurl::InitCurl()
     return false;
   }
   cmCurlSetCAInfo(this->Curl);
-  if (this->VerifyPeerOff) {
-    curl_easy_setopt(this->Curl, CURLOPT_SSL_VERIFYPEER, 0);
+  if (this->CurlOpts.TLSVersionOpt.has_value()) {
+    curl_easy_setopt(this->Curl, CURLOPT_SSLVERSION,
+                     *this->CurlOpts.TLSVersionOpt);
   }
-  if (this->VerifyHostOff) {
+  if (this->CurlOpts.TLSVerifyOpt.has_value()) {
+    curl_easy_setopt(this->Curl, CURLOPT_SSL_VERIFYPEER,
+                     *this->CurlOpts.TLSVerifyOpt ? 1 : 0);
+  }
+  if (this->CurlOpts.VerifyHostOff) {
     curl_easy_setopt(this->Curl, CURLOPT_SSL_VERIFYHOST, 0);
   }
   if (!this->HTTPProxy.empty()) {

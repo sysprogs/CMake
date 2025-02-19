@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 project(VSAndroid C CXX)
 
 set(CMAKE_ANDROID_ARCH armv7-a)
-set(CMAKE_ANDROID_STL_TYPE stlport_shared)
+set(CMAKE_ANDROID_STL_TYPE c++_shared)
 set(CMAKE_ANDROID_API_MIN 9)
 set(CMAKE_ANDROID_API 15)
 set(CMAKE_ANDROID_GUI 1)

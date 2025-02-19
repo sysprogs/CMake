@@ -100,6 +100,7 @@ set(properties
   "C_LINKER_LAUNCHER"                       "ccache"            "<SAME>"
   ### C++
   "CXX_LINKER_LAUNCHER"                     "ccache"            "<SAME>"
+  "CXX_MODULE_STD"                          "ON"                "<SAME>"
   ### CUDA
   "CUDA_RESOLVE_DEVICE_SYMBOLS"             "ON"                "<SAME>"
   "CUDA_RUNTIME_LIBRARY"                    "Static"            "<SAME>"
@@ -176,6 +177,7 @@ set(properties
 
   # Metadata
   "EXPORT_COMPILE_COMMANDS"                 "OFF"               "<SAME>"
+  "EXPORT_BUILD_DATABASE"                   "OFF"               "<SAME>"
   )
 
 if (CMAKE_HOST_APPLE) # compile-guarded in CMake

@@ -2,6 +2,11 @@
 ADD_AUTOGEN_TEST(AutogenOriginDependsOff autogenOriginDependsOff)
 ADD_AUTOGEN_TEST(AutogenOriginDependsOn)
 ADD_AUTOGEN_TEST(AutogenTargetDepends)
+
+set(Autogen_CTEST_OPTIONS --build-target Exe)
+ADD_AUTOGEN_TEST(AutogenTimestampDeps)
+unset(Autogen_CTEST_OPTIONS)
+
 ADD_AUTOGEN_TEST(AutoMocGeneratedFile)
 ADD_AUTOGEN_TEST(Complex QtAutogen)
 ADD_AUTOGEN_TEST(GlobalAutogenSystemUseInclude)
@@ -42,9 +47,7 @@ ADD_AUTOGEN_TEST(UnityMocSource)
 
 if(QT_TEST_ALLOW_QT_MACROS)
   ADD_AUTOGEN_TEST(MocCMP0071)
-  set_property(TEST "Qt${QT_TEST_VERSION}Autogen.MocCMP0071" APPEND PROPERTY LABELS "policy")
   ADD_AUTOGEN_TEST(MocCMP0100)
-  set_property(TEST "Qt${QT_TEST_VERSION}Autogen.MocCMP0100" APPEND PROPERTY LABELS "policy")
   ADD_AUTOGEN_TEST(MocInclude)
   ADD_AUTOGEN_TEST(MocIncludeSymlink)
   ADD_AUTOGEN_TEST(MocSkipSource)

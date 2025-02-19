@@ -157,6 +157,9 @@ The following variables can be set to guide the search for HDF5 libraries and in
 include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
+
 # We haven't found HDF5 yet. Clear its state in case it is set in the parent
 # scope somewhere else. We can't rely on it because different components may
 # have been requested for this call.
@@ -971,7 +974,6 @@ if( NOT HDF5_FOUND )
     # If the HDF5 include directory was found, open H5pubconf.h to determine if
     # HDF5 was compiled with parallel IO support
     set( HDF5_IS_PARALLEL FALSE )
-    set( HDF5_VERSION "" )
     foreach( _dir IN LISTS HDF5_INCLUDE_DIRS )
       foreach(_hdr "${_dir}/H5pubconf.h" "${_dir}/H5pubconf-64.h" "${_dir}/H5pubconf-32.h")
         if( EXISTS "${_hdr}" )
@@ -987,7 +989,7 @@ if( NOT HDF5_FOUND )
                 HDF5_VERSION_DEFINE
                 REGEX "^[ \t]*#[ \t]*define[ \t]+H5_VERSION[ \t]+" )
             if( "${HDF5_VERSION_DEFINE}" MATCHES
-                "H5_VERSION[ \t]+\"([0-9]+\\.[0-9]+\\.[0-9]+)(-patch([0-9]+))?\"" )
+                "H5_VERSION[ \t]+\"([0-9\\.]+)(-patch([0-9]+))?\"" )
                 set( HDF5_VERSION "${CMAKE_MATCH_1}" )
                 if( CMAKE_MATCH_3 )
                   set( HDF5_VERSION ${HDF5_VERSION}.${CMAKE_MATCH_3})
@@ -1243,3 +1245,5 @@ if (HDF5_FIND_DEBUG)
 endif()
 unset(_lang)
 unset(_HDF5_NEED_TO_SEARCH)
+
+cmake_policy(POP)

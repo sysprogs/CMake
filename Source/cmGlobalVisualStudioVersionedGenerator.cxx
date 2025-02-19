@@ -56,7 +56,7 @@ static bool VSIsArm64Host()
   USHORT processMachine;
   USHORT nativeMachine;
 
-  return s_IsWow64Process2Impl != nullptr &&
+  return s_IsWow64Process2Impl &&
     s_IsWow64Process2Impl(GetCurrentProcess(), &processMachine,
                           &nativeMachine) &&
     nativeMachine == IMAGE_FILE_MACHINE_ARM64;
@@ -125,10 +125,6 @@ static unsigned int VSVersionToMajor(
   cmGlobalVisualStudioGenerator::VSVersion v)
 {
   switch (v) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-      return 9;
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return 12;
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return 14;
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:
@@ -145,10 +141,6 @@ static const char* VSVersionToToolset(
   cmGlobalVisualStudioGenerator::VSVersion v)
 {
   switch (v) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-      return "v90";
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return "v120";
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return "v140";
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:
@@ -165,10 +157,6 @@ static std::string VSVersionToMajorString(
   cmGlobalVisualStudioGenerator::VSVersion v)
 {
   switch (v) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-      return "9";
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return "12";
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return "14";
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:
@@ -185,9 +173,6 @@ static const char* VSVersionToAndroidToolset(
   cmGlobalVisualStudioGenerator::VSVersion v)
 {
   switch (v) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return "";
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return "Clang_3_8";
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:
@@ -485,8 +470,6 @@ bool cmGlobalVisualStudioVersionedGenerator::MatchesGeneratorName(
 {
   std::string genName;
   switch (this->Version) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       break;
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:
@@ -752,9 +735,6 @@ cmGlobalVisualStudioVersionedGenerator::GetAndroidApplicationTypeRevision()
   const
 {
   switch (this->Version) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return "";
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return "2.0";
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:

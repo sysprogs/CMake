@@ -138,6 +138,10 @@ bool cmMacroHelperCommand::operator()(
       inStatus.SetBreakInvoked();
       return true;
     }
+    if (status.HasExitCode()) {
+      inStatus.SetExitCode(status.GetExitCode());
+      return true;
+    }
 	
 #ifndef CMAKE_BOOTSTRAP
     auto pDebugServer = makefile.GetCMakeInstance()->GetDebugServer();

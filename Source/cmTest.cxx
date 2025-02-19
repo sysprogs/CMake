@@ -9,6 +9,8 @@
 
 cmTest::cmTest(cmMakefile* mf)
   : Backtrace(mf->GetBacktrace())
+  , PolicyStatusCMP0158(mf->GetPolicyStatus(cmPolicies::CMP0158))
+  , PolicyStatusCMP0178(mf->GetPolicyStatus(cmPolicies::CMP0178))
 {
   this->Makefile = mf;
   this->OldStyle = true;
@@ -49,7 +51,7 @@ cmValue cmTest::GetProperty(const std::string& prop) const
 
 bool cmTest::GetPropertyAsBool(const std::string& prop) const
 {
-  return cmIsOn(this->GetProperty(prop));
+  return this->GetProperty(prop).IsOn();
 }
 
 void cmTest::SetProperty(const std::string& prop, cmValue value)

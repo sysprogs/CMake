@@ -126,6 +126,10 @@ bool cmFunctionHelperCommand::operator()(
       makefile.RaiseScope(status.GetReturnVariables());
       break;
     }
+    if (status.HasExitCode()) {
+      inStatus.SetExitCode(status.GetExitCode());
+      break;
+    }
 	
 #ifndef CMAKE_BOOTSTRAP
     auto pDebugServer = makefile.GetCMakeInstance()->GetDebugServer();

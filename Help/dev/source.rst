@@ -16,7 +16,7 @@ format source code.  It automatically runs ``clang-format`` on the set of
 source files for which we enforce style.  The script also has options to
 format only a subset of files, such as those that are locally modified.
 
-.. _`clang-format`: http://clang.llvm.org/docs/ClangFormat.html
+.. _`clang-format`: https://clang.llvm.org/docs/ClangFormat.html
 .. _`.clang-format`: ../../.clang-format
 .. _`Utilities/Scripts/clang-format.bash`: ../../Utilities/Scripts/clang-format.bash
 
@@ -249,6 +249,14 @@ These are:
   * ``cm::is_unique_ptr``:
     Checks if a type is a ``std::unique_ptr`` type.
 
+  * ``cm::remove_member_pointer``
+    Produces the underlying type of a member-pointer type, ie, given ``T C::*``,
+    returns ``T``.
+
+  * ``cm::member_pointer_class``
+    Produces the class associated with a member-pointer type, ie, given
+    ``T C::*``, returns ``C``.
+
 CMake assumes the compiler supports ``#pragma once``. Use this for all
 hand-written header files.
 
@@ -310,6 +318,7 @@ The CMake source tree is organized as follows.
 
 * ``Tests/``:
   The test suite.  See `Tests/README.rst`_.
+  To run the tests, see the `CMake Testing Guide`_.
 
 * ``Utilities/``:
   Scripts, third-party source code.
@@ -331,5 +340,6 @@ The CMake source tree is organized as follows.
     See `Utilities/Release/README.rst`_.
 
 .. _`CMake Documentation Guide`: documentation.rst
+.. _`CMake Testing Guide`: testing.rst
 .. _`Tests/README.rst`: ../../Tests/README.rst
 .. _`Utilities/Release/README.rst`: ../../Utilities/Release/README.rst

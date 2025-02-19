@@ -179,6 +179,11 @@
 # elif defined(__FRT_version__)
         PRINT *, 'INFO:compiler_version['//__FRT_version__//']'
 # endif
+#elif defined(__LFORTRAN__)
+        PRINT *, 'INFO:compiler[LFortran]'
+#define COMPILER_VERSION_MAJOR DEC(__LFORTRAN_MAJOR__)
+#define COMPILER_VERSION_MINOR DEC(__LFORTRAN_MINOR__)
+#define COMPILER_VERSION_PATCH DEC(__LFORTRAN_PATCHLEVEL__)
 #else
         PRINT *, 'INFO:compiler[]'
 #endif
@@ -240,7 +245,7 @@
 #else
         PRINT *, 'INFO:platform[]'
 #endif
-#if defined(_WIN32) && (defined(__INTEL_COMPILER) || defined(__ICC))
+#if defined(_MSC_VER)
 # if defined(_M_IA64)
         PRINT *, 'INFO:arch[IA64]'
 # elif defined(_M_X64) || defined(_M_AMD64)

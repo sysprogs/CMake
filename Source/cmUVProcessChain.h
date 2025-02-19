@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef> // IWYU pragma: keep
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <utility>
@@ -30,11 +31,16 @@ public:
 
   cmUVProcessChainBuilder& AddCommand(
     const std::vector<std::string>& arguments);
+  cmUVProcessChainBuilder& SetBuiltinLoop();
+  cmUVProcessChainBuilder& SetExternalLoop(uv_loop_t& loop);
   cmUVProcessChainBuilder& SetNoStream(Stream stdio);
   cmUVProcessChainBuilder& SetBuiltinStream(Stream stdio);
   cmUVProcessChainBuilder& SetMergedBuiltinStreams();
   cmUVProcessChainBuilder& SetExternalStream(Stream stdio, int fd);
+  cmUVProcessChainBuilder& SetExternalStream(Stream stdio, FILE* stream);
   cmUVProcessChainBuilder& SetWorkingDirectory(std::string dir);
+
+  uv_loop_t* GetLoop() const;
 
   cmUVProcessChain Start() const;
 
@@ -50,8 +56,8 @@ private:
 
   struct StdioConfiguration
   {
-    StdioType Type;
-    int FileDescriptor;
+    StdioType Type = None;
+    int FileDescriptor = -1;
   };
 
   struct ProcessConfiguration
@@ -63,6 +69,7 @@ private:
   std::vector<ProcessConfiguration> Processes;
   std::string WorkingDirectory;
   bool MergedBuiltinStreams = false;
+  uv_loop_t* Loop = nullptr;
 };
 
 class cmUVProcessChain

@@ -37,7 +37,7 @@ Cache variables
 
 The following cache variables may also be set:
 
-``JPEG_INCLUDE_DIRS``
+``JPEG_INCLUDE_DIR``
   where to find jpeglib.h, etc.
 ``JPEG_LIBRARY_RELEASE``
   where to find the JPEG library (optimized).
@@ -50,11 +50,12 @@ The following cache variables may also be set:
 Obsolete variables
 ^^^^^^^^^^^^^^^^^^
 
-``JPEG_INCLUDE_DIR``
-  where to find jpeglib.h, etc. (same as JPEG_INCLUDE_DIRS)
 ``JPEG_LIBRARY``
   where to find the JPEG library.
 #]=======================================================================]
+
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
 
 find_path(JPEG_INCLUDE_DIR jpeglib.h)
 
@@ -140,3 +141,5 @@ if(JPEG_FOUND)
 endif()
 
 mark_as_advanced(JPEG_LIBRARY JPEG_INCLUDE_DIR)
+
+cmake_policy(POP)

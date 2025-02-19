@@ -307,7 +307,7 @@ void cmCursesMainForm::PrintKeys(int process /* = 0 */)
   }
 
   char fmt_s[] = "%s";
-  if (cw == nullptr || !cw->PrintKeys()) {
+  if (!cw || !cw->PrintKeys()) {
     char firstLine[512] = "";
     char secondLine[512] = "";
     char thirdLine[512] = "";
@@ -605,7 +605,7 @@ void cmCursesMainForm::RemoveEntry(const char* value)
     std::find_if(this->Entries.begin(), this->Entries.end(),
                  [value](cmCursesCacheEntryComposite& entry) -> bool {
                    const char* val = entry.GetValue();
-                   return val != nullptr && !strcmp(value, val);
+                   return val && !strcmp(value, val);
                  });
 
   if (removeIt != this->Entries.end()) {
@@ -962,6 +962,11 @@ int cmCursesMainForm::LoadCache(const char* /*unused*/)
   if (r < 0) {
     return r;
   }
+
+  // Process presets before loading the cache
+  this->CMakeInstance->ProcessPresetVariables();
+  this->CMakeInstance->ProcessPresetEnvironment();
+
   this->CMakeInstance->SetCacheArgs(this->Args);
   this->CMakeInstance->PreLoadCMakeFiles();
   return r;

@@ -59,6 +59,9 @@ help this module find the correct files::
 
 #]=======================================================================]
 
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
+
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
 #=============================================================================
@@ -78,10 +81,11 @@ endif()
 # This will return ``GSL_INCLUDEDIR`` and ``GSL_LIBDIR`` used below.
 if( GSL_USE_PKGCONFIG )
   find_package(PkgConfig QUIET)
-  pkg_check_modules( GSL QUIET gsl )
-
-  if( EXISTS "${GSL_INCLUDEDIR}" )
-    get_filename_component( GSL_ROOT_DIR "${GSL_INCLUDEDIR}" DIRECTORY CACHE)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules( GSL QUIET gsl )
+    if( EXISTS "${GSL_INCLUDEDIR}" )
+      get_filename_component( GSL_ROOT_DIR "${GSL_INCLUDEDIR}" DIRECTORY CACHE)
+    endif()
   endif()
 endif()
 
@@ -229,3 +233,5 @@ if( GSL_FOUND AND NOT TARGET GSL::gsl )
       INTERFACE_LINK_LIBRARIES          GSL::gslcblas )
   endif()
 endif()
+
+cmake_policy(POP)

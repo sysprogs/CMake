@@ -164,6 +164,11 @@ BLAS/LAPACK Vendors
 
   Intel MKL v10+ 64 bit, single dynamic library
 
+``libblastrampoline``
+  .. versionadded:: 3.30
+
+  A BLAS/LAPACK demuxing library using PLT trampolines
+
 ``NVHPC``
   .. versionadded:: 3.21
 
@@ -288,12 +293,14 @@ if(BLA_PREFER_PKGCONFIG)
     set(BLA_PKGCONFIG_BLAS "blas")
   endif()
   find_package(PkgConfig QUIET)
-  pkg_check_modules(PKGC_BLAS QUIET ${BLA_PKGCONFIG_BLAS})
-  if(PKGC_BLAS_FOUND)
-    set(BLAS_FOUND ${PKGC_BLAS_FOUND})
-    set(BLAS_LIBRARIES "${PKGC_BLAS_LINK_LIBRARIES}")
-    _add_blas_target()
-    return()
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PKGC_BLAS QUIET ${BLA_PKGCONFIG_BLAS})
+    if(PKGC_BLAS_FOUND)
+      set(BLAS_FOUND ${PKGC_BLAS_FOUND})
+      set(BLAS_LIBRARIES "${PKGC_BLAS_LINK_LIBRARIES}")
+      _add_blas_target()
+      return()
+    endif()
   endif()
 endif()
 
@@ -746,7 +753,11 @@ if(BLA_VENDOR STREQUAL "OpenBLAS" OR BLA_VENDOR STREQUAL "All")
   set(_blas_openblas_lib "openblas")
 
   if(_blas_sizeof_integer EQUAL 8)
-    string(APPEND _blas_openblas_lib "64")
+    if(MINGW)
+      string(APPEND _blas_openblas_lib "_64")
+    else()
+      string(APPEND _blas_openblas_lib "64")
+    endif()
   endif()
 
   if(NOT BLAS_LIBRARIES)
@@ -1346,6 +1357,31 @@ if(BLA_VENDOR STREQUAL "NVHPC" OR BLA_VENDOR STREQUAL "All")
   endif()
 
   unset(_blas_nvhpc_lib)
+endif()
+
+# libblastrampoline? (https://github.com/JuliaLinearAlgebra/libblastrampoline/tree/main)
+if(BLA_VENDOR STREQUAL "libblastrampoline" OR BLA_VENDOR STREQUAL "All")
+  set(_blas_libblastrampoline_lib "blastrampoline")
+
+  if(WIN32)
+    # Windows appends the version number to the library
+    string(APPEND _blas_libblastrampoline_lib "-5")
+  endif()
+
+  if(NOT BLAS_LIBRARIES)
+    check_blas_libraries(
+      BLAS_LIBRARIES
+      BLAS
+      sgemm
+      ""
+      "${_blas_libblastrampoline_lib}"
+      ""
+      ""
+      ""
+      )
+  endif()
+
+  unset(_blas_libblastrampoline_lib)
 endif()
 
 # Generic BLAS library?

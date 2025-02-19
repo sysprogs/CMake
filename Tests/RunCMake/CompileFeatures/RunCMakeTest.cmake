@@ -53,6 +53,7 @@ function(test_build)
   set(RunCMake_TEST_BINARY_DIR "${RunCMake_BINARY_DIR}/${test}-build")
   run_cmake(${test})
   set(RunCMake_TEST_NO_CLEAN 1)
+  set(RunCMake_TEST_OUTPUT_MERGE 1)
   run_cmake_command(${test}-build ${CMAKE_COMMAND} --build . ${ARGN})
 endfunction()
 
@@ -62,7 +63,7 @@ macro(mangle_flags variable)
 
   if(RunCMake_GENERATOR MATCHES "Visual Studio" AND MSVC_TOOLSET_VERSION GREATER_EQUAL 141)
     string(REPLACE "-" "/" result "${result}")
-  elseif(RunCMake_GENERATOR STREQUAL "Xcode" AND CMAKE_XCODE_BUILD_SYSTEM GREATER_EQUAL 12)
+  elseif(RunCMake_GENERATOR STREQUAL "Xcode" AND XCODE_VERSION VERSION_LESS 15.3 AND CMAKE_XCODE_BUILD_SYSTEM GREATER_EQUAL 12)
     string(REPLACE "=" [[\\=]] result "${result}")
   endif()
 

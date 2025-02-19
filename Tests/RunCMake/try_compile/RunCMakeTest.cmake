@@ -16,6 +16,7 @@ run_cmake_with_options(Inspect
 include("${RunCMake_BINARY_DIR}/Inspect-build/info.cmake")
 
 run_cmake(ConfigureLog)
+run_cmake(TopIncludes)
 run_cmake(NoArgs)
 run_cmake(OneArg)
 run_cmake(TwoArgs)
@@ -46,6 +47,8 @@ run_cmake(NonSourceCopyFile)
 run_cmake(NonSourceCompileDefinitions)
 
 run_cmake(Verbose)
+
+run_cmake(ProjectVars)
 
 set(RunCMake_TEST_OPTIONS --debug-trycompile)
 run_cmake(PlatformVariables)

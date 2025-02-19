@@ -22,7 +22,7 @@ Synopsis
     string(`JOIN`_ <glue> <out-var> [<input>...])
     string(`TOLOWER`_ <string> <out-var>)
     string(`TOUPPER`_ <string> <out-var>)
-    string(`LENGTH`_ <string> <out-var>)
+    string(`LENGTH <LENGTH_>`_ <string> <out-var>)
     string(`SUBSTRING`_ <string> <begin> <length> <out-var>)
     string(`STRIP`_ <string> <out-var>)
     string(`GENEX_STRIP`_ <string> <out-var>)
@@ -136,15 +136,16 @@ The following characters have special meaning in regular expressions:
   or ``\\`` for a literal backslash ``\``.  Escaping a non-special
   character is unnecessary but allowed, e.g. ``\a`` matches ``a``.
 ``[ ]``
-  Matches any character(s) inside the brackets
+  Matches any character(s) inside the brackets.
+  To match a literal ``]``, make it the first character, e.g., ``[]ab]``.
 ``[^ ]``
-  Matches any character(s) not inside the brackets
+  Matches any character(s) not inside the brackets.
+  To not match a literal ``]``, make it the first character, e.g., ``[^]ab]``.
 ``-``
-  Inside brackets, specifies an inclusive range between
-  characters on either side e.g. ``[a-f]`` is ``[abcdef]``
-  To match a literal ``-`` using brackets, make it the first
-  or the last character e.g. ``[+*/-]`` matches basic
-  mathematical operators.
+  Inside brackets, specifies an inclusive range between characters on
+  either side, e.g., ``[a-f]`` is ``[abcdef]``.
+  To match a literal ``-`` using brackets, make it the first or the last
+  character, e.g., ``[+*/-]`` matches basic mathematical operators.
 ``*``
   Matches preceding pattern zero or more times
 ``+``

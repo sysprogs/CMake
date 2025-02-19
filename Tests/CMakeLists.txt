@@ -1,5 +1,13 @@
-# a macro for tests that have a simple format where the name matches the
-# directory and project
+# Creates a test named <NAME> that runs ctest --build-and-test on the
+# subdirectory of this one named by replacing "." with "/" in
+# <NAME>. Any arguments following NAME are passed to ctest as a
+# --test-command.  See the implementation for additional details.
+#
+# The subdirectory is added to TEST_BUILD_DIRS in the caller's scope.
+#
+# Requires: the name of the project in the subdirectory is the part of
+# <NAME> following the last dot ("."), or all of <NAME> if there is no
+# "." in <NAME>.
 macro(ADD_TEST_MACRO NAME)
   if(${ARGC} GREATER 1)
     set(_test_command --test-command ${ARGN})
@@ -24,11 +32,14 @@ endmacro()
 include(${CMAKE_CURRENT_SOURCE_DIR}/CheckFortran.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/CheckSwift.cmake)
 
+# Isolate tests from user-wide configuration.
+set(TEST_HOME "${CMake_BINARY_DIR}/Tests/CMakeFiles/TestHome")
+set(TEST_CONFIG_ENV_CODE "# Isolate tests from user-wide configuration.
+set(ENV{CMAKE_CONFIG_DIR} \"${TEST_HOME}/.config/cmake\")\n")
+file(MAKE_DIRECTORY "${TEST_HOME}/.config/cmake")
+
 # Fake a user home directory to avoid polluting the real one.
 if(NOT CTEST_NO_TEST_HOME AND (NOT WIN32 OR DEFINED ENV{HOME}))
-  set(TEST_HOME "${CMake_BINARY_DIR}/Tests/CMakeFiles/TestHome")
-  file(MAKE_DIRECTORY "${TEST_HOME}")
-  file(WRITE "${TEST_HOME}/.cvspass" ":pserver:anoncvs@www.cmake.org:/cvsroot/KWSys A\n")
   set(TEST_HOME_ENV_CODE "# Fake a user home directory to avoid polluting the real one.
 # But provide original ENV{HOME} value in ENV{CTEST_REAL_HOME} for tests that
 # need access to the real HOME directory.
@@ -37,15 +48,6 @@ if(DEFINED ENV{HOME} AND NOT DEFINED ENV{CTEST_REAL_HOME})
 endif()
 set(ENV{HOME} \"${TEST_HOME}\")
 ")
-endif()
-
-# Suppress generator deprecation warnings in test suite.
-if(CMAKE_GENERATOR MATCHES "^Visual Studio 9 2008")
-  set(TEST_WARN_VS_CODE "set(ENV{CMAKE_WARN_VS9} OFF)")
-elseif(CMAKE_GENERATOR MATCHES "^Visual Studio 12 2013")
-  set(TEST_WARN_VS_CODE "set(ENV{CMAKE_WARN_VS12} OFF)")
-else()
-  set(TEST_WARN_VS_CODE "")
 endif()
 
 # 3.9 or later provides a definitive answer to whether we are multi-config
@@ -74,9 +76,6 @@ if(BUILD_TESTING)
   set(CMake_TEST_DEVENV "")
   if(CMAKE_VS_DEVENV_COMMAND)
     set(CMake_TEST_DEVENV "${CMAKE_VS_DEVENV_COMMAND}")
-  elseif(CMAKE_GENERATOR MATCHES "Visual Studio 9 " AND
-      NOT CMAKE_MAKE_PROGRAM MATCHES "[mM][sS][bB][uU][iI][lL][dD]\\.[eE][xX][eE]")
-    set(CMake_TEST_DEVENV "${CMAKE_MAKE_PROGRAM}")
   endif()
 
   if(CMAKE_GENERATOR MATCHES "Visual Studio|Xcode")
@@ -172,49 +171,18 @@ if(BUILD_TESTING)
     set(CPACK_BINARY_DEB OFF)
   endif()
 
-  # Look for NuGet to use for tests.
-  find_program(NUGET_EXECUTABLE NAMES NuGet nuget)
-
-  if(NUGET_EXECUTABLE)
+  if(CMake_TEST_CPACK_NUGET)
     set(CPACK_BINARY_NUGET ON)
   else()
     set(CPACK_BINARY_NUGET OFF)
   endif()
 
   if(WIN32)
-    # Macro to search for available Windows CE SDKs in the windows Registry
-    macro(select_wince_sdk selected_reg selected_sdk)
-      if(CMAKE_HOST_WIN32)
-        execute_process(COMMAND reg QUERY "HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows CE Tools\\SDKs"
-                    OUTPUT_VARIABLE sdk_reg
-                    ERROR_VARIABLE my_err)
-        string(REGEX REPLACE "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Wow6432Node\\\\Microsoft\\\\Windows CE Tools\\\\SDKs\\\\"  ";" sdk_list "${sdk_reg}")
-        list(LENGTH sdk_list sdk_list_len)
-        if(${sdk_list_len} GREATER 1)
-          list(GET sdk_list 1 _sdk) # The first entry is always empty due to the regex replace above
-          string(STRIP ${_sdk} _sdk) # Make sure there is no newline in the SDK name
-        endif()
-        # Build a key to be used by get_filename_component that is pointing to the SDK directory
-        set(_reg "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows CE Tools\\SDKs\\${_sdk}]")
-        # Set return values
-        set(${selected_reg} ${_reg})
-        set(${selected_sdk} ${_sdk})
-      endif(CMAKE_HOST_WIN32)
-    endmacro(select_wince_sdk)
-
-    set(reg_vs10 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\10.0;InstallDir]")
-    set(reg_vs11 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\11.0;InstallDir]")
-    set(reg_vs12 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\12.0;InstallDir]")
     set(reg_vs14 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\14.0;InstallDir]")
-    set(reg_ws80 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Microsoft SDKs\\Windows\\v8.0;InstallationFolder]")
-    set(reg_ws81 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Microsoft SDKs\\Windows\\v8.1;InstallationFolder]")
     set(reg_ws10_0 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\Setup\\Build Tools for Windows 10;srcPath]")
-    set(reg_wp80 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Microsoft SDKs\\WindowsPhone\\v8.0;InstallationFolder]")
-    set(reg_wp81 "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Microsoft SDKs\\WindowsPhone\\v8.1;InstallationFolder]")
-    select_wince_sdk(reg_wince wince_sdk)
     set(reg_tegra "[HKEY_LOCAL_MACHINE\\SOFTWARE\\NVIDIA Corporation\\Nsight Tegra;sdkRoot]")
     set(reg_nasm "[HKEY_CURRENT_USER\\SOFTWARE\\nasm]")
-    foreach(reg IN ITEMS vs10 vs11 vs12 vs14 ws80 ws81 ws10_0 wp80 wp81 wince tegra nasm)
+    foreach(reg IN ITEMS vs14 ws10_0 tegra nasm)
       get_filename_component(r "${reg_${reg}}" ABSOLUTE)
       if(IS_DIRECTORY "${r}" AND NOT "${r}" STREQUAL "/registry")
         set(${reg} 1)
@@ -299,24 +267,20 @@ if(BUILD_TESTING)
     "Should the tests that use '--build-target package' be run?"
     ON)
   mark_as_advanced(CTEST_TEST_CPACK)
-  set(CTEST_TEST_OSX_ARCH 0)
   set(CMake_TEST_XCODE_VERSION 0)
   if(APPLE)
-    set(CTEST_TEST_OSX_ARCH 1)
     if(XCODE_VERSION)
       set(CMake_TEST_XCODE_VERSION "${XCODE_VERSION}")
     else()
       execute_process(
         COMMAND xcodebuild -version
-        OUTPUT_VARIABLE _version ERROR_VARIABLE _version_err
+        OUTPUT_VARIABLE _version
+        ERROR_VARIABLE _stderr
+        RESULT_VARIABLE _failed
         )
-      if(_version MATCHES "^Xcode ([0-9]+(\\.[0-9]+)*)")
+      if(NOT _failed AND _version MATCHES "^Xcode ([0-9]+(\\.[0-9]+)*)")
         set(CMake_TEST_XCODE_VERSION "${CMAKE_MATCH_1}")
       endif()
-    endif()
-    if(NOT CMake_TEST_XCODE_VERSION VERSION_LESS 10)
-      # Since Xcode 10 we do not have two supported architectures for the host.
-      set(CTEST_TEST_OSX_ARCH 0)
     endif()
     if(CMAKE_OSX_SYSROOT)
       execute_process(
@@ -392,7 +356,22 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(TryCompile TryCompile)
   ADD_TEST_MACRO(SystemInformation SystemInformation)
   ADD_TEST_MACRO(MathTest MathTest)
+
+  string(REPLACE ";" "$<SEMICOLON>" TEST_STDS_C "${CMake_TEST_C_STANDARDS}")
+  string(REPLACE ";" "$<SEMICOLON>" TEST_STDS_CXX "${CMake_TEST_CXX_STANDARDS}")
+  string(REPLACE ";" "$<SEMICOLON>" TEST_STDS_CUDA "${CMake_TEST_CUDA_STANDARDS}")
+  string(REPLACE ";" "$<SEMICOLON>" TEST_STDS_HIP "${CMake_TEST_HIP_STANDARDS}")
+  set(CompileFeatures_BUILD_OPTIONS
+    -DCMake_TEST_C_STANDARDS=${TEST_STDS_C}
+    -DCMake_TEST_CXX_STANDARDS=${TEST_STDS_CXX}
+    -DCMake_TEST_CUDA=${CMake_TEST_CUDA}
+    -DCMake_TEST_CUDA_STANDARDS=${TEST_STDS_CUDA}
+    -DCMake_TEST_HIP=${CMake_TEST_HIP}
+    -DCMake_TEST_HIP_STANDARDS=${TEST_STDS_HIP}
+    )
   ADD_TEST_MACRO(CompileFeatures CompileFeatures)
+  set_property(TEST CompileFeatures APPEND PROPERTY LABELS "CUDA" "HIP")
+
   ADD_TEST_MACRO(CMakeCommands.target_compile_features)
 
   if(CMake_TEST_RESOURCES)
@@ -412,6 +391,7 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "CMake Error at CMakeLists.txt:3 \\(add_executable\\):[ \r\n]*Cannot find source file:[ \r\n]*DoesNotExist/MissingSourceFile.c")
   if(CMake_TEST_Swift)
     ADD_TEST_MACRO(SwiftOnly SwiftOnly)
+    ADD_TEST_MACRO(SwiftMixPCH SwiftMixPCH)
     if(CMake_TEST_XCODE_SWIFT)
       ADD_TEST_MACRO(SwiftMix SwiftMix)
     endif()
@@ -421,6 +401,7 @@ if(BUILD_TESTING)
   endif()
   if(CMAKE_Fortran_COMPILER)
     ADD_TEST_MACRO(FortranOnly FortranOnly)
+    set_property(TEST FortranOnly APPEND PROPERTY LABELS "Fortran")
   endif()
   # test Visual Studio GNU Fortran mixing with cmake_add_fortran_subdirectory
   # run this project if we have a working fortran compiler or
@@ -454,6 +435,7 @@ if(BUILD_TESTING)
     endif()
     if(NOT CMAKE_SKIP_VSGNUFortran)
       ADD_TEST_MACRO(VSGNUFortran ${CMAKE_CMAKE_COMMAND} -P runtest.cmake)
+      set_property(TEST VSGNUFortran APPEND PROPERTY LABELS "Fortran")
     endif()
   endif()
 
@@ -462,7 +444,7 @@ if(BUILD_TESTING)
     add_subdirectory(ObjCXX)
   endif()
 
-  if(${CMAKE_GENERATOR} MATCHES "Visual Studio ([^9]|[9][0-9])")
+  if(${CMAKE_GENERATOR} MATCHES "Visual Studio")
     ADD_TEST_MACRO(CSharpOnly CSharpOnly)
     if(NOT CMAKE_VS_PLATFORM_NAME STREQUAL "ARM64")
       ADD_TEST_MACRO(CSharpLinkToCxx CSharpLinkToCxx)
@@ -480,6 +462,7 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(OutDir runtime/OutDir)
   ADD_TEST_MACRO(OutName exe.OutName.exe)
   ADD_TEST_MACRO(ObjectLibrary UseCshared)
+  ADD_TEST_MACRO(SharedLibraryArchive UseSLA)
   ADD_TEST_MACRO(NewlineArgs NewlineArgs)
   ADD_TEST_MACRO(SetLang SetLangX)
   ADD_TEST_MACRO(EmptyProperty EmptyProperty)
@@ -495,6 +478,10 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(ReturnTest ReturnTest)
   ADD_TEST_MACRO(Properties Properties)
   ADD_TEST_MACRO(Assembler HelloAsm)
+  # relies on Linux syscall interface
+  if(CMake_TEST_ASM_NASM AND CMAKE_SYSTEM_NAME MATCHES "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    ADD_TEST_MACRO(NasmOnly NasmOnly)
+  endif()
   ADD_TEST_MACRO(SourceGroups SourceGroups)
   ADD_TEST_MACRO(Preprocess Preprocess)
   set(ExportImport_BUILD_OPTIONS -DCMake_TEST_NESTED_MAKE_PROGRAM:FILEPATH=${CMake_TEST_EXPLICIT_MAKE_PROGRAM}
@@ -508,16 +495,20 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(PolicyScope PolicyScope)
   ADD_TEST_MACRO(EmptyLibrary EmptyLibrary)
   ADD_TEST_MACRO(CompileDefinitions CompileDefinitions)
-  if(CMAKE_Fortran_COMPILER)
-    set(CompileOptions_BUILD_OPTIONS -DTEST_FORTRAN=1)
-  endif()
+
   if(_isMultiConfig)
     set(CompileOptions_CTEST_OPTIONS --build-config $<CONFIGURATION>)
   else()
     set(CompileOptions_BUILD_OPTIONS -DCMAKE_BUILD_TYPE=$<CONFIGURATION>)
   endif()
+  if(CMAKE_Fortran_COMPILER)
+    list(APPEND CompileOptions_BUILD_OPTIONS -DTEST_FORTRAN=1)
+  endif()
   ADD_TEST_MACRO(CompileOptions CompileOptions)
+  set_property(TEST CompileOptions APPEND PROPERTY LABELS "Fortran")
+
   ADD_TEST_MACRO(CompatibleInterface CompatibleInterface)
+  ADD_TEST_MACRO(CustomTransitiveProperties CustomTransitiveProperties)
   ADD_TEST_MACRO(AliasTarget AliasTarget)
   ADD_TEST_MACRO(StagingPrefix StagingPrefix)
   ADD_TEST_MACRO(ImportedSameName ImportedSameName)
@@ -556,10 +547,13 @@ if(BUILD_TESTING)
   if("${CMAKE_GENERATOR}" MATCHES "Make")
     ADD_TEST_MACRO(Policy0002 Policy0002)
   endif()
-  if(CTEST_TEST_OSX_ARCH)
+  if(CMake_TEST_XCODE_VERSION)
+    set(Architecture_BUILD_OPTIONS -DCMake_TEST_XCODE_VERSION=${CMake_TEST_XCODE_VERSION})
     ADD_TEST_MACRO(Architecture Architecture)
     set_tests_properties(Architecture PROPERTIES
       PASS_REGULAR_EXPRESSION "(file is not of required architecture|does not match cputype|not the architecture being linked|but attempting to link with file built for)")
+    set_property(TEST Architecture APPEND PROPERTY
+      PASS_REGULAR_EXPRESSION "Skip test x86_64 only|found architecture '.*', required architecture '.*'")
   endif()
 
   list(APPEND TEST_BUILD_DIRS ${CMake_TEST_INSTALL_PREFIX})
@@ -659,6 +653,7 @@ if(BUILD_TESTING)
   if(CMAKE_Fortran_COMPILER)
     set(Module.CheckIPOSupported-Fortran_BUILD_OPTIONS -DCMake_TEST_IPO_WORKS_Fortran=${CMake_TEST_IPO_WORKS_Fortran})
     ADD_TEST_MACRO(Module.CheckIPOSupported-Fortran CheckIPOSupported-Fortran)
+    set_property(TEST Module.CheckIPOSupported-Fortran APPEND PROPERTY LABELS "Fortran")
   endif()
 
   add_test(Module.ExternalData ${CMAKE_CTEST_COMMAND}
@@ -926,6 +921,8 @@ if(BUILD_TESTING)
     "${CMake_BINARY_DIR}/Tests/BuildDepends"
     ${build_generator_args}
     --build-project BuildDepends
+    --build-options
+    "-DCMake_TEST_XCODE_VERSION=${CMake_TEST_XCODE_VERSION}"
     )
   list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/BuildDepends")
 
@@ -964,36 +961,6 @@ if(BUILD_TESTING)
     else()
       set(CTEST_RUN_CPackComponents OFF)
       set(CTEST_package_X11_TEST OFF)
-    endif()
-  endif()
-
-  # On Windows run the CPackWiXGenerator test
-  # if the WiX Toolset seems to be available
-  if(WIN32)
-    file(TO_CMAKE_PATH "$ENV{WIX}" WIX_ROOT)
-
-    find_program(WIX_LIGHT_EXECUTABLE light
-      PATHS "${WIX_ROOT}/bin"
-      DOC "WiX Toolset light.exe location")
-
-    if(WIX_LIGHT_EXECUTABLE)
-      add_test(CPackWiXGenerator ${CMAKE_CTEST_COMMAND}
-        -C \${CTEST_CONFIGURATION_TYPE}
-        --build-and-test
-        "${CMake_SOURCE_DIR}/Tests/CPackWiXGenerator"
-        "${CMake_BINARY_DIR}/Tests/CPackWiXGenerator"
-        ${build_generator_args}
-        --build-project CPackWiXGenerator
-        --build-options
-        --test-command ${CMAKE_CMAKE_COMMAND}
-          "-DCPackWiXGenerator_BINARY_DIR:PATH=${CMake_BINARY_DIR}/Tests/CPackWiXGenerator"
-          "-Dno_verify:BOOL=${CMake_TEST_WIX_NO_VERIFY}"
-          "-Dconfig=\${CTEST_CONFIGURATION_TYPE}"
-          -P "${CMake_SOURCE_DIR}/Tests/CPackWiXGenerator/RunCPackVerifyResult.cmake")
-
-      set_property(TEST CPackWiXGenerator PROPERTY
-        ATTACHED_FILES_ON_FAIL
-        "${CMake_BINARY_DIR}/Tests/CPackWiXGenerator/_CPack_Packages/win32/WIX/wix.log")
     endif()
   endif()
 
@@ -1040,6 +1007,32 @@ if(BUILD_TESTING)
     set_property(TEST CPackNSISGenerator PROPERTY
       ATTACHED_FILES_ON_FAIL
       "${CMake_BINARY_DIR}/Tests/CPackNSISGenerator/_CPack_Packages/win32/NSIS/NSISOutput.log")
+  endif()
+
+  find_program(IFW_BINARYCREATOR_EXECUTABLE NAMES binarycreator
+    DOC "IFW binarycreator program location"
+  )
+
+  if(IFW_BINARYCREATOR_EXECUTABLE)
+    add_test(CPackIFWGenerator ${CMAKE_CTEST_COMMAND}
+      -C \${CTEST_CONFIGURATION_TYPE}
+      --build-and-test
+      "${CMake_SOURCE_DIR}/Tests/CPackIFWGenerator"
+      "${CMake_BINARY_DIR}/Tests/CPackIFWGenerator"
+      ${build_generator_args}
+      --build-project CPackIFWGenerator
+      --build-options
+      --test-command ${CMAKE_CMAKE_COMMAND}
+      "-DCPackIFWGenerator_BINARY_DIR:PATH=${CMake_BINARY_DIR}/Tests/CPackIFWGenerator"
+      "-Dconfig=\${CTEST_CONFIGURATION_TYPE}"
+      -P "${CMake_SOURCE_DIR}/Tests/CPackIFWGenerator/RunCPackVerifyResult.cmake")
+
+    set_property(TEST CPackIFWGenerator PROPERTY
+      ATTACHED_FILES_ON_FAIL
+      "${CMake_BINARY_DIR}/Tests/CPackIFWGenerator/_CPack_Packages/Linux/IFW/IFWOutput.log"
+      "${CMake_BINARY_DIR}/Tests/CPackIFWGenerator/_CPack_Packages/Darwin/IFW/IFWOutput.log"
+      "${CMake_BINARY_DIR}/Tests/CPackIFWGenerator/_CPack_Packages/win32/IFW/IFWOutput.log"
+    )
   endif()
 
   if(CTEST_TEST_CPACK)
@@ -1127,9 +1120,7 @@ if(BUILD_TESTING)
     if(CPACK_BINARY_DEB)
       list(APPEND ACTIVE_CPACK_GENERATORS DEB)
     endif()
-    # Check whether if NuGet command is found
-    # before adding NuGet tests
-    if(CPACK_BINARY_NUGET)
+    if(CMake_TEST_CPACK_NUGET)
       list(APPEND ACTIVE_CPACK_GENERATORS NUGET)
       set(CPACK_GENERATOR_STRING_NUGET NuGet)
     endif()
@@ -1204,13 +1195,17 @@ if(BUILD_TESTING)
         else()
           unset(SHLIBDEPS_EXECUTABLE_VERSION)
         endif()
+        # Check if distro has symbols or shlibs data
+        file(GLOB SHLIBS_FILES_EXIST "/var/lib/dpkg/info/*.shlibs" "/var/lib/dpkg/info/*.symbols")
         if(NOT SHLIBDEPS_EXECUTABLE_VERSION VERSION_LESS 1.19 OR
           (NOT SHLIBDEPS_EXECUTABLE_VERSION VERSION_LESS 1.17 AND NOT CMAKE_BINARY_DIR MATCHES ".*[ ].*"))
             list(APPEND DEB_CONFIGURATIONS_TO_TEST "shlibdeps-with-private-lib-failure"
-                                                   "shlibdeps-with-private-lib-success")
+                                                   "shlibdeps-with-private-lib-success"
+                                                   "shlibdeps-with-ORIGIN-RPATH-failure")
+            if(SHLIBS_FILES_EXIST)
+                list(APPEND DEB_CONFIGURATIONS_TO_TEST "shlibdeps-with-ORIGIN-RPATH-success")
+            endif()
         endif()
-        # Check if distro has symbols or shlibs data
-        file(GLOB SHLIBS_FILES_EXIST "/var/lib/dpkg/info/*.shlibs" "/var/lib/dpkg/info/*.symbols")
         if(SHLIBS_FILES_EXIST)
           list(APPEND DEB_CONFIGURATIONS_TO_TEST "components-depend2")
         endif()
@@ -1466,6 +1461,7 @@ if(BUILD_TESTING)
   _mod
   IN ITEMS
       ALSA
+      Backtrace
       BLAS
       Boost
       BZip2
@@ -1552,7 +1548,7 @@ if(BUILD_TESTING)
     set(CMake_TEST_FindPython2 TRUE)
     set(CMake_TEST_FindPython3 TRUE)
   endif()
-  if(CMake_TEST_FindPython_SABIMOdule)
+  if(CMake_TEST_FindPython_SABIModule)
     set(CMake_TEST_FindPython2_SABIModule TRUE)
     set(CMake_TEST_FindPython3_SABIModule TRUE)
   endif()
@@ -2159,7 +2155,7 @@ if(BUILD_TESTING)
     endif()
     ADD_TEST_MACRO(MSVCDebugInformationFormat)
     set_property(TEST MSVCDebugInformationFormat APPEND
-      PROPERTY LABELS "CUDA")
+      PROPERTY LABELS "CUDA" "Fortran")
 
     set(MSVCRuntimeLibrary_BUILD_OPTIONS -DCMake_TEST_CUDA=${CMake_TEST_CUDA})
     ADD_TEST_MACRO(MSVCRuntimeLibrary)
@@ -2167,6 +2163,7 @@ if(BUILD_TESTING)
       PROPERTY LABELS "CUDA")
     if(CMAKE_Fortran_COMPILER)
       ADD_TEST_MACRO(MSVCRuntimeLibrary.Fortran)
+      set_property(TEST MSVCRuntimeLibrary.Fortran APPEND PROPERTY LABELS "Fortran")
     endif()
   endif()
   if(MSVC OR
@@ -2214,20 +2211,17 @@ if(BUILD_TESTING)
   endif()
 
   if(MSVC AND NOT MSVC_VERSION LESS 1310
-     AND (NOT CMAKE_GENERATOR MATCHES "Visual Studio 9 "
-          OR CMAKE_SIZEOF_VOID_P EQUAL 4)
      AND (NOT CMAKE_C_COMPILER_ARCHITECTURE_ID STREQUAL "ARM64")
       )
     ADD_TEST_MACRO(VSMASM VSMASM)
   endif()
 
-  if(${CMAKE_GENERATOR} MATCHES "Visual Studio")
+  if(CMAKE_GENERATOR MATCHES "Visual Studio")
     if(NOT MSVC60)
       ADD_TEST_MACRO(SBCS SBCS)
     endif()
 
-    if(NOT "${CMAKE_GENERATOR}" MATCHES "Visual Studio 9 "
-        AND NOT CMAKE_GENERATOR_TOOLSET STREQUAL "v90"
+    if(NOT CMAKE_GENERATOR_TOOLSET STREQUAL "v90"
         AND NOT CMAKE_VS_PLATFORM_NAME STREQUAL "ARM64")
       ADD_TEST_MACRO(VSWindowsFormsResx VSWindowsFormsResx)
       ADD_TEST_MACRO(VSManagedCustomCommand)
@@ -2284,20 +2278,17 @@ if(BUILD_TESTING)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSExcludeFromDefaultBuild")
     endif()
 
-    if(CMAKE_GENERATOR MATCHES "Visual Studio ([0-5]|[6-9][0-9])")
-      # This is Visual Studio 10 or above, so the default build tool is MSBuild.
-      add_test(NAME VSProjectInSubdir COMMAND ${CMAKE_CTEST_COMMAND}
-        --build-and-test
-        "${CMake_SOURCE_DIR}/Tests/VSProjectInSubdir"
-        "${CMake_BINARY_DIR}/Tests/VSProjectInSubdir"
-        --build-two-config
-        --build-generator ${CMAKE_GENERATOR}
-        --build-generator-platform "${CMAKE_GENERATOR_PLATFORM}"
-        --build-generator-toolset "${CMAKE_GENERATOR_TOOLSET}"
-        --build-project VSProjectInSubdir
-        --build-target test)
-      list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSProjectInSubdir")
-    endif()
+    add_test(NAME VSProjectInSubdir COMMAND ${CMAKE_CTEST_COMMAND}
+      --build-and-test
+      "${CMake_SOURCE_DIR}/Tests/VSProjectInSubdir"
+      "${CMake_BINARY_DIR}/Tests/VSProjectInSubdir"
+      --build-two-config
+      --build-generator ${CMAKE_GENERATOR}
+      --build-generator-platform "${CMAKE_GENERATOR_PLATFORM}"
+      --build-generator-toolset "${CMAKE_GENERATOR_TOOLSET}"
+      --build-project VSProjectInSubdir
+      --build-target test)
+    list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSProjectInSubdir")
   endif()
 
   get_filename_component(ntver "[HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion;CurrentVersion]" NAME)
@@ -2320,22 +2311,21 @@ if(BUILD_TESTING)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSWinStorePhone/${name}")
     endmacro()
 
-    if(vs12 AND ws81)
-      add_test_VSWinStorePhone(vs12-store81-X86 "Visual Studio 12 2013" WindowsStore 8.1 Win32)
-      add_test_VSWinStorePhone(vs12-store81-ARM "Visual Studio 12 2013" WindowsStore 8.1 ARM)
-      add_test_VSWinStorePhone(vs12-store81-X64 "Visual Studio 12 2013" WindowsStore 8.1 x64)
-
+    # FIXME(#26248): Update this test to work with newer VS and Win 10.0.
+    # It previously ran with Visual Studio 12 2013 targeting Win 8.1.
+    if(FALSE AND CMAKE_GENERATOR MATCHES "Visual Studio")
       add_test(NAME VSXaml COMMAND ${CMAKE_CTEST_COMMAND}
         --build-and-test
           "${CMake_SOURCE_DIR}/Tests/VSXaml"
           "${CMake_BINARY_DIR}/Tests/VSXaml"
-          --build-generator "Visual Studio 12 2013"
+          --build-generator "${CMAKE_GENERATOR}"
           --build-project VSXaml
           --build-config $<CONFIGURATION>
           --build-options -DCMAKE_SYSTEM_NAME=WindowsStore
-                          -DCMAKE_SYSTEM_VERSION=8.1
+                          -DCMAKE_SYSTEM_VERSION=10.0
         )
     endif()
+
     if(CMake_TEST_VSWinStorePhone_VS_2017 AND ws10_0)
       add_test_VSWinStorePhone(vs15-store10_0-X86 "Visual Studio 15 2017" WindowsStore 10.0 Win32)
       add_test_VSWinStorePhone(vs15-store10_0-ARM "Visual Studio 15 2017" WindowsStore 10.0 ARM)
@@ -2347,38 +2337,9 @@ if(BUILD_TESTING)
       add_test_VSWinStorePhone(vs14-store10_0-ARM "Visual Studio 14 2015" WindowsStore 10.0 ARM)
       add_test_VSWinStorePhone(vs14-store10_0-X64 "Visual Studio 14 2015" WindowsStore 10.0 x64)
     endif()
-    if(vs12 AND wp81)
-      add_test_VSWinStorePhone(vs12-phone81-X86 "Visual Studio 12 2013" WindowsPhone 8.1 Win32)
-      add_test_VSWinStorePhone(vs12-phone81-ARM "Visual Studio 12 2013" WindowsPhone 8.1 ARM)
-    endif()
   endif()
 
-  if(WIN32 AND wince)
-    macro(add_test_VSWinCE name generator systemName systemVersion generatorPlatform)
-      # TODO: Fix the tutorial to make it work in cross compile
-      # currently the MakeTable is build for target and can not be used on the host
-      # This happens in part 5 so we build only through part 4 of the tutorial.
-      foreach(STP RANGE 2 4)
-        add_test(NAME "TutorialStep${STP}.${name}" COMMAND ${CMAKE_CTEST_COMMAND}
-          --build-and-test
-          "${CMake_SOURCE_DIR}/Help/guide/tutorial/Step${STP}"
-          "${CMake_BINARY_DIR}/Tests/Tutorial/Step${STP}_${name}"
-          --build-generator "${generator}"
-          --build-project Tutorial
-          --build-config $<CONFIGURATION>
-          --build-options -DCMAKE_SYSTEM_NAME=${systemName}
-                          -DCMAKE_SYSTEM_VERSION=${systemVersion}
-                          -DCMAKE_GENERATOR_PLATFORM=${generatorPlatform})
-        list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/Tutorial/Step${STP}_${name}")
-      endforeach()
-    endmacro()
-
-    if(vs12)
-      add_test_VSWinCE(vs12-ce80-ARM "Visual Studio 12 2013" WindowsCE 8.0 ${wince_sdk})
-    endif()
-  endif()
-
-  if(CMAKE_GENERATOR MATCHES "Visual Studio ([^9]|9[0-9])" AND nasm)
+  if(CMAKE_GENERATOR MATCHES "Visual Studio" AND nasm)
     ADD_TEST_MACRO(VSNASM VSNASM)
   endif()
 
@@ -2499,9 +2460,6 @@ if(BUILD_TESTING)
     list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSAndroid/${name}")
   endmacro()
   if(tegra AND NOT "${CMake_SOURCE_DIR};${CMake_BINARY_DIR}" MATCHES " ")
-    if(vs12)
-      add_test_VSAndroid(vs12 "Visual Studio 12 2013" "Tegra-Android")
-    endif()
     if(vs14)
       add_test_VSAndroid(vs14 "Visual Studio 14 2015" "Tegra-Android")
     endif()
@@ -2798,7 +2756,6 @@ if(BUILD_TESTING)
     -S "${CMake_BINARY_DIR}/Tests/CTestCoverageCollectGCOV/test.cmake" -VV
     --output-log "${CMake_BINARY_DIR}/Tests/CTestCoverageCollectGCOV/testOut.log"
     )
-  set_property(TEST CTestCoverageCollectGCOV PROPERTY ENVIRONMENT CTEST_PARALLEL_LEVEL=)
 
   configure_file(
     "${CMake_SOURCE_DIR}/Tests/CTestTestEmptyBinaryDirectory/test.cmake.in"
@@ -3065,19 +3022,6 @@ if(BUILD_TESTING)
     "Test command:.*Working Directory:.*Environment variables:.*foo=bar.*this=that"
   )
 
-  configure_file(
-    "${CMake_SOURCE_DIR}/Tests/CTestTestSkipReturnCode/test.cmake.in"
-    "${CMake_BINARY_DIR}/Tests/CTestTestSkipReturnCode/test.cmake"
-    @ONLY ESCAPE_QUOTES)
-  add_test(CTestTestSkipReturnCode ${CMAKE_CTEST_COMMAND}
-    -S "${CMake_BINARY_DIR}/Tests/CTestTestSkipReturnCode/test.cmake" -V
-    --output-log "${CMake_BINARY_DIR}/Tests/CTestTestSkipReturnCode/testOutput.log"
-    -C \${CTEST_CONFIGURATION_TYPE}
-    )
-  set_tests_properties(CTestTestSkipReturnCode PROPERTIES
-    PASS_REGULAR_EXPRESSION "CMakeV1 \\.* +Passed.*CMakeV2 \\.+\\*+Skipped")
-  set_property(TEST CTestTestSkipReturnCode PROPERTY ENVIRONMENT CTEST_PARALLEL_LEVEL=)
-
   ADD_TEST_MACRO(CTestTestSerialInDepends ${CMAKE_CTEST_COMMAND} -j 4
     --output-on-failure -C "\${CTestTest_CONFIG}")
 
@@ -3087,20 +3031,11 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "\\*\\*\\*Not Run"
   )
 
-  ADD_TEST_MACRO(CTestTestSerialOrder ${CMAKE_CTEST_COMMAND}
-    --output-on-failure -C "\${CTestTest_CONFIG}")
-  set_property(TEST CTestTestSerialOrder PROPERTY ENVIRONMENT CTEST_PARALLEL_LEVEL=)
-
   if(NOT BORLAND)
     set(CTestLimitDashJ_CTEST_OPTIONS --force-new-ctest-process)
     add_test_macro(CTestLimitDashJ ${CMAKE_CTEST_COMMAND} -j 4
       --output-on-failure -C "\${CTestTest_CONFIG}")
   endif()
-
-  add_test(CTestTestPrintLabels ${CMAKE_CTEST_COMMAND} --print-labels)
-  set_tests_properties(CTestTestPrintLabels PROPERTIES LABELS "Label1;Label2")
-  set_tests_properties(CTestTestPrintLabels PROPERTIES PASS_REGULAR_EXPRESSION
-    "All Labels:.*  Label1.*  Label2")
 
   configure_file(
     "${CMake_SOURCE_DIR}/Tests/CTestTestLabelRegExp/test.cmake.in"
@@ -3112,15 +3047,6 @@ if(BUILD_TESTING)
       -P ${CMAKE_BINARY_DIR}/Tests/CTestTestLabelRegExp/test.cmake
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/Tests/CTestTestLabelRegExp
   )
-
-  configure_file(
-    "${CMake_SOURCE_DIR}/Tests/CTestTestResourceLock/test.cmake.in"
-    "${CMake_BINARY_DIR}/Tests/CTestTestResourceLock/test.cmake"
-    @ONLY ESCAPE_QUOTES)
-  add_test(CTestTestResourceLock ${CMAKE_CTEST_COMMAND}
-    -S "${CMake_BINARY_DIR}/Tests/CTestTestResourceLock/test.cmake" -V
-    --output-log "${CMake_BINARY_DIR}/Tests/CTestTestResourceLock/output.log"
-    )
 
   configure_file(
     "${CMake_SOURCE_DIR}/Tests/CTestTestScheduler/test.cmake.in"
@@ -3361,8 +3287,12 @@ if(BUILD_TESTING)
       --build-two-config
       --test-command testf)
     list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/Fortran")
+    set_property(TEST Fortran APPEND PROPERTY LABELS "Fortran")
 
-    if(CMAKE_Fortran_COMPILER_SUPPORTS_F90)
+    if(CMAKE_Fortran_COMPILER_SUPPORTS_F90
+        # FIXME(lfortran): The compiler fails on the test's modules.
+        AND NOT CMAKE_Fortran_COMPILER_ID STREQUAL "LFortran"
+        )
       add_test(FortranModules ${CMAKE_CTEST_COMMAND}
         --build-and-test
         "${CMake_SOURCE_DIR}/Tests/FortranModules"
@@ -3375,6 +3305,7 @@ if(BUILD_TESTING)
           ${CMake_TEST_FortranModules_BUILD_OPTIONS}
         )
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/FortranModules")
+      set_property(TEST FortranModules APPEND PROPERTY LABELS "Fortran")
     endif()
 
     # FortranCInterface tests.
@@ -3384,6 +3315,7 @@ if(BUILD_TESTING)
       add_test(FortranC.Flags ${CMAKE_CMAKE_COMMAND} -P
         ${CMAKE_CURRENT_BINARY_DIR}/FortranC/Flags.cmake)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/FortranC/Flags")
+      set_property(TEST FortranC.Flags APPEND PROPERTY LABELS "Fortran")
     else()
       add_test(FortranC ${CMAKE_CTEST_COMMAND}
         --build-and-test
@@ -3394,6 +3326,7 @@ if(BUILD_TESTING)
         --build-two-config
         --test-command CMakeFiles/FortranCInterface/FortranCInterface)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/FortranC")
+      set_property(TEST FortranC APPEND PROPERTY LABELS "Fortran")
     endif()
   endif()
 

@@ -218,6 +218,10 @@ public:
   {
     return "install/strip";
   }
+  const char* GetInstallParallelTargetName() const
+  {
+    return "install/parallel";
+  }
   const char* GetTestTargetName() const override { return "test"; }
   const char* GetPackageTargetName() const override { return "package"; }
   const char* GetPackageSourceTargetName() const override
@@ -349,7 +353,7 @@ public:
   virtual std::string OrderDependsTargetForTarget(
     cmGeneratorTarget const* target, const std::string& config) const;
 
-  virtual std::string OrderDependsTargetForTargetPrivate(
+  std::string OrderDependsTargetForTargetPrivate(
     cmGeneratorTarget const* target, const std::string& config) const;
 
   void AppendTargetOutputs(cmGeneratorTarget const* target,
@@ -415,10 +419,12 @@ public:
     return "1.10.2";
   }
   static std::string RequiredNinjaVersionForCodePage() { return "1.11"; }
+  static std::string RequiredNinjaVersionForCWDDepend() { return "1.7"; }
   bool SupportsDirectConsole() const override;
   bool SupportsImplicitOuts() const;
   bool SupportsManifestRestat() const;
   bool SupportsMultilineDepfile() const;
+  bool SupportsCWDDepend() const;
 
   std::string NinjaOutputPath(std::string const& path) const;
   bool HasOutputPathPrefix() const { return !this->OutputPathPrefix.empty(); }
@@ -477,8 +483,13 @@ public:
   bool IsSingleConfigUtility(cmGeneratorTarget const* target) const;
 
   bool CheckCxxModuleSupport(CxxModuleSupportQuery query) override;
+  bool SupportsBuildDatabase() const override { return true; }
+
+  std::string ConvertToOutputPath(std::string path) const override;
 
 protected:
+  std::vector<std::string> const& GetConfigNames() const;
+
   void Generate() override;
 
   bool CheckALLOW_DUPLICATE_CUSTOM_TARGETS() const override { return true; }
@@ -597,6 +608,7 @@ private:
   bool NinjaSupportsMultipleOutputs = false;
   bool NinjaSupportsMetadataOnRegeneration = false;
   bool NinjaSupportsCodePage = false;
+  bool NinjaSupportsCWDDepend = false;
 
   codecvt_Encoding NinjaExpectedEncoding = codecvt_Encoding::None;
 
@@ -740,9 +752,6 @@ public:
   bool SupportsDefaultConfigs() const override { return true; }
 
   std::string OrderDependsTargetForTarget(
-    cmGeneratorTarget const* target, const std::string& config) const override;
-
-  std::string OrderDependsTargetForTargetPrivate(
     cmGeneratorTarget const* target, const std::string& config) const override;
 
 protected:

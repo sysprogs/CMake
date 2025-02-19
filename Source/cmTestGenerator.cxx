@@ -168,16 +168,53 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
     // Use the target file on disk.
     exe = target->GetFullPath(config);
 
-    // Prepend with the emulator when cross compiling if required.
-    cmValue emulator = target->GetProperty("CROSSCOMPILING_EMULATOR");
-    if (cmNonempty(emulator)) {
-      cmList emulatorWithArgs{ *emulator };
-      std::string emulatorExe(emulatorWithArgs[0]);
-      cmSystemTools::ConvertToUnixSlashes(emulatorExe);
-      os << cmOutputConverter::EscapeForCMake(emulatorExe) << " ";
-      for (std::string const& arg : cmMakeRange(emulatorWithArgs).advance(1)) {
-        os << cmOutputConverter::EscapeForCMake(arg) << " ";
+    auto addLauncher = [this, &config, &ge, &os,
+                        target](std::string const& propertyName) {
+      cmValue launcher = target->GetProperty(propertyName);
+      if (!cmNonempty(launcher)) {
+        return;
       }
+      const auto propVal = ge.Parse(*launcher)->Evaluate(this->LG, config);
+      cmList launcherWithArgs(propVal, cmList::ExpandElements::Yes,
+                              this->Test->GetCMP0178() == cmPolicies::NEW
+                                ? cmList::EmptyElements::Yes
+                                : cmList::EmptyElements::No);
+      if (!launcherWithArgs.empty() && !launcherWithArgs[0].empty()) {
+        if (this->Test->GetCMP0178() == cmPolicies::WARN) {
+          cmList argsWithEmptyValuesPreserved(
+            propVal, cmList::ExpandElements::Yes, cmList::EmptyElements::Yes);
+          if (launcherWithArgs != argsWithEmptyValuesPreserved) {
+            this->Test->GetMakefile()->IssueMessage(
+              MessageType::AUTHOR_WARNING,
+              cmStrCat("The ", propertyName, " property of target '",
+                       target->GetName(),
+                       "' contains empty list items. Those empty items are "
+                       "being silently discarded to preserve backward "
+                       "compatibility.\n",
+                       cmPolicies::GetPolicyWarning(cmPolicies::CMP0178)));
+          }
+        }
+        std::string launcherExe(launcherWithArgs[0]);
+        cmSystemTools::ConvertToUnixSlashes(launcherExe);
+        os << cmOutputConverter::EscapeForCMake(launcherExe) << " ";
+        for (std::string const& arg :
+             cmMakeRange(launcherWithArgs).advance(1)) {
+          if (arg.empty()) {
+            os << "\"\" ";
+          } else {
+            os << cmOutputConverter::EscapeForCMake(arg) << " ";
+          }
+        }
+      }
+    };
+
+    // Prepend with the test launcher if specified.
+    addLauncher("TEST_LAUNCHER");
+
+    // Prepend with the emulator when cross compiling if required.
+    if (!this->GetTest()->GetCMP0158IsNew() ||
+        this->LG->GetMakefile()->IsOn("CMAKE_CROSSCOMPILING")) {
+      addLauncher("CROSSCOMPILING_EMULATOR");
     }
   } else {
     // Use the command name given.

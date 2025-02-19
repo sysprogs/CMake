@@ -1,7 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-cmake_minimum_required(VERSION 3.13...3.26 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.13...3.29 FATAL_ERROR)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE_C ${CMAKE_CURRENT_SOURCE_DIR}/Source/Modules/OverrideC.cmake)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_SOURCE_DIR}/Source/Modules/OverrideCXX.cmake)
 
@@ -140,6 +140,7 @@ if(NOT CMake_TEST_EXTERNAL_CMAKE)
     if(CMAKE_SYSTEM_NAME MATCHES "Windows|Darwin|Linux|BSD|DragonFly|CYGWIN|MSYS"
         AND NOT (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19.16)
         AND NOT (CMAKE_CXX_COMPILER_ID STREQUAL "XLClang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16.1)
+        AND NOT (CMAKE_CXX_COMPILER_ID STREQUAL "LCC" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.23)
         )
       set(CMake_ENABLE_DEBUGGER 1)
     else()
@@ -177,6 +178,9 @@ macro(CMAKE_HANDLE_SYSTEM_LIBRARIES)
       string(TOLOWER "${util}" lutil)
       set(CMAKE_USE_SYSTEM_${util} "${CMAKE_USE_SYSTEM_LIBRARY_${util}}"
         CACHE BOOL "Use system-installed ${lutil}" FORCE)
+    elseif(util STREQUAL "CURL" AND APPLE)
+      # macOS provides a curl with backends configured by Apple.
+      set(CMAKE_USE_SYSTEM_LIBRARY_${util} ON)
     else()
       set(CMAKE_USE_SYSTEM_LIBRARY_${util} OFF)
     endif()
@@ -214,6 +218,10 @@ macro(CMAKE_HANDLE_SYSTEM_LIBRARIES)
   mark_as_advanced(CMAKE_USE_SYSTEM_KWIML)
 
   # Mention to the user what system libraries are being used.
+  if(CMAKE_USE_SYSTEM_CURL)
+    # Avoid messaging about curl-only dependencies.
+    list(REMOVE_ITEM UTILITIES NGHTTP2)
+  endif()
   foreach(util IN LISTS UTILITIES ITEMS KWIML)
     if(CMAKE_USE_SYSTEM_${util})
       message(STATUS "Using system-installed ${util}")
@@ -259,9 +267,7 @@ macro(CMAKE_SETUP_TESTING)
   endif()
 
   # configure some files for testing
-  configure_file(Templates/CTestScript.cmake.in CTestScript.cmake @ONLY)
   configure_file(Tests/.NoDartCoverage Tests/.NoDartCoverage)
-  configure_file(Tests/.NoDartCoverage Modules/.NoDartCoverage)
   configure_file(CTestCustom.cmake.in CTestCustom.cmake @ONLY)
 endmacro()
 

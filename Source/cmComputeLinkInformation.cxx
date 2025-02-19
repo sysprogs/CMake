@@ -9,6 +9,7 @@
 
 #include <cm/memory>
 #include <cm/optional>
+#include <cm/string_view>
 #include <cmext/algorithm>
 #include <cmext/string_view>
 
@@ -260,7 +261,7 @@ cmComputeLinkInformation::cmComputeLinkInformation(
   , Config(config)
 {
   // Check whether to recognize OpenBSD-style library versioned names.
-  this->OpenBSD = this->Makefile->GetState()->GetGlobalPropertyAsBool(
+  this->IsOpenBSD = this->Makefile->GetState()->GetGlobalPropertyAsBool(
     "FIND_LIBRARY_USE_OPENBSD_VERSIONING");
 
   // Allocate internals.
@@ -553,7 +554,8 @@ bool cmComputeLinkInformation::Compute()
         this->Target->GetType() == cmStateEnums::MODULE_LIBRARY ||
         this->Target->GetType() == cmStateEnums::STATIC_LIBRARY ||
         (this->Target->CanCompileSources() &&
-         (this->Target->HaveCxx20ModuleSources() ||
+         (this->Target->HaveCxxModuleSupport(this->Config) ==
+            cmGeneratorTarget::Cxx20SupportLevel::Supported ||
           this->Target->HaveFortranSources())))) {
     return false;
   }
@@ -566,8 +568,25 @@ bool cmComputeLinkInformation::Compute()
     return false;
   }
 
+  LinkLibrariesStrategy strategy = LinkLibrariesStrategy::REORDER_MINIMALLY;
+  if (cmValue s = this->Target->GetProperty("LINK_LIBRARIES_STRATEGY")) {
+    if (*s == "REORDER_MINIMALLY"_s) {
+      strategy = LinkLibrariesStrategy::REORDER_MINIMALLY;
+    } else if (*s == "REORDER_FREELY"_s) {
+      strategy = LinkLibrariesStrategy::REORDER_FREELY;
+    } else {
+      this->CMakeInstance->IssueMessage(
+        MessageType::FATAL_ERROR,
+        cmStrCat("LINK_LIBRARIES_STRATEGY value '", *s,
+                 "' is not recognized."),
+        this->Target->GetBacktrace());
+      return false;
+    }
+  }
+
   // Compute the ordered link line items.
-  cmComputeLinkDepends cld(this->Target, this->Config, this->LinkLanguage);
+  cmComputeLinkDepends cld(this->Target, this->Config, this->LinkLanguage,
+                           strategy);
   cld.SetOldLinkDirMode(this->OldLinkDirMode);
   cmComputeLinkDepends::EntryVector const& linkEntries = cld.Compute();
   FeatureDescriptor const* currentFeature = nullptr;
@@ -577,8 +596,7 @@ bool cmComputeLinkInformation::Compute()
     if (linkEntry.Kind == cmComputeLinkDepends::LinkEntry::Group) {
       const auto& groupFeature = this->GetGroupFeature(linkEntry.Feature);
       if (groupFeature.Supported) {
-        if (linkEntry.Item.Value == "</LINK_GROUP>" &&
-            currentFeature != nullptr) {
+        if (linkEntry.Item.Value == "</LINK_GROUP>" && currentFeature) {
           // emit feature suffix, if any
           if (!currentFeature->Suffix.empty()) {
             this->Items.emplace_back(
@@ -598,8 +616,7 @@ bool cmComputeLinkInformation::Compute()
       continue;
     }
 
-    if (currentFeature != nullptr &&
-        linkEntry.Feature != currentFeature->Name) {
+    if (currentFeature && linkEntry.Feature != currentFeature->Name) {
       // emit feature suffix, if any
       if (!currentFeature->Suffix.empty()) {
         this->Items.emplace_back(
@@ -611,8 +628,7 @@ bool cmComputeLinkInformation::Compute()
     }
 
     if (linkEntry.Feature != DEFAULT &&
-        (currentFeature == nullptr ||
-         linkEntry.Feature != currentFeature->Name)) {
+        (!currentFeature || linkEntry.Feature != currentFeature->Name)) {
       if (!this->AddLibraryFeature(linkEntry.Feature)) {
         continue;
       }
@@ -632,7 +648,7 @@ bool cmComputeLinkInformation::Compute()
     }
   }
 
-  if (currentFeature != nullptr) {
+  if (currentFeature) {
     // emit feature suffix, if any
     if (!currentFeature->Suffix.empty()) {
       this->Items.emplace_back(
@@ -645,7 +661,7 @@ bool cmComputeLinkInformation::Compute()
   // Restore the target link type so the correct system runtime
   // libraries are found.
   cmValue lss = this->Target->GetProperty("LINK_SEARCH_END_STATIC");
-  if (cmIsOn(lss)) {
+  if (lss.IsOn()) {
     this->SetCurrentLinkType(LinkStatic);
   } else {
     this->SetCurrentLinkType(this->StartLinkType);
@@ -737,13 +753,13 @@ public:
 private:
   std::string ExpandVariable(std::string const& variable) override
   {
-    if (this->Library != nullptr && variable == "LIBRARY") {
+    if (this->Library && variable == "LIBRARY") {
       return *this->Library;
     }
-    if (this->LibItem != nullptr && variable == "LIB_ITEM") {
+    if (this->LibItem && variable == "LIB_ITEM") {
       return *this->LibItem;
     }
-    if (this->LinkItem != nullptr && variable == "LINK_ITEM") {
+    if (this->LinkItem && variable == "LINK_ITEM") {
       return *this->LinkItem;
     }
 
@@ -1331,7 +1347,17 @@ void cmComputeLinkInformation::AddSharedDepItem(LinkEntry const& entry)
   }
 
   // If in linking mode, just link to the shared library.
-  if (this->SharedDependencyMode == SharedDepModeLink) {
+  if (this->SharedDependencyMode == SharedDepModeLink ||
+      // For an imported shared library without a known runtime artifact,
+      // such as a CUDA stub, a library file named with the real soname
+      // may not be available at all, so '-rpath-link' cannot help linkers
+      // find it to satisfy '--no-allow-shlib-undefined' recursively.
+      // Pass this dependency to the linker explicitly just in case.
+      // If the linker also uses '--as-needed' behavior, this will not
+      // add an unnecessary direct dependency.
+      (tgt && tgt->IsImported() &&
+       !tgt->HasKnownRuntimeArtifactLocation(this->Config) &&
+       this->Target->LinkerEnforcesNoAllowShLibUndefined(this->Config))) {
     this->AddItem(entry);
     return;
   }
@@ -1440,7 +1466,7 @@ void cmComputeLinkInformation::ComputeLinkTypeInfo()
 
   // Lookup the starting link type from the target (linked statically?).
   cmValue lss = this->Target->GetProperty("LINK_SEARCH_START_STATIC");
-  this->StartLinkType = cmIsOn(lss) ? LinkStatic : LinkShared;
+  this->StartLinkType = lss.IsOn() ? LinkStatic : LinkShared;
   this->CurrentLinkType = this->StartLinkType;
 }
 
@@ -1574,7 +1600,7 @@ std::string cmComputeLinkInformation::CreateExtensionRegex(
   libext += ')';
 
   // Add an optional OpenBSD-style version or major.minor.version component.
-  if (this->OpenBSD || type == LinkShared) {
+  if (this->IsOpenBSD || type == LinkShared) {
     libext += "(\\.[0-9]+)*";
   }
 

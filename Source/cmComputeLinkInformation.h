@@ -77,7 +77,7 @@ public:
 
     BT<std::string> GetFormattedItem(std::string const& path) const
     {
-      return { (this->Feature != nullptr)
+      return { this->Feature
                  ? this->Feature->GetDecoratedItem(path, this->IsPath)
                  : path,
                Value.Backtrace };
@@ -254,7 +254,7 @@ private:
   std::unique_ptr<cmOrderDirectories> OrderRuntimeSearchPath;
 
   bool OldLinkDirMode;
-  bool OpenBSD;
+  bool IsOpenBSD;
   bool LinkDependsNoShared;
   bool RuntimeUseChrpath;
   bool NoSONameUsesPath;

@@ -84,9 +84,18 @@ List of CPack RPM generator specific variables:
  :Default: ``<CPACK_PACKAGE_FILE_NAME>[-<component>].rpm`` with spaces
                replaced by '-'
 
- This may be set to ``RPM-DEFAULT`` to allow ``rpmbuild`` tool to generate package
- file name by itself.
- Alternatively provided package file name must end with ``.rpm`` suffix.
+ This may be set to:
+
+ ``RPM-DEFAULT``
+    Tell ``rpmbuild`` to automatically generate the package file name.
+
+ ``<file-name>[.rpm]``
+   Use the given file name.
+
+   .. versionchanged:: 3.29
+
+     The ``.rpm`` suffix will be automatically added if missing.
+     Previously the suffix was required.
 
  .. note::
 
@@ -237,9 +246,8 @@ List of CPack RPM generator specific variables:
  :Default: (system default)
 
  May be used to override RPM compression type to be used to build the
- RPM. For example some Linux distribution now default to ``lzma`` or ``xz``
- compression whereas older cannot use such RPM. Using this one can enforce
- compression type to be used.
+ RPM. For example some Linux distributions default to ``xz`` or ``zstd``.
+ Using this, one can specify a specific compression type to be used.
 
  Possible values are:
 
@@ -254,6 +262,11 @@ List of CPack RPM generator specific variables:
 
   ``gzip``
     GNU Gzip compression
+
+  ``zstd``
+    .. versionadded:: 3.31
+
+    Zstandard compression
 
 .. variable:: CPACK_RPM_PACKAGE_AUTOREQ
               CPACK_RPM_<component>_PACKAGE_AUTOREQ

@@ -1,8 +1,13 @@
-cmake_minimum_required (VERSION 2.7.20090711)
+set(CMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES "1942b4fa-b2c5-4546-9385-83f254070067")
+cmake_minimum_required(VERSION 2.8.11) # old enough to not set CMP0022
 if(POLICY CMP0129)
   cmake_policy(SET CMP0129 NEW)
 endif()
 project(Export C CXX)
+
+set(CMAKE_AIX_SHARED_LIBRARY_ARCHIVE 1)
+
+find_package(Foo REQUIRED CONFIG NO_DEFAULT_PATH)
 
 # Pretend that RelWithDebInfo should link to debug libraries to test
 # the DEBUG_CONFIGURATIONS property.
@@ -25,6 +30,9 @@ set_property(TARGET testExe2 PROPERTY LINK_INTERFACE_LIBRARIES testExe2lib)
 add_library(compileOnly INTERFACE)
 target_compile_definitions(compileOnly INTERFACE FROM_compileOnly)
 target_link_options(compileOnly INTERFACE -fthis-flag-does-not-exist)
+
+add_library(noUses INTERFACE)
+target_link_libraries(noUses INTERFACE this::target_does_not_exist)
 
 add_library(testLib1 STATIC testLib1.c)
 add_library(testLib2 STATIC testLib2.c)
@@ -110,7 +118,39 @@ add_library(testLib9ObjIface OBJECT testLib9ObjIface.c)
 target_compile_definitions(testLib9ObjIface INTERFACE testLib9ObjIface_USED)
 add_library(testLib9 STATIC testLib9.c)
 target_link_libraries(testLib9 INTERFACE testLib9ObjIface PUBLIC testLib9ObjPub PRIVATE testLib9ObjPriv)
+target_link_libraries(testLib9 PUBLIC Foo::Foo)
 cmake_policy(POP)
+
+block()
+  cmake_policy(SET CMP0022 NEW)
+  add_library(testLib10 STATIC testLib10.c)
+  set_target_properties(testLib10 PROPERTIES
+    TRANSITIVE_COMPILE_PROPERTIES "CUSTOM_C"
+    TRANSITIVE_LINK_PROPERTIES    "CUSTOM_L"
+    INTERFACE_CUSTOM_C "TESTLIB10_INTERFACE_CUSTOM_C"
+    INTERFACE_CUSTOM_L "TESTLIB10_INTERFACE_CUSTOM_L"
+    )
+  target_compile_definitions(testLib10 INTERFACE
+    "$<TARGET_PROPERTY:CUSTOM_C>"
+    "$<TARGET_PROPERTY:CUSTOM_L>"
+    )
+  add_library(testLib11 STATIC testLib11.c)
+  target_link_libraries(testLib11 PRIVATE testLib10)
+  set_target_properties(testLib11 PROPERTIES
+    INTERFACE_CUSTOM_C "TESTLIB11_INTERFACE_CUSTOM_C"
+    INTERFACE_CUSTOM_L "TESTLIB11_INTERFACE_CUSTOM_L"
+    TRANSITIVE_COMPILE_PROPERTIES "CUSTOM_D"
+    TRANSITIVE_LINK_PROPERTIES    "CUSTOM_M"
+    INTERFACE_CUSTOM_D "TESTLIB11_INTERFACE_CUSTOM_D"
+    INTERFACE_CUSTOM_M "TESTLIB11_INTERFACE_CUSTOM_M"
+    )
+  target_compile_definitions(testLib11 INTERFACE
+    "$<TARGET_PROPERTY:CUSTOM_C>"
+    "$<TARGET_PROPERTY:CUSTOM_D>"
+    "$<TARGET_PROPERTY:CUSTOM_L>"
+    "$<TARGET_PROPERTY:CUSTOM_M>"
+    )
+endblock()
 
 # Test using the target_link_libraries command to set the
 # LINK_INTERFACE_LIBRARIES* properties.  We construct two libraries
@@ -444,6 +484,9 @@ add_library(testMod1 MODULE empty.cpp)
 add_library(testMod2 MODULE empty.cpp)
 set_property(TARGET testMod2 PROPERTY BUNDLE 1)
 
+add_library(testSharedObjectAIX SHARED testSharedObjectAIX.c)
+set_property(TARGET testSharedObjectAIX PROPERTY AIX_SHARED_LIBRARY_ARCHIVE 0)
+
 install(TARGETS testLibRequired
         EXPORT RequiredExp DESTINATION lib
         INCLUDES DESTINATION
@@ -566,10 +609,12 @@ install(FILES
 install(
   TARGETS
   compileOnly
+  noUses
   testExe1 testLib1 testLib2 testExe2 testLib3 testLib4 testExe3 testExe4
   testExe2lib testLib4lib testLib4libdbg testLib4libopt
   testLib6 testLib7 testLib8
   testLib9
+  testLib10 testLib11
   testLibDeprecation
   testLibCycleA testLibCycleB
   testLibNoSONAME
@@ -582,6 +627,7 @@ install(
   systemlib
   testInterfaceIncludeUser
   testInterfaceIncludeUser2
+  testSharedObjectAIX
   EXPORT exp
   RUNTIME DESTINATION $<1:bin>$<0:/wrong>
   LIBRARY DESTINATION $<1:lib>$<0:/wrong> NAMELINK_SKIP
@@ -624,7 +670,7 @@ install(
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   )
-install(EXPORT exp NAMESPACE exp_ DESTINATION lib/exp)
+install(EXPORT exp NAMESPACE exp_ DESTINATION lib/exp EXPORT_PACKAGE_DEPENDENCIES)
 
 # Install testLib5.dll outside the export.
 if(WIN32)
@@ -640,7 +686,7 @@ export(TARGETS testExe1 testLib1 testLib2 testLib3
   testSharedLibDepends renamed_on_export
   cmp0022NEW cmp0022OLD
   TopDirLib SubDirLinkA
-  systemlib
+  systemlib noUses
   testInterfaceIncludeUser
   testInterfaceIncludeUser2
   NAMESPACE bld_
@@ -649,6 +695,7 @@ export(TARGETS testExe1 testLib1 testLib2 testLib3
 export(TARGETS testExe2 testLib4 testLib5 testLib6 testLib7 testExe3 testExe4 testExe2lib
   testLib8
   testLib9 testLib9ObjPub testLib9ObjPriv testLib9ObjIface
+  testLib10 testLib11
   testLibDeprecation
   testLib4lib testLib4libdbg testLib4libopt
   testLibCycleA testLibCycleB
@@ -658,6 +705,7 @@ export(TARGETS testExe2 testLib4 testLib5 testLib6 testLib7 testExe3 testExe4 te
   testExeWithPluginHelper testExePluginHelperObj
   testMod1 testMod2
   testLibPerConfigDest
+  testSharedObjectAIX
   NAMESPACE bld_
   APPEND FILE ExportBuildTree.cmake
   )

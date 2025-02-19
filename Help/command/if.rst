@@ -41,13 +41,15 @@ Compound conditions are evaluated in the following order of precedence:
 
 1. `Parentheses`_.
 
-2. Unary tests such as `EXISTS`_, `COMMAND`_, and `DEFINED`_.
+2. Unary tests such as `COMMAND`_, `POLICY`_, `TARGET`_, `TEST`_,
+   `EXISTS`_, `IS_READABLE`_, `IS_WRITABLE`_, `IS_EXECUTABLE`_,
+   `IS_DIRECTORY`_, `IS_SYMLINK`_, `IS_ABSOLUTE`_, and `DEFINED`_.
 
 3. Binary tests such as `EQUAL`_, `LESS`_, `LESS_EQUAL`_, `GREATER`_,
    `GREATER_EQUAL`_, `STREQUAL`_, `STRLESS`_, `STRLESS_EQUAL`_,
    `STRGREATER`_, `STRGREATER_EQUAL`_, `VERSION_EQUAL`_, `VERSION_LESS`_,
    `VERSION_LESS_EQUAL`_, `VERSION_GREATER`_, `VERSION_GREATER_EQUAL`_,
-   `PATH_EQUAL`_, and `MATCHES`_.
+   `PATH_EQUAL`_, `IN_LIST`_, `IS_NEWER_THAN`_, and `MATCHES`_.
 
 4. Unary logical operator `NOT`_.
 
@@ -175,6 +177,46 @@ File Operations
   expanded as a home directory and is considered a relative path).
   Resolves symbolic links, i.e. if the named file or directory is a
   symbolic link, returns true if the target of the symbolic link exists.
+
+  False if the given path is an empty string.
+
+  .. note::
+    Prefer ``if(IS_READABLE)`` to check file readability.  ``if(EXISTS)``
+    may be changed in the future to only check file existence.
+
+.. signature:: if(IS_READABLE <path-to-file-or-directory>)
+
+  .. versionadded:: 3.29
+
+  True if the named file or directory is readable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
+  Resolves symbolic links, i.e. if the named file or directory is a
+  symbolic link, returns true if the target of the symbolic link is readable.
+
+  False if the given path is an empty string.
+
+.. signature:: if(IS_WRITABLE <path-to-file-or-directory>)
+
+  .. versionadded:: 3.29
+
+  True if the named file or directory is writable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
+  Resolves symbolic links, i.e. if the named file or directory is a
+  symbolic link, returns true if the target of the symbolic link is writable.
+
+  False if the given path is an empty string.
+
+.. signature:: if(IS_EXECUTABLE <path-to-file-or-directory>)
+
+  .. versionadded:: 3.29
+
+  True if the named file or directory is executable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
+  Resolves symbolic links, i.e. if the named file or directory is a
+  symbolic link, returns true if the target of the symbolic link is executable.
 
   False if the given path is an empty string.
 
@@ -430,6 +472,10 @@ above-documented condition syntax accepts ``<variable|string>``:
   `VERSION_GREATER_EQUAL`_ are independently tested to see if they are defined
   variables.  If so, their defined values are used otherwise the original value
   is used.
+
+* The left hand argument to `IN_LIST`_ is tested to see if it is a defined
+  variable.  If so, the variable's value is used, otherwise the original
+  value is used.
 
 * The right hand argument to `NOT`_ is tested to see if it is a boolean
   constant.  If so, the value is used, otherwise it is assumed to be a

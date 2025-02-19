@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include <cm/optional>
+
 class cmMakefile;
 
 class cmExperimental
@@ -15,7 +17,11 @@ class cmExperimental
 public:
   enum class Feature
   {
+    ExportPackageDependencies,
     WindowsKernelModeDriver,
+    CxxImportStd,
+    ExportPackageInfo,
+    ExportBuildDatabase,
 
     Sentinel,
   };
@@ -39,5 +45,6 @@ public:
   };
 
   static const FeatureData& DataForFeature(Feature f);
+  static cm::optional<Feature> FeatureByName(std::string const& name);
   static bool HasSupportEnabled(cmMakefile const& mf, Feature f);
 };

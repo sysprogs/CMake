@@ -21,6 +21,30 @@ Find a package (usually provided by something external to the project),
 and load its package-specific details.  Calls to this command can also
 be intercepted by :ref:`dependency providers <dependency_providers>`.
 
+Typical Usage
+^^^^^^^^^^^^^
+
+Most calls to ``find_package()`` typically have the following form:
+
+.. parsed-literal::
+
+  find_package(<PackageName> [<version>] [REQUIRED] [COMPONENTS <components>...])
+
+The ``<PackageName>`` is the only mandatory argument.  The ``<version>`` is
+often omitted, and ``REQUIRED`` should be given if the project cannot be
+configured successfully without the package.  Some more complicated packages
+support components which can be selected with the ``COMPONENTS`` keyword, but
+most packages don't have that level of complexity.
+
+The above is a reduced form of the `basic signature`_.  Where possible,
+projects should find packages using this form.  This reduces complexity and
+maximizes the ways in which the package can be found or provided.
+
+Understanding the `basic signature`_ should be enough for general usage of
+``find_package()``.  Project maintainers who intend to provide a config
+package should understand the bigger picture, as explained in
+:ref:`Full Signature` and all subsequent sections on this page.
+
 Search Modes
 ^^^^^^^^^^^^
 
@@ -85,12 +109,6 @@ to true to reverse the priority and direct CMake to search using Config mode
 first before falling back to Module mode.  The basic signature can also be
 forced to use only Module mode with a ``MODULE`` keyword.  If the
 `full signature`_ is used, the command only searches in Config mode.
-
-Where possible, user code should generally look for packages using the
-`basic signature`_, since that allows the package to be found with any mode.
-Project maintainers wishing to provide a config package should understand
-the bigger picture, as explained in :ref:`Full Signature` and all subsequent
-sections on this page.
 
 .. _`basic signature`:
 
@@ -485,6 +503,42 @@ The :variable:`CMAKE_IGNORE_PATH`, :variable:`CMAKE_IGNORE_PREFIX_PATH`,
 :variable:`CMAKE_SYSTEM_IGNORE_PREFIX_PATH` variables can also cause some
 of the above locations to be ignored.
 
+Paths are searched in the order described above.  The first viable package
+configuration file found is used, even if a newer version of the package
+resides later in the list of search paths.
+
+For search paths which contain ``<name>*``, the order among matching paths
+is unspecified unless the :variable:`CMAKE_FIND_PACKAGE_SORT_ORDER` variable
+is set.  This variable, along with the
+:variable:`CMAKE_FIND_PACKAGE_SORT_DIRECTION` variable, determines the order
+in which CMake considers paths that match a single search path containing
+``<name>*``.  For example, if the file system contains the package
+configuration files
+
+::
+
+  <prefix>/example-1.2/example-config.cmake
+  <prefix>/example-1.10/example-config.cmake
+  <prefix>/share/example-2.0/example-config.cmake
+
+it is unspecified (when the aforementioned variables are unset) whether
+``find_package(example)`` will find ``example-1.2`` or ``example-1.10``
+(assuming that both are viable), but ``find_package`` will *not* find
+``example-2.0``, because one of the other two will be found first.
+
+To control the order in which ``find_package`` searches directories that match
+a glob expression, use :variable:`CMAKE_FIND_PACKAGE_SORT_ORDER` and
+:variable:`CMAKE_FIND_PACKAGE_SORT_DIRECTION`.
+For instance, to cause the above example to select ``example-1.10``,
+one can set
+
+.. code-block:: cmake
+
+  SET(CMAKE_FIND_PACKAGE_SORT_ORDER NATURAL)
+  SET(CMAKE_FIND_PACKAGE_SORT_DIRECTION DEC)
+
+before calling ``find_package``.
+
 .. versionadded:: 3.16
    Added the ``CMAKE_FIND_USE_<CATEGORY>`` variables to globally disable
    various search locations.
@@ -630,22 +684,6 @@ is acceptable the following variables are set:
   Number of version components, 0 to 4
 
 and the corresponding package configuration file is loaded.
-When multiple package configuration files are available whose version files
-claim compatibility with the version requested it is unspecified which
-one is chosen: unless the variable :variable:`CMAKE_FIND_PACKAGE_SORT_ORDER`
-is set no attempt is made to choose a highest or closest version number.
-
-To control the order in which ``find_package`` checks for compatibility use
-the two variables :variable:`CMAKE_FIND_PACKAGE_SORT_ORDER` and
-:variable:`CMAKE_FIND_PACKAGE_SORT_DIRECTION`.
-For instance in order to select the highest version one can set
-
-.. code-block:: cmake
-
-  SET(CMAKE_FIND_PACKAGE_SORT_ORDER NATURAL)
-  SET(CMAKE_FIND_PACKAGE_SORT_DIRECTION DEC)
-
-before calling ``find_package``.
 
 Package File Interface Variables
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

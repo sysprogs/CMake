@@ -179,7 +179,7 @@ struct cmCTest::Private
 
   int MaxTestNameWidth = 30;
 
-  int ParallelLevel = 1;
+  cm::optional<size_t> ParallelLevel = 1;
   bool ParallelLevelSetInCli = false;
 
   unsigned long TestLoad = 0;
@@ -235,8 +235,8 @@ struct tm* cmCTest::GetNightlyTime(std::string const& str, bool tomorrowtag)
   char buf[1024];
   // add todays year day and month to the time in str because
   // curl_getdate no longer assumes the day is today
-  snprintf(buf, sizeof(buf), "%d%02d%02d %s", lctime->tm_year + 1900,
-           lctime->tm_mon + 1, lctime->tm_mday, str.c_str());
+  std::snprintf(buf, sizeof(buf), "%d%02d%02d %s", lctime->tm_year + 1900,
+                lctime->tm_mon + 1, lctime->tm_mday, str.c_str());
   cmCTestLog(this, OUTPUT,
              "Determine Nightly Start Time" << std::endl
                                             << "   Specified time: " << str
@@ -380,14 +380,14 @@ cmCTest::cmCTest()
 
 cmCTest::~cmCTest() = default;
 
-int cmCTest::GetParallelLevel() const
+cm::optional<size_t> cmCTest::GetParallelLevel() const
 {
   return this->Impl->ParallelLevel;
 }
 
-void cmCTest::SetParallelLevel(int level)
+void cmCTest::SetParallelLevel(cm::optional<size_t> level)
 {
-  this->Impl->ParallelLevel = level < 1 ? 1 : level;
+  this->Impl->ParallelLevel = level;
 }
 
 unsigned long cmCTest::GetTestLoad() const
@@ -538,8 +538,7 @@ int cmCTest::Initialize(const std::string& binary_dir,
         }
         tfin.close();
       }
-      if (tag.empty() || (nullptr != command) ||
-          this->Impl->Parts[PartStart]) {
+      if (tag.empty() || command || this->Impl->Parts[PartStart]) {
         cmCTestOptionalLog(
           this, DEBUG,
           "TestModel: " << this->GetTestModelString() << std::endl, quiet);
@@ -573,7 +572,7 @@ int cmCTest::Initialize(const std::string& binary_dir,
           }
         }
         ofs.close();
-        if (nullptr == command) {
+        if (!command) {
           cmCTestOptionalLog(this, OUTPUT,
                              "Create new tag: " << tag << " - "
                                                 << this->GetTestModelString()
@@ -760,7 +759,9 @@ bool cmCTest::UpdateCTestConfiguration()
   }
   if (!this->GetCTestConfiguration("BuildDirectory").empty()) {
     this->Impl->BinaryDir = this->GetCTestConfiguration("BuildDirectory");
-    cmSystemTools::ChangeDirectory(this->Impl->BinaryDir);
+    if (this->Impl->TestDir.empty()) {
+      cmSystemTools::ChangeDirectory(this->Impl->BinaryDir);
+    }
   }
   this->Impl->TimeOut =
     std::chrono::seconds(atoi(this->GetCTestConfiguration("TimeOut").c_str()));
@@ -1072,11 +1073,6 @@ int cmCTest::GetTestModelFromString(const std::string& str)
   return cmCTest::EXPERIMENTAL;
 }
 
-// ######################################################################
-// ######################################################################
-// ######################################################################
-// ######################################################################
-
 bool cmCTest::RunMakeCommand(const std::string& command, std::string& output,
                              int* retVal, const char* dir, cmDuration timeout,
                              std::ostream& ofs, Encoding encoding)
@@ -1138,10 +1134,9 @@ bool cmCTest::RunMakeCommand(const std::string& command, std::string& output,
                                 << "K\n    " << std::flush);
         }
       }
-      cmCTestLog(this, HANDLER_VERBOSE_OUTPUT,
-                 cmCTestLogWrite(strdata.c_str(), strdata.size()));
+      cmCTestLog(this, HANDLER_VERBOSE_OUTPUT, strdata);
       if (ofs) {
-        ofs << cmCTestLogWrite(strdata.c_str(), strdata.size());
+        ofs << strdata;
       }
     },
     [this, &processOutput, &output, &ofs]() {
@@ -1149,10 +1144,9 @@ bool cmCTest::RunMakeCommand(const std::string& command, std::string& output,
       processOutput.DecodeText(std::string(), strdata);
       if (!strdata.empty()) {
         output.append(strdata);
-        cmCTestLog(this, HANDLER_VERBOSE_OUTPUT,
-                   cmCTestLogWrite(strdata.c_str(), strdata.size()));
+        cmCTestLog(this, HANDLER_VERBOSE_OUTPUT, strdata);
         if (ofs) {
-          ofs << cmCTestLogWrite(strdata.c_str(), strdata.size());
+          ofs << strdata;
         }
       }
     });
@@ -1190,11 +1184,6 @@ bool cmCTest::RunMakeCommand(const std::string& command, std::string& output,
 
   return true;
 }
-
-// ######################################################################
-// ######################################################################
-// ######################################################################
-// ######################################################################
 
 bool cmCTest::RunTest(const std::vector<std::string>& argv,
                       std::string* output, int* retVal, std::ostream* log,
@@ -1304,8 +1293,7 @@ bool cmCTest::RunTest(const std::vector<std::string>& argv,
       if (output) {
         cm::append(tempOutput, data.data(), data.data() + data.size());
       }
-      cmCTestLog(this, HANDLER_VERBOSE_OUTPUT,
-                 cmCTestLogWrite(strdata.c_str(), strdata.size()));
+      cmCTestLog(this, HANDLER_VERBOSE_OUTPUT, strdata);
       if (log) {
         log->write(strdata.c_str(), strdata.size());
       }
@@ -1314,8 +1302,7 @@ bool cmCTest::RunTest(const std::vector<std::string>& argv,
       std::string strdata;
       processOutput.DecodeText(std::string(), strdata);
       if (!strdata.empty()) {
-        cmCTestLog(this, HANDLER_VERBOSE_OUTPUT,
-                   cmCTestLogWrite(strdata.c_str(), strdata.size()));
+        cmCTestLog(this, HANDLER_VERBOSE_OUTPUT, strdata);
         if (log) {
           log->write(strdata.c_str(), strdata.size());
         }
@@ -1446,6 +1433,7 @@ void cmCTest::StartXML(cmXMLWriter& xml, bool append)
   xml.Attribute("VendorID", info.GetVendorID());
   xml.Attribute("FamilyID", info.GetFamilyID());
   xml.Attribute("ModelID", info.GetModelID());
+  xml.Attribute("ModelName", info.GetModelName());
   xml.Attribute("ProcessorCacheSize", info.GetProcessorCacheSize());
   xml.Attribute("NumberOfLogicalCPU", info.GetNumberOfLogicalCPU());
   xml.Attribute("NumberOfPhysicalCPU", info.GetNumberOfPhysicalCPU());
@@ -1659,8 +1647,8 @@ std::string cmCTest::Base64GzipEncodeFile(std::string const& file)
   std::vector<std::string> files;
   files.push_back(file);
 
-  if (!cmSystemTools::CreateTar(tarFile, files, cmSystemTools::TarCompressGZip,
-                                false)) {
+  if (!cmSystemTools::CreateTar(tarFile, files, {},
+                                cmSystemTools::TarCompressGZip, false)) {
     cmCTestLog(this, ERROR_MESSAGE,
                "Error creating tar while "
                "encoding file: "
@@ -1859,22 +1847,20 @@ bool cmCTest::AddTestsForDashboardType(std::string& targ)
 void cmCTest::ErrorMessageUnknownDashDValue(std::string& val)
 {
   cmCTestLog(this, ERROR_MESSAGE,
-             "CTest -D called with incorrect option: " << val << std::endl);
+             "CTest -D called with incorrect option: " << val << '\n');
 
-  cmCTestLog(
-    this, ERROR_MESSAGE,
-    "Available options are:"
-      << std::endl
-      << "  ctest -D Continuous" << std::endl
-      << "  ctest -D Continuous(Start|Update|Configure|Build)" << std::endl
-      << "  ctest -D Continuous(Test|Coverage|MemCheck|Submit)" << std::endl
-      << "  ctest -D Experimental" << std::endl
-      << "  ctest -D Experimental(Start|Update|Configure|Build)" << std::endl
-      << "  ctest -D Experimental(Test|Coverage|MemCheck|Submit)" << std::endl
-      << "  ctest -D Nightly" << std::endl
-      << "  ctest -D Nightly(Start|Update|Configure|Build)" << std::endl
-      << "  ctest -D Nightly(Test|Coverage|MemCheck|Submit)" << std::endl
-      << "  ctest -D NightlyMemoryCheck" << std::endl);
+  cmCTestLog(this, ERROR_MESSAGE,
+             "Available options are:\n"
+             "  ctest -D Continuous\n"
+             "  ctest -D Continuous(Start|Update|Configure|Build)\n"
+             "  ctest -D Continuous(Test|Coverage|MemCheck|Submit)\n"
+             "  ctest -D Experimental\n"
+             "  ctest -D Experimental(Start|Update|Configure|Build)\n"
+             "  ctest -D Experimental(Test|Coverage|MemCheck|Submit)\n"
+             "  ctest -D Nightly\n"
+             "  ctest -D Nightly(Start|Update|Configure|Build)\n"
+             "  ctest -D Nightly(Test|Coverage|MemCheck|Submit)\n"
+             "  ctest -D NightlyMemoryCheck\n");
 }
 
 bool cmCTest::CheckArgument(const std::string& arg, cm::string_view varg1,
@@ -1890,16 +1876,34 @@ bool cmCTest::HandleCommandLineArguments(size_t& i,
                                          std::string& errormsg)
 {
   std::string arg = args[i];
+  cm::string_view noTestsPrefix = "--no-tests=";
   if (this->CheckArgument(arg, "-F"_s)) {
     this->Impl->Failover = true;
-  } else if (this->CheckArgument(arg, "-j"_s, "--parallel") &&
-             i < args.size() - 1) {
-    i++;
-    int plevel = atoi(args[i].c_str());
-    this->SetParallelLevel(plevel);
+  } else if (this->CheckArgument(arg, "-j"_s, "--parallel")) {
+    cm::optional<size_t> parallelLevel;
+    // No value or an empty value tells ctest to choose a default.
+    if (i + 1 < args.size() && !cmHasLiteralPrefix(args[i + 1], "-")) {
+      ++i;
+      if (!args[i].empty()) {
+        // A non-empty value must be a non-negative integer.
+        unsigned long plevel = 0;
+        if (!cmStrToULong(args[i], &plevel)) {
+          errormsg =
+            cmStrCat("'", arg, "' given invalid value '", args[i], "'");
+          return false;
+        }
+        parallelLevel = plevel;
+      }
+    }
+    this->SetParallelLevel(parallelLevel);
     this->Impl->ParallelLevelSetInCli = true;
   } else if (cmHasPrefix(arg, "-j")) {
-    int plevel = atoi(arg.substr(2).c_str());
+    // The value must be a non-negative integer.
+    unsigned long plevel = 0;
+    if (!cmStrToULong(arg.substr(2), &plevel)) {
+      errormsg = cmStrCat("'", arg, "' given invalid value '", args[i], "'");
+      return false;
+    }
     this->SetParallelLevel(plevel);
     this->Impl->ParallelLevelSetInCli = true;
   }
@@ -1966,7 +1970,7 @@ bool cmCTest::HandleCommandLineArguments(size_t& i,
       this->SetTestLoad(load);
     } else {
       cmCTestLog(this, WARNING,
-                 "Invalid value for 'Test Load' : " << args[i] << std::endl);
+                 "Invalid value for 'Test Load' : " << args[i] << '\n');
     }
   }
 
@@ -2134,8 +2138,7 @@ bool cmCTest::HandleCommandLineArguments(size_t& i,
     this->SetOutputJUnitFileName(std::string(args[i]));
   }
 
-  cm::string_view noTestsPrefix = "--no-tests=";
-  if (cmHasPrefix(arg, noTestsPrefix)) {
+  else if (cmHasPrefix(arg, noTestsPrefix)) {
     cm::string_view noTestsMode =
       cm::string_view(arg).substr(noTestsPrefix.length());
     if (noTestsMode == "error") {
@@ -2224,9 +2227,27 @@ bool cmCTest::HandleCommandLineArguments(size_t& i,
                                                     args[i]);
   }
 
+  else if (this->CheckArgument(arg, "--tests-from-file"_s) &&
+           i < args.size() - 1) {
+    i++;
+    this->GetTestHandler()->SetPersistentOption("TestListFile", args[i]);
+    this->GetMemCheckHandler()->SetPersistentOption("TestListFile", args[i]);
+  }
+
+  else if (this->CheckArgument(arg, "--exclude-from-file"_s) &&
+           i < args.size() - 1) {
+    i++;
+    this->GetTestHandler()->SetPersistentOption("ExcludeTestListFile",
+                                                args[i]);
+    this->GetMemCheckHandler()->SetPersistentOption("ExcludeTestListFile",
+                                                    args[i]);
+  }
+
   else if (this->CheckArgument(arg, "--rerun-failed"_s)) {
     this->GetTestHandler()->SetPersistentOption("RerunFailed", "true");
     this->GetMemCheckHandler()->SetPersistentOption("RerunFailed", "true");
+  } else {
+    return false;
   }
   return true;
 }
@@ -2276,7 +2297,7 @@ bool cmCTest::ColoredOutputSupportedByConsole()
 }
 
 // handle the -S -SR and -SP arguments
-void cmCTest::HandleScriptArguments(size_t& i, std::vector<std::string>& args,
+bool cmCTest::HandleScriptArguments(size_t& i, std::vector<std::string>& args,
                                     bool& SRArgumentSpecified)
 {
   std::string arg = args[i];
@@ -2291,8 +2312,8 @@ void cmCTest::HandleScriptArguments(size_t& i, std::vector<std::string>& args,
     }
   }
 
-  if (this->CheckArgument(arg, "-SR"_s, "--script-run") &&
-      i < args.size() - 1) {
+  else if (this->CheckArgument(arg, "-SR"_s, "--script-run") &&
+           i < args.size() - 1) {
     SRArgumentSpecified = true;
     this->Impl->RunConfigurationScript = true;
     i++;
@@ -2300,7 +2321,8 @@ void cmCTest::HandleScriptArguments(size_t& i, std::vector<std::string>& args,
     ch->AddConfigurationScript(args[i], true);
   }
 
-  if (this->CheckArgument(arg, "-S"_s, "--script") && i < args.size() - 1) {
+  else if (this->CheckArgument(arg, "-S"_s, "--script") &&
+           i < args.size() - 1) {
     this->Impl->RunConfigurationScript = true;
     i++;
     cmCTestScriptHandler* ch = this->GetScriptHandler();
@@ -2308,7 +2330,10 @@ void cmCTest::HandleScriptArguments(size_t& i, std::vector<std::string>& args,
     if (!SRArgumentSpecified) {
       ch->AddConfigurationScript(args[i], true);
     }
+  } else {
+    return false;
   }
+  return true;
 }
 
 bool cmCTest::AddVariableDefinition(const std::string& arg)
@@ -2701,16 +2726,18 @@ int cmCTest::Run(std::vector<std::string>& args, std::string* output)
   for (size_t i = 1; i < args.size(); ++i) {
     // handle the simple commandline arguments
     std::string errormsg;
-    if (!this->HandleCommandLineArguments(i, args, errormsg)) {
+    bool validArg = this->HandleCommandLineArguments(i, args, errormsg);
+    if (!validArg && !errormsg.empty()) {
       cmSystemTools::Error(errormsg);
       return 1;
     }
+    std::string arg = args[i];
 
     // handle the script arguments -S -SR -SP
-    this->HandleScriptArguments(i, args, SRArgumentSpecified);
+    validArg =
+      validArg || this->HandleScriptArguments(i, args, SRArgumentSpecified);
 
     // --dashboard: handle a request for a dashboard
-    std::string arg = args[i];
     if (this->CheckArgument(arg, "-D"_s, "--dashboard") &&
         i < args.size() - 1) {
       this->Impl->ProduceXML = true;
@@ -2724,6 +2751,7 @@ int cmCTest::Run(std::vector<std::string>& args, std::string* output)
           executeTests = false;
         }
       }
+      validArg = true;
     }
 
     // If it's not exactly -D, but it starts with -D, then try to parse out
@@ -2734,16 +2762,17 @@ int cmCTest::Run(std::vector<std::string>& args, std::string* output)
     if (arg != "-D" && cmHasLiteralPrefix(arg, "-D")) {
       std::string input = arg.substr(2);
       this->AddVariableDefinition(input);
+      validArg = true;
     }
 
     // --test-action: calls SetTest(<stage>, /*report=*/ false) to enable
     // the corresponding stage
-    if (!this->HandleTestActionArgument(ctestExec, i, args)) {
+    if (!this->HandleTestActionArgument(ctestExec, i, args, validArg)) {
       executeTests = false;
     }
 
     // --test-model: what type of test model
-    if (!this->HandleTestModelArgument(ctestExec, i, args)) {
+    if (!this->HandleTestModelArgument(ctestExec, i, args, validArg)) {
       executeTests = false;
     }
 
@@ -2755,38 +2784,58 @@ int cmCTest::Run(std::vector<std::string>& args, std::string* output)
       if (!this->SubmitExtraFiles(args[i])) {
         return 0;
       }
+      validArg = true;
     }
 
     // --build-and-test options
     if (this->CheckArgument(arg, "--build-and-test"_s) &&
         i < args.size() - 1) {
       cmakeAndTest = true;
+      validArg = true;
     }
 
     // --schedule-random
     if (this->CheckArgument(arg, "--schedule-random"_s)) {
       this->Impl->ScheduleType = "Random";
+      validArg = true;
     }
 
     // pass the argument to all the handlers as well, but it may no longer be
     // set to what it was originally so I'm not sure this is working as
     // intended
     for (auto& handler : this->Impl->GetTestingHandlers()) {
-      if (!handler->ProcessCommandLineArguments(arg, i, args)) {
+      if (!handler->ProcessCommandLineArguments(arg, i, args, validArg)) {
         cmCTestLog(
           this, ERROR_MESSAGE,
           "Problem parsing command line arguments within a handler\n");
         return 0;
       }
     }
+
+    if (!validArg && cmHasLiteralPrefix(arg, "-") &&
+        !cmHasLiteralPrefix(arg, "--preset")) {
+      cmSystemTools::Error(cmStrCat("Unknown argument: ", arg));
+      cmSystemTools::Error("Run 'ctest --help' for all supported options.");
+      return 1;
+    }
   } // the close of the for argument loop
 
   // handle CTEST_PARALLEL_LEVEL environment variable
   if (!this->Impl->ParallelLevelSetInCli) {
-    std::string parallel;
-    if (cmSystemTools::GetEnv("CTEST_PARALLEL_LEVEL", parallel)) {
-      int plevel = atoi(parallel.c_str());
-      this->SetParallelLevel(plevel);
+    if (cm::optional<std::string> parallelEnv =
+          cmSystemTools::GetEnvVar("CTEST_PARALLEL_LEVEL")) {
+      if (parallelEnv->empty() ||
+          parallelEnv->find_first_not_of(" \t") == std::string::npos) {
+        // An empty value tells ctest to choose a default.
+        this->SetParallelLevel(cm::nullopt);
+      } else {
+        // A non-empty value must be a non-negative integer.
+        // Otherwise, ignore it.
+        unsigned long plevel = 0;
+        if (cmStrToULong(*parallelEnv, &plevel)) {
+          this->SetParallelLevel(plevel);
+        }
+      }
     }
   }
 
@@ -2834,44 +2883,48 @@ int cmCTest::Run(std::vector<std::string>& args, std::string* output)
 }
 
 bool cmCTest::HandleTestActionArgument(const char* ctestExec, size_t& i,
-                                       const std::vector<std::string>& args)
+                                       const std::vector<std::string>& args,
+                                       bool& validArg)
 {
   bool success = true;
   std::string const& arg = args[i];
   if (this->CheckArgument(arg, "-T"_s, "--test-action") &&
       (i < args.size() - 1)) {
+    validArg = true;
     this->Impl->ProduceXML = true;
     i++;
     if (!this->SetTest(args[i], false)) {
       success = false;
       cmCTestLog(this, ERROR_MESSAGE,
-                 "CTest -T called with incorrect option: " << args[i]
-                                                           << std::endl);
+                 "CTest -T called with incorrect option: " << args[i] << '\n');
+      /* clang-format off */
       cmCTestLog(this, ERROR_MESSAGE,
-                 "Available options are:"
-                   << std::endl
-                   << "  " << ctestExec << " -T all" << std::endl
-                   << "  " << ctestExec << " -T start" << std::endl
-                   << "  " << ctestExec << " -T update" << std::endl
-                   << "  " << ctestExec << " -T configure" << std::endl
-                   << "  " << ctestExec << " -T build" << std::endl
-                   << "  " << ctestExec << " -T test" << std::endl
-                   << "  " << ctestExec << " -T coverage" << std::endl
-                   << "  " << ctestExec << " -T memcheck" << std::endl
-                   << "  " << ctestExec << " -T notes" << std::endl
-                   << "  " << ctestExec << " -T submit" << std::endl);
+                 "Available options are:\n"
+                 "  " << ctestExec << " -T all\n"
+                 "  " << ctestExec << " -T start\n"
+                 "  " << ctestExec << " -T update\n"
+                 "  " << ctestExec << " -T configure\n"
+                 "  " << ctestExec << " -T build\n"
+                 "  " << ctestExec << " -T test\n"
+                 "  " << ctestExec << " -T coverage\n"
+                 "  " << ctestExec << " -T memcheck\n"
+                 "  " << ctestExec << " -T notes\n"
+                 "  " << ctestExec << " -T submit\n");
+      /* clang-format on */
     }
   }
   return success;
 }
 
 bool cmCTest::HandleTestModelArgument(const char* ctestExec, size_t& i,
-                                      const std::vector<std::string>& args)
+                                      const std::vector<std::string>& args,
+                                      bool& validArg)
 {
   bool success = true;
   std::string const& arg = args[i];
   if (this->CheckArgument(arg, "-M"_s, "--test-model") &&
       (i < args.size() - 1)) {
+    validArg = true;
     i++;
     std::string const& str = args[i];
     if (cmSystemTools::LowerCase(str) == "nightly"_s) {
@@ -2883,14 +2936,14 @@ bool cmCTest::HandleTestModelArgument(const char* ctestExec, size_t& i,
     } else {
       success = false;
       cmCTestLog(this, ERROR_MESSAGE,
-                 "CTest -M called with incorrect option: " << str
-                                                           << std::endl);
+                 "CTest -M called with incorrect option: " << str << '\n');
+      /* clang-format off */
       cmCTestLog(this, ERROR_MESSAGE,
-                 "Available options are:"
-                   << std::endl
-                   << "  " << ctestExec << " -M Continuous" << std::endl
-                   << "  " << ctestExec << " -M Experimental" << std::endl
-                   << "  " << ctestExec << " -M Nightly" << std::endl);
+                 "Available options are:\n"
+                 "  " << ctestExec << " -M Continuous\n"
+                 "  " << ctestExec << " -M Experimental\n"
+                 "  " << ctestExec << " -M Nightly\n");
+      /* clang-format on */
     }
   }
   return success;
@@ -3432,10 +3485,10 @@ void cmCTest::AddCTestConfigurationOverwrite(const std::string& overStr)
   size_t epos = overStr.find('=');
   if (epos == std::string::npos) {
     cmCTestLog(this, ERROR_MESSAGE,
-               "CTest configuration overwrite specified in the wrong format."
-                 << std::endl
-                 << "Valid format is: --overwrite key=value" << std::endl
-                 << "The specified was: --overwrite " << overStr << std::endl);
+               "CTest configuration overwrite specified in the wrong format.\n"
+               "Valid format is: --overwrite key=value\n"
+               "The specified was: --overwrite "
+                 << overStr << '\n');
     return;
   }
   std::string key = overStr.substr(0, epos);

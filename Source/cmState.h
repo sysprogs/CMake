@@ -34,6 +34,7 @@ class cmStateSnapshot;
 class cmMessenger;
 class cmExecutionStatus;
 class cmListFileBacktrace;
+struct cmGlobCacheEntry;
 struct cmListFileArgument;
 
 template <typename T>
@@ -212,6 +213,8 @@ public:
   bool UseWindowsVSIDE() const;
   void SetGhsMultiIDE(bool ghsMultiIDE);
   bool UseGhsMultiIDE() const;
+  void SetBorlandMake(bool borlandMake);
+  bool UseBorlandMake() const;
   void SetWatcomWMake(bool watcomWMake);
   bool UseWatcomWMake() const;
   void SetMinGWMake(bool minGWMake);
@@ -220,6 +223,8 @@ public:
   bool UseNMake() const;
   void SetMSYSShell(bool mSYSShell);
   bool UseMSYSShell() const;
+  void SetNinja(bool ninja);
+  bool UseNinja() const;
   void SetNinjaMulti(bool ninjaMulti);
   bool UseNinjaMulti() const;
 
@@ -261,13 +266,11 @@ private:
   std::string const& GetGlobVerifyScript() const;
   std::string const& GetGlobVerifyStamp() const;
   bool SaveVerificationScript(const std::string& path, cmMessenger* messenger);
-  void AddGlobCacheEntry(bool recurse, bool listDirectories,
-                         bool followSymlinks, const std::string& relative,
-                         const std::string& expression,
-                         const std::vector<std::string>& files,
+  void AddGlobCacheEntry(const cmGlobCacheEntry& entry,
                          const std::string& variable,
                          cmListFileBacktrace const& bt,
                          cmMessenger* messenger);
+  std::vector<cmGlobCacheEntry> GetGlobCacheEntries() const;
 
   cmPropertyDefinitionMap PropertyDefinitions;
   std::vector<std::string> EnabledLanguages;
@@ -293,10 +296,12 @@ private:
   bool WindowsShell = false;
   bool WindowsVSIDE = false;
   bool GhsMultiIDE = false;
+  bool BorlandMake = false;
   bool WatcomWMake = false;
   bool MinGWMake = false;
   bool NMake = false;
   bool MSYSShell = false;
+  bool Ninja = false;
   bool NinjaMulti = false;
   Mode StateMode = Unknown;
   ProjectKind StateProjectKind = ProjectKind::Normal;

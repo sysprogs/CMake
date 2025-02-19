@@ -3,7 +3,14 @@ CMAKE_TLS_VERIFY
 
 Specify the default value for the :command:`file(DOWNLOAD)` and
 :command:`file(UPLOAD)` commands' ``TLS_VERIFY`` options.
-If not set, the default is *off*.
+If this variable is not set, the commands check the
+:envvar:`CMAKE_TLS_VERIFY` environment variable.
+If neither is set, the default is *on*.
+
+.. versionchanged:: 3.31
+  The default is on.  Previously, the default was off.
+  Users may set the :envvar:`CMAKE_TLS_VERIFY` environment
+  variable to ``0`` to restore the old default.
 
 This variable is also used by the :module:`ExternalProject` and
 :module:`FetchContent` modules for internal calls to :command:`file(DOWNLOAD)`.

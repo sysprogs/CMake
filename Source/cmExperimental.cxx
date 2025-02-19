@@ -19,14 +19,51 @@ namespace {
  * up-to-date.
  */
 cmExperimental::FeatureData LookupTable[] = {
+  // ExportPackageDependencies
+  { "ExportPackageDependencies",
+    "1942b4fa-b2c5-4546-9385-83f254070067",
+    "CMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES",
+    "CMake's EXPORT_PACKAGE_DEPENDENCIES support is experimental. It is meant "
+    "only for experimentation and feedback to CMake developers.",
+    {},
+    cmExperimental::TryCompileCondition::Always,
+    false },
   // WindowsKernelModeDriver
   { "WindowsKernelModeDriver",
-    "5c2d848d-4efa-4529-a768-efd57171bf68",
+    "fac18f65-504e-4dbb-b068-f356bb1f2ddb",
     "CMAKE_EXPERIMENTAL_WINDOWS_KERNEL_MODE_DRIVER",
     "CMake's Windows kernel-mode driver support is experimental. It is meant "
     "only for experimentation and feedback to CMake developers.",
     {},
     cmExperimental::TryCompileCondition::Always,
+    false },
+  // CxxImportStd
+  { "CxxImportStd",
+    "0e5b6991-d74f-4b3d-a41c-cf096e0b2508",
+    "CMAKE_EXPERIMENTAL_CXX_IMPORT_STD",
+    "CMake's support for `import std;` in C++23 and newer is experimental. It "
+    "is meant only for experimentation and feedback to CMake developers.",
+    {},
+    cmExperimental::TryCompileCondition::Always,
+    false },
+  // ExportPackageInfo
+  { "ExportPackageInfo",
+    "b80be207-778e-46ba-8080-b23bba22639e",
+    "CMAKE_EXPERIMENTAL_EXPORT_PACKAGE_INFO",
+    "CMake's support for exporting package information in the Common Package "
+    "Specification format is experimental. It is meant only for "
+    "experimentation and feedback to CMake developers.",
+    {},
+    cmExperimental::TryCompileCondition::Always,
+    false },
+  // ExportBuildDatabase
+  { "ExportBuildDatabase",
+    "4bd552e2-b7fb-429a-ab23-c83ef53f3f13",
+    "CMAKE_EXPERIMENTAL_EXPORT_BUILD_DATABASE",
+    "CMake's support for exporting build databases is experimental. It is "
+    "meant only for experimentation and feedback to CMake developers.",
+    {},
+    cmExperimental::TryCompileCondition::Never,
     false },
 };
 static_assert(sizeof(LookupTable) / sizeof(LookupTable[0]) ==
@@ -43,6 +80,20 @@ cmExperimental::FeatureData& DataForFeature(cmExperimental::Feature f)
 const cmExperimental::FeatureData& cmExperimental::DataForFeature(Feature f)
 {
   return ::DataForFeature(f);
+}
+
+cm::optional<cmExperimental::Feature> cmExperimental::FeatureByName(
+  std::string const& name)
+{
+  size_t idx = 0;
+  for (auto const& feature : LookupTable) {
+    if (feature.Name == name) {
+      return static_cast<Feature>(idx);
+    }
+    ++idx;
+  }
+
+  return {};
 }
 
 bool cmExperimental::HasSupportEnabled(cmMakefile const& mf, Feature f)

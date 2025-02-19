@@ -32,6 +32,7 @@ Value                           Name
 ``Intel``                       Intel Classic Compiler
 ``IntelLLVM``                   `Intel LLVM-Based Compiler`_
 ``LCC``                         MCST Elbrus C/C++/Fortran Compiler
+``LFortran``                    LFortran Fortran Compiler
 ``MSVC``                        `Microsoft Visual Studio`_
 ``NVHPC``                       `NVIDIA HPC Compiler`_
 ``NVIDIA``                      `NVIDIA CUDA Compiler`_
@@ -40,9 +41,10 @@ Value                           Name
 ``PGI``                         The Portland Group
 ``PathScale``                   PathScale
 ``SDCC``                        `Small Device C Compiler`_
-``SunPro``                      Oracle Solaris Studio
+``SunPro``                      Oracle Developer Studio
 ``Tasking``                     `Tasking Compiler Toolsets`_
 ``TI``                          Texas Instruments
+``TIClang``                     `Texas Instruments Clang-based Compilers`_
 ``TinyCC``                      `Tiny C Compiler`_
 ``XL``, ``VisualAge``, ``zOS``  IBM XL
 ``XLClang``                     IBM Clang-based XL
@@ -68,3 +70,4 @@ languages.
 .. _Small Device C Compiler: https://sdcc.sourceforge.net
 .. _Tiny C Compiler: https://bellard.org/tcc
 .. _Tasking Compiler Toolsets: https://www.tasking.com
+.. _Texas Instruments Clang-based Compilers: https://www.ti.com/tool/download/ARM-CGT-CLANG

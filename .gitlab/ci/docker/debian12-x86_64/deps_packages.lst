@@ -32,11 +32,19 @@ cvs
 subversion
 mercurial
 
+# Install ASM_NASM language toolchain.
+nasm
+
 # Install HIP language toolchain.
 hipcc
 
 # Install swift runtime deps.
 libncurses5
+
+# Install IAR compiler package dependencies.
+libusb-1.0-0
+udev
+sudo
 
 # Packages needed to test find modules.
 alsa-utils

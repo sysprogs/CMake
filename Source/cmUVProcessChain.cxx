@@ -12,6 +12,8 @@
 
 #include <cm3p/uv.h>
 
+#include "cm_fileno.hxx"
+
 #include "cmGetPipes.h"
 #include "cmUVHandlePtr.h"
 
@@ -38,7 +40,8 @@ struct cmUVProcessChain::InternalData
 
   bool Valid = false;
 
-  cm::uv_loop_ptr Loop;
+  cm::uv_loop_ptr BuiltinLoop;
+  uv_loop_t* Loop;
 
   StreamData InputStreamData;
   StreamData OutputStreamData;
@@ -57,12 +60,7 @@ struct cmUVProcessChain::InternalData
   void Finish();
 };
 
-cmUVProcessChainBuilder::cmUVProcessChainBuilder()
-{
-  this->SetNoStream(Stream_INPUT)
-    .SetNoStream(Stream_OUTPUT)
-    .SetNoStream(Stream_ERROR);
-}
+cmUVProcessChainBuilder::cmUVProcessChainBuilder() = default;
 
 cmUVProcessChainBuilder& cmUVProcessChainBuilder::AddCommand(
   const std::vector<std::string>& arguments)
@@ -71,6 +69,19 @@ cmUVProcessChainBuilder& cmUVProcessChainBuilder::AddCommand(
     this->Processes.emplace_back();
     this->Processes.back().Arguments = arguments;
   }
+  return *this;
+}
+
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetBuiltinLoop()
+{
+  this->Loop = nullptr;
+  return *this;
+}
+
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalLoop(
+  uv_loop_t& loop)
+{
+  this->Loop = &loop;
   return *this;
 }
 
@@ -122,6 +133,16 @@ cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalStream(
   return *this;
 }
 
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalStream(
+  Stream stdio, FILE* stream)
+{
+  int fd = cm_fileno(stream);
+  if (fd >= 0) {
+    return this->SetExternalStream(stdio, fd);
+  }
+  return this->SetNoStream(stdio);
+}
+
 cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetMergedBuiltinStreams()
 {
   this->MergedBuiltinStreams = true;
@@ -133,6 +154,11 @@ cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetWorkingDirectory(
 {
   this->WorkingDirectory = std::move(dir);
   return *this;
+}
+
+uv_loop_t* cmUVProcessChainBuilder::GetLoop() const
+{
+  return this->Loop;
 }
 
 cmUVProcessChain cmUVProcessChainBuilder::Start() const
@@ -157,6 +183,13 @@ bool cmUVProcessChain::InternalData::Prepare(
   const cmUVProcessChainBuilder* builder)
 {
   this->Builder = builder;
+
+  if (this->Builder->Loop) {
+    this->Loop = this->Builder->Loop;
+  } else {
+    this->BuiltinLoop.init();
+    this->Loop = this->BuiltinLoop;
+  }
 
   auto const& input =
     this->Builder->Stdio[cmUVProcessChainBuilder::Stream_INPUT];
@@ -304,6 +337,11 @@ void cmUVProcessChain::InternalData::SpawnProcess(
   arguments.push_back(nullptr);
   options.args = const_cast<char**>(arguments.data());
   options.flags = UV_PROCESS_WINDOWS_HIDE;
+#if UV_VERSION_MAJOR > 1 ||                                                   \
+  (UV_VERSION_MAJOR == 1 && UV_VERSION_MINOR >= 48) ||                        \
+  !defined(CMAKE_USE_SYSTEM_LIBUV)
+  options.flags |= UV_PROCESS_WINDOWS_FILE_PATH_EXACT_NAME;
+#endif
   if (!this->Builder->WorkingDirectory.empty()) {
     options.cwd = this->Builder->WorkingDirectory.c_str();
   }
@@ -353,7 +391,6 @@ void cmUVProcessChain::InternalData::Finish()
 cmUVProcessChain::cmUVProcessChain()
   : Data(cm::make_unique<InternalData>())
 {
-  this->Data->Loop.init();
 }
 
 cmUVProcessChain::cmUVProcessChain(cmUVProcessChain&& other) noexcept

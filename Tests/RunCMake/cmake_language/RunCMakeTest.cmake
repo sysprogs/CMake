@@ -84,6 +84,20 @@ run_cmake(defer_get_call_id_var)
 run_cmake(defer_missing_arg)
 run_cmake(defer_missing_call)
 run_cmake(defer_unknown_option)
+run_cmake(exit_0)
+run_cmake(exit_5)
+run_cmake_script(exit_0_script)
+run_cmake_script(exit_5_script)
+run_cmake_script(exit_0_script_with_command)
+run_cmake_script(exit_7_script_in_include)
+run_cmake_script(exit_8_script_in_recursive_cmake_language)
+run_cmake_script(exit_9_script_block)
+run_cmake_script(exit_9_script_control)
+run_cmake_script(exit_9_script_if)
+run_cmake_script(exit_9_script_foreach)
+run_cmake_script(exit_9_script_function)
+run_cmake_script(exit_9_script_macro)
+run_cmake_script(exit_9_script_while)
 
 # Default log level
 run_cmake_command(
@@ -142,3 +156,11 @@ run_cmake_command(
     -DCMAKE_MESSAGE_LOG_LEVEL=TRACE
     -P ${RunCMake_SOURCE_DIR}/get_message_log_level.cmake
   )
+
+run_cmake(Experimental/CxxImportStd-set)
+run_cmake(Experimental/CxxImportStd-unset)
+run_cmake(Experimental/ExportPackageDependencies-set)
+run_cmake(Experimental/ExportPackageDependencies-unset)
+run_cmake(Experimental/WindowsKernelModeDriver-set)
+run_cmake(Experimental/WindowsKernelModeDriver-unset)
+run_cmake(Experimental/Unknown)

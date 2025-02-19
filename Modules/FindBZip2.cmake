@@ -41,7 +41,11 @@ Cache variables
 The following cache variables may also be set:
 
 ``BZIP2_INCLUDE_DIR``
-  the BZip2 include directory
+  the directory containing the BZip2 headers
+``BZIP2_LIBRARY_RELEASE``
+  the path to the BZip2 library for release configurations
+``BZIP2_LIBRARY_DEBUG``
+  the path to the BZip2 library for debug configurations
 
 Legacy Variables
 ^^^^^^^^^^^^^^^^
@@ -54,6 +58,9 @@ The following variables are provided for backward compatibility:
   .. versionchanged:: 3.26
     Superseded by ``BZIP2_VERSION``.
 #]=======================================================================]
+
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
 
 set(_BZIP2_PATHS PATHS
   "[HKEY_LOCAL_MACHINE\\SOFTWARE\\GnuWin32\\Bzip2;InstallPath]"
@@ -120,3 +127,5 @@ if (BZIP2_FOUND)
 endif ()
 
 mark_as_advanced(BZIP2_INCLUDE_DIR)
+
+cmake_policy(POP)

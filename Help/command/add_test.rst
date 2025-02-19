@@ -27,9 +27,37 @@ directory the test is created in.
 ``add_test`` options are:
 
 ``COMMAND``
-  Specify the test command-line.  If ``<command>`` specifies an executable
-  target created by :command:`add_executable`, it will automatically be
-  replaced by the location of the executable created at build time.
+  Specify the test command-line.
+
+  If ``<command>`` specifies an executable target created by
+  :command:`add_executable`:
+
+  * It will automatically be replaced by the location of the executable
+    created at build time.
+
+  * .. versionadded:: 3.3
+
+      The target's :prop_tgt:`CROSSCOMPILING_EMULATOR`, if set, will be
+      used to run the command on the host::
+
+        <emulator> <command>
+
+      .. versionchanged:: 3.29
+
+        The emulator is used only when
+        :variable:`cross-compiling <CMAKE_CROSSCOMPILING>`.
+        See policy :policy:`CMP0158`.
+
+  * .. versionadded:: 3.29
+
+      The target's :prop_tgt:`TEST_LAUNCHER`, if set, will be
+      used to launch the command::
+
+        <launcher> <command>
+
+      If the :prop_tgt:`CROSSCOMPILING_EMULATOR` is also set, both are used::
+
+        <launcher> <emulator> <command>
 
   The command may be specified using
   :manual:`generator expressions <cmake-generator-expressions(7)>`.
@@ -52,7 +80,7 @@ directory the test is created in.
 If the test command exits with code ``0`` the test passes. Non-zero exit code
 is a "failed" test. The test property :prop_test:`WILL_FAIL` inverts this
 logic. Note that system-level test failures such as segmentation faults or
-heap errors will still fail the test even if ``WILL_FALL`` is true. Output
+heap errors will still fail the test even if ``WILL_FAIL`` is true. Output
 written to stdout or stderr is captured by :manual:`ctest(1)` and only
 affects the pass/fail status via the :prop_test:`PASS_REGULAR_EXPRESSION`,
 :prop_test:`FAIL_REGULAR_EXPRESSION`, or :prop_test:`SKIP_REGULAR_EXPRESSION`

@@ -7,6 +7,8 @@
 #include <cctype>
 #include <cstring>
 #include <initializer_list>
+#include <iterator>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -44,7 +46,10 @@ private:
 /** Returns true if the character @a ch is a whitespace character.  **/
 inline bool cmIsSpace(char ch)
 {
-  return ((ch & 0x80) == 0) && std::isspace(ch);
+  // isspace takes 'int' but documents that the value must be representable
+  // by 'unsigned char', or be EOF.  Cast to 'unsigned char' to avoid sign
+  // extension while converting to 'int'.
+  return std::isspace(static_cast<unsigned char>(ch));
 }
 
 /** Returns a string that has whitespace removed from the start and the end. */
@@ -72,6 +77,38 @@ std::string cmJoin(Range const& rng, cm::string_view separator)
     os << separator << *it;
   }
   return os.str();
+}
+
+/** Generic function to join strings range with separator
+ *  and initial leading string into a single string.
+ */
+template <typename Range>
+std::string cmJoinStrings(Range const& rng, cm::string_view separator,
+                          cm::string_view initial)
+{
+  if (rng.empty()) {
+    return { std::begin(initial), std::end(initial) };
+  }
+
+  std::string result;
+  result.reserve(
+    std::accumulate(std::begin(rng), std::end(rng),
+                    initial.size() + (rng.size() - 1) * separator.size(),
+                    [](std::size_t sum, const std::string& item) {
+                      return sum + item.size();
+                    }));
+  result.append(std::begin(initial), std::end(initial));
+
+  auto begin = std::begin(rng);
+  auto end = std::end(rng);
+  result += *begin;
+
+  for (++begin; begin != end; ++begin) {
+    result.append(std::begin(separator), std::end(separator));
+    result += *begin;
+  }
+
+  return result;
 }
 
 /**
@@ -109,7 +146,7 @@ public:
   {
   }
   cmAlphaNum(const char* str)
-    : View_(str)
+    : View_(str ? cm::string_view(str) : cm::string_view())
   {
   }
   cmAlphaNum(char ch)

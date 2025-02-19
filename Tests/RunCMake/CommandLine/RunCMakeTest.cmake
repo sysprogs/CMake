@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 include(RunCMake)
 
@@ -48,6 +48,16 @@ run_cmake_command(E___run_co_compile-bad-iwyu ${CMAKE_COMMAND} -E __run_co_compi
 run_cmake_command(E___run_co_compile-no--- ${CMAKE_COMMAND} -E __run_co_compile --iwyu=iwyu-does-not-exist command-does-not-exist)
 run_cmake_command(E___run_co_compile-no-cc ${CMAKE_COMMAND} -E __run_co_compile --iwyu=iwyu-does-not-exist --)
 run_cmake_command(E___run_co_compile-tidy-remove-fixes ${CMAKE_COMMAND} -E __run_co_compile "--tidy=${CMAKE_COMMAND}\\;-E\\;true\\;--export-fixes=${RunCMake_BINARY_DIR}/tidy-fixes.yaml" -- ${CMAKE_COMMAND} -E true)
+
+block()
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/list-cache-build)
+  run_cmake(list-cache)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  run_cmake_command(list-cache-LR ${CMAKE_COMMAND} . -LR MIDDLE)
+  run_cmake_command(list-cache-LRA ${CMAKE_COMMAND} . -LRA MIDDLE)
+  run_cmake_command(list-cache-LRH ${CMAKE_COMMAND} . -LRH MIDDLE)
+  run_cmake_command(list-cache-LRAH ${CMAKE_COMMAND} . -LRAH MIDDLE)
+endblock()
 
 run_cmake_command(G_no-arg ${CMAKE_COMMAND} -B DummyBuildDir -G)
 run_cmake_command(G_bad-arg ${CMAKE_COMMAND} -B DummyBuildDir -G NoSuchGenerator)
@@ -372,37 +382,28 @@ function(run_EnvironmentGenerator)
   run_cmake_command(Envgen-bad-help ${CMAKE_COMMAND} --help)
   unset(ENV{CMAKE_GENERATOR})
 
-  if(RunCMake_GENERATOR MATCHES "Visual Studio.*")
+  if(RunCMake_GENERATOR MATCHES "Visual Studio")
     set(ENV{CMAKE_GENERATOR} "${RunCMake_GENERATOR}")
     run_cmake_command(Envgen ${CMAKE_COMMAND} ${source_dir})
-    # Toolset is available since VS 2010.
-    if(RunCMake_GENERATOR MATCHES "Visual Studio [1-9][0-9]")
-      set(ENV{CMAKE_GENERATOR_TOOLSET} "invalid")
-      # Envvar shouldn't affect existing build tree
-      run_cmake_command(Envgen-toolset-existing ${CMAKE_COMMAND} -E chdir ..
-        ${CMAKE_COMMAND} --build Envgen-build)
-      run_cmake_command(Envgen-toolset-invalid ${CMAKE_COMMAND} ${source_dir})
-      # Command line -G implies -T""
-      run_cmake_command(Envgen-G-implicit-toolset ${CMAKE_COMMAND} -G "${RunCMake_GENERATOR}" ${source_dir})
-      run_cmake_command(Envgen-T-toolset ${CMAKE_COMMAND} -T "fromcli" ${source_dir})
-      unset(ENV{CMAKE_GENERATOR_TOOLSET})
-    endif()
+    set(ENV{CMAKE_GENERATOR_TOOLSET} "invalid")
+    # Envvar shouldn't affect existing build tree
+    run_cmake_command(Envgen-toolset-existing ${CMAKE_COMMAND} -E chdir ..
+      ${CMAKE_COMMAND} --build Envgen-build)
+    run_cmake_command(Envgen-toolset-invalid ${CMAKE_COMMAND} ${source_dir})
+    # Command line -G implies -T""
+    run_cmake_command(Envgen-G-implicit-toolset ${CMAKE_COMMAND} -G "${RunCMake_GENERATOR}" ${source_dir})
+    run_cmake_command(Envgen-T-toolset ${CMAKE_COMMAND} -T "fromcli" ${source_dir})
+    unset(ENV{CMAKE_GENERATOR_TOOLSET})
     # Platform can be set only if not in generator name.
     if(RunCMake_GENERATOR MATCHES "^Visual Studio [0-9]+ [0-9]+$")
       set(ENV{CMAKE_GENERATOR_PLATFORM} "invalid")
       # Envvar shouldn't affect existing build tree
       run_cmake_command(Envgen-platform-existing ${CMAKE_COMMAND} -E chdir ..
         ${CMAKE_COMMAND} --build Envgen-build)
-      if(RunCMake_GENERATOR MATCHES "^Visual Studio 9 ")
-        set(RunCMake-stderr-file "Envgen-platform-invalid-stderr-vs9.txt")
-      endif()
       run_cmake_command(Envgen-platform-invalid ${CMAKE_COMMAND} ${source_dir})
       unset(RunCMake-stderr-file)
       # Command line -G implies -A""
       run_cmake_command(Envgen-G-implicit-platform ${CMAKE_COMMAND} -G "${RunCMake_GENERATOR}" ${source_dir})
-      if(RunCMake_GENERATOR MATCHES "^Visual Studio 9 ")
-        set(RunCMake-stderr-file "Envgen-A-platform-stderr-vs9.txt")
-      endif()
       run_cmake_command(Envgen-A-platform ${CMAKE_COMMAND} -A "fromcli" ${source_dir})
       unset(RunCMake-stderr-file)
       unset(ENV{CMAKE_GENERATOR_PLATFORM})
@@ -458,6 +459,15 @@ if(RunCMake_GENERATOR MATCHES "Make|^Ninja$")
 elseif(RunCMake_GENERATOR MATCHES "Ninja Multi-Config|Visual Studio|Xcode")
   run_EnvironmentConfigTypes()
 endif()
+
+function(run_EnvironmentInstallPrefix)
+  set(ENV{CMAKE_INSTALL_PREFIX} "${RunCMake_BINARY_DIR}/install_prefix_set_via_env_var")
+  run_cmake(EnvInstallPrefix)
+  run_cmake_with_options(EnvInstallPrefixOverrideWithVar -DCMAKE_INSTALL_PREFIX=${RunCMake_BINARY_DIR}/install_prefix_set_via_var)
+  run_cmake_with_options(EnvInstallPrefixOverrideWithCmdLineOpt --install-prefix ${RunCMake_BINARY_DIR}/install_prefix_set_cmd_line_opt)
+  unset(ENV{CMAKE_INSTALL_PREFIX})
+endfunction()
+run_EnvironmentInstallPrefix()
 
 function(run_EnvironmentToolchain)
   set(ENV{CMAKE_TOOLCHAIN_FILE} "${RunCMake_SOURCE_DIR}/EnvToolchain-toolchain.cmake")
@@ -782,6 +792,8 @@ run_cmake_command(E_cat-without-double-dash ${CMAKE_COMMAND} -E cat "-file-start
 unset(RunCMake_TEST_COMMAND_WORKING_DIRECTORY)
 unset(out)
 
+run_cmake_command(E_cat-stdin ${CMAKE_COMMAND} -P ${RunCMake_SOURCE_DIR}/E_cat-stdin.cmake)
+
 # Unset environment variables that are used for testing cmake -E
 unset(ENV{TEST_ENV})
 unset(ENV{TEST_ENV_EXPECTED})
@@ -892,6 +904,8 @@ run_cmake_command(P_working-dir ${CMAKE_COMMAND} -DEXPECTED_WORKING_DIR=${RunCMa
 file(COPY ${RunCMake_SOURCE_DIR}/C_basic_initial-cache.txt DESTINATION ${RunCMake_BINARY_DIR})
 run_cmake_with_options(C_basic -C ../C_basic_initial-cache.txt)
 run_cmake_with_options(C_basic_fullpath -C ${RunCMake_BINARY_DIR}/C_basic_initial-cache.txt)
+file(COPY ${RunCMake_SOURCE_DIR}/C_target-commands_initial-cache.cmake DESTINATION ${RunCMake_BINARY_DIR})
+run_cmake_command(C_target-commands ${CMAKE_COMMAND} -S ${RunCMake_SOURCE_DIR} -DRunCMake_TEST=C_target-commands -C ../C_target-commands_initial-cache.cmake)
 
 set(RunCMake_TEST_OPTIONS
   "-DFOO=-DBAR:BOOL=BAZ")
@@ -1113,18 +1127,18 @@ set(RunCMake_TEST_OPTIONS --profiling-format=google-trace --profiling-output=${P
 run_cmake(ProfilingTest)
 unset(RunCMake_TEST_OPTIONS)
 
-if(RunCMake_GENERATOR MATCHES "^Visual Studio 9 2008")
-  run_cmake_with_options(DeprecateVS9-WARN-ON -DCMAKE_WARN_VS9=ON)
-  unset(ENV{CMAKE_WARN_VS9})
-  run_cmake(DeprecateVS9-WARN-ON)
-  run_cmake_with_options(DeprecateVS9-WARN-OFF -DCMAKE_WARN_VS9=OFF)
-endif()
-
-if(RunCMake_GENERATOR MATCHES "^Visual Studio 12 2013")
-  run_cmake_with_options(DeprecateVS12-WARN-ON -DCMAKE_WARN_VS12=ON)
-  unset(ENV{CMAKE_WARN_VS12})
-  run_cmake(DeprecateVS12-WARN-ON)
-  run_cmake_with_options(DeprecateVS12-WARN-OFF -DCMAKE_WARN_VS12=OFF)
-endif()
-
 run_cmake_with_options(help-arbitrary "--help" "CMAKE_CXX_IGNORE_EXTENSIONS")
+
+if (WIN32 OR DEFINED ENV{HOME})
+  set(config_dir_test print-config-dir)
+  if (WIN32)
+    set(config_dir_test print-config-dir-win)
+  elseif(APPLE)
+    set(config_dir_test print-config-dir-apple)
+  endif()
+  unset(ENV{CMAKE_CONFIG_DIR})
+  unset(ENV{XDG_CONFIG_HOME})
+  run_cmake_command(${config_dir_test} ${CMAKE_COMMAND} "--print-config-dir")
+endif()
+set(ENV{CMAKE_CONFIG_DIR} cmake_config_dir)
+run_cmake_command(print-config-dir-env ${CMAKE_COMMAND} "--print-config-dir")

@@ -7,6 +7,8 @@
 #include <memory>
 #include <utility>
 
+#include <cm/string_view>
+
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmGeneratorExpressionContext.h"
@@ -70,13 +72,6 @@ const std::string& cmCompiledGeneratorExpression::Evaluate(
     currentTarget ? currentTarget : headTarget, this->EvaluateForBuildsystem,
     this->Backtrace, language);
 
-  return this->EvaluateWithContext(context, dagChecker);
-}
-
-const std::string& cmCompiledGeneratorExpression::EvaluateWithContext(
-  cmGeneratorExpressionContext& context,
-  cmGeneratorExpressionDAGChecker* dagChecker) const
-{
   if (!this->NeedsEvaluation) {
     return this->Input;
   }
@@ -200,7 +195,7 @@ static std::string stripAllGeneratorExpressions(const std::string& input)
 }
 
 static void prefixItems(const std::string& content, std::string& result,
-                        const std::string& prefix)
+                        const cm::string_view& prefix)
 {
   std::vector<std::string> entries;
   cmGeneratorExpression::Split(content, entries);
@@ -218,7 +213,7 @@ static void prefixItems(const std::string& content, std::string& result,
 
 static std::string stripExportInterface(
   const std::string& input, cmGeneratorExpression::PreprocessContext context,
-  bool resolveRelative)
+  cm::string_view importPrefix)
 {
   std::string result;
 
@@ -275,8 +270,8 @@ static std::string stripExportInterface(
         } else if (context == cmGeneratorExpression::InstallInterface &&
                    foundGenex == FoundGenex::InstallInterface) {
           const std::string content = input.substr(pos, c - cStart);
-          if (resolveRelative) {
-            prefixItems(content, result, "${_IMPORT_PREFIX}/");
+          if (!importPrefix.empty()) {
+            prefixItems(content, result, importPrefix);
           } else {
             result += content;
           }
@@ -366,13 +361,13 @@ void cmGeneratorExpression::Split(const std::string& input,
 
 std::string cmGeneratorExpression::Preprocess(const std::string& input,
                                               PreprocessContext context,
-                                              bool resolveRelative)
+                                              cm::string_view importPrefix)
 {
   if (context == StripAllGeneratorExpressions) {
     return stripAllGeneratorExpressions(input);
   }
   if (context == BuildInterface || context == InstallInterface) {
-    return stripExportInterface(input, context, resolveRelative);
+    return stripExportInterface(input, context, importPrefix);
   }
 
   assert(false &&
@@ -380,14 +375,15 @@ std::string cmGeneratorExpression::Preprocess(const std::string& input,
   return std::string();
 }
 
-std::string::size_type cmGeneratorExpression::Find(const std::string& input)
+cm::string_view::size_type cmGeneratorExpression::Find(
+  const cm::string_view& input)
 {
-  const std::string::size_type openpos = input.find("$<");
-  if (openpos != std::string::npos &&
-      input.find('>', openpos) != std::string::npos) {
+  const cm::string_view::size_type openpos = input.find("$<");
+  if (openpos != cm::string_view::npos &&
+      input.find('>', openpos) != cm::string_view::npos) {
     return openpos;
   }
-  return std::string::npos;
+  return cm::string_view::npos;
 }
 
 bool cmGeneratorExpression::IsValidTargetName(const std::string& input)
@@ -432,7 +428,7 @@ const std::string& cmGeneratorExpressionInterpreter::Evaluate(
   cmGeneratorExpressionDAGChecker dagChecker(
     this->HeadTarget,
     property == "COMPILE_FLAGS" ? "COMPILE_OPTIONS" : property, nullptr,
-    nullptr);
+    nullptr, this->LocalGenerator, this->Config);
 
   return this->CompiledGeneratorExpression->Evaluate(
     this->LocalGenerator, this->Config, this->HeadTarget, &dagChecker, nullptr,

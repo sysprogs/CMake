@@ -268,7 +268,7 @@ static inline char* realpath(const char* path, char* resolved_path)
   snprintf(resolved_path, maxlen, "%s", path);
   BPath normalized(resolved_path, nullptr, true);
   const char* resolved = normalized.Path();
-  if (resolved != nullptr) // nullptr == No such file.
+  if (resolved) // nullptr == No such file.
   {
     if (snprintf(resolved_path, maxlen, "%s", resolved) < maxlen) {
       return resolved_path;
@@ -409,18 +409,6 @@ inline void Realpath(const std::string& path, std::string& resolved_path,
     // if path resolution fails, return what was passed in
     resolved_path = path;
   }
-}
-#endif
-
-#if !defined(_WIN32) && defined(__COMO__)
-// Hack for como strict mode to avoid defining _SVID_SOURCE or _BSD_SOURCE.
-extern "C" {
-extern FILE* popen(__const char* __command, __const char* __modes) __THROW;
-extern int pclose(FILE* __stream) __THROW;
-extern char* realpath(__const char* __restrict __name,
-                      char* __restrict __resolved) __THROW;
-extern char* strdup(__const char* __s) __THROW;
-extern int putenv(char* __string) __THROW;
 }
 #endif
 
@@ -777,12 +765,16 @@ const char* SystemTools::GetEnv(const std::string& key)
 bool SystemTools::GetEnv(const char* key, std::string& result)
 {
 #if defined(_WIN32)
-  const std::wstring wkey = Encoding::ToWide(key);
-  const wchar_t* wv = _wgetenv(wkey.c_str());
-  if (wv) {
-    result = Encoding::ToNarrow(wv);
-    return true;
+  auto wide_key = Encoding::ToWide(key);
+  auto result_size = GetEnvironmentVariableW(wide_key.data(), nullptr, 0);
+  if (result_size <= 0) {
+    return false;
   }
+  std::wstring wide_result;
+  wide_result.resize(result_size - 1);
+  GetEnvironmentVariableW(wide_key.data(), &wide_result[0], result_size);
+  result = Encoding::ToNarrow(wide_result);
+  return true;
 #else
   const char* v = getenv(key);
   if (v) {
@@ -806,7 +798,7 @@ bool SystemTools::HasEnv(const char* key)
 #else
   const char* v = getenv(key);
 #endif
-  return v != nullptr;
+  return v;
 }
 
 bool SystemTools::HasEnv(const std::string& key)
@@ -1175,7 +1167,7 @@ static DWORD SystemToolsMakeRegistryMode(DWORD mode,
   // only add the modes when on a system that supports Wow64.
   static FARPROC wow64p =
     GetProcAddress(GetModuleHandleW(L"kernel32"), "IsWow64Process");
-  if (wow64p == nullptr) {
+  if (!wow64p) {
     return mode;
   }
 
@@ -1363,6 +1355,75 @@ bool SystemTools::DeleteRegistryValue(const std::string&, KeyWOW64)
   return false;
 }
 #endif
+
+#ifdef _WIN32
+SystemTools::WindowsFileId::WindowsFileId(unsigned long volumeSerialNumber,
+                                          unsigned long fileIndexHigh,
+                                          unsigned long fileIndexLow)
+  : m_volumeSerialNumber(volumeSerialNumber)
+  , m_fileIndexHigh(fileIndexHigh)
+  , m_fileIndexLow(fileIndexLow)
+{
+}
+
+bool SystemTools::WindowsFileId::operator==(const WindowsFileId& o) const
+{
+  return (m_volumeSerialNumber == o.m_volumeSerialNumber &&
+          m_fileIndexHigh == o.m_fileIndexHigh &&
+          m_fileIndexLow == o.m_fileIndexLow);
+}
+
+bool SystemTools::WindowsFileId::operator!=(const WindowsFileId& o) const
+{
+  return !(*this == o);
+}
+#else
+SystemTools::UnixFileId::UnixFileId(dev_t volumeSerialNumber,
+                                    ino_t fileSerialNumber, off_t fileSize)
+  : m_volumeSerialNumber(volumeSerialNumber)
+  , m_fileSerialNumber(fileSerialNumber)
+  , m_fileSize(fileSize)
+{
+}
+
+bool SystemTools::UnixFileId::operator==(const UnixFileId& o) const
+{
+  return (m_volumeSerialNumber == o.m_volumeSerialNumber &&
+          m_fileSerialNumber == o.m_fileSerialNumber &&
+          m_fileSize == o.m_fileSize);
+}
+
+bool SystemTools::UnixFileId::operator!=(const UnixFileId& o) const
+{
+  return !(*this == o);
+}
+#endif
+
+bool SystemTools::GetFileId(const std::string& file, FileId& id)
+{
+#ifdef _WIN32
+  HANDLE hFile =
+    CreateFileW(Encoding::ToWide(file).c_str(), GENERIC_READ, FILE_SHARE_READ,
+                nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+  if (hFile != INVALID_HANDLE_VALUE) {
+    BY_HANDLE_FILE_INFORMATION fiBuf;
+    GetFileInformationByHandle(hFile, &fiBuf);
+    CloseHandle(hFile);
+    id = FileId(fiBuf.dwVolumeSerialNumber, fiBuf.nFileIndexHigh,
+                fiBuf.nFileIndexLow);
+    return true;
+  } else {
+    return false;
+  }
+#else
+  struct stat fileStat;
+  if (stat(file.c_str(), &fileStat) == 0) {
+    id = FileId(fileStat.st_dev, fileStat.st_ino, fileStat.st_size);
+    return true;
+  }
+  return false;
+#endif
+}
 
 bool SystemTools::SameFile(const std::string& file1, const std::string& file2)
 {
@@ -2536,8 +2597,12 @@ SystemTools::CopyStatus SystemTools::CloneFileContent(
 
   // NOTE: we cannot use `clonefile` as the {a,c,m}time for the file needs to
   // be updated by `copy_file_if_different` and `copy_file`.
+  // These flags are meant to be COPYFILE_METADATA | COPYFILE_CLONE, but CLONE
+  // forces COPYFILE_NOFOLLOW_SRC and that violates the invariant that this
+  // should result in a file.
   if (copyfile(source.c_str(), destination.c_str(), nullptr,
-               COPYFILE_METADATA | COPYFILE_CLONE) < 0) {
+               COPYFILE_METADATA | COPYFILE_EXCL | COPYFILE_STAT |
+                 COPYFILE_XATTR | COPYFILE_DATA) < 0) {
     return CopyStatus{ Status::POSIX_errno(), CopyStatus::NoPath };
   }
 #  if KWSYS_CXX_HAS_UTIMENSAT
@@ -2802,14 +2867,14 @@ Status SystemTools::RemoveFile(std::string const& source)
 
 Status SystemTools::RemoveADirectory(std::string const& source)
 {
-  // Add write permission to the directory so we can modify its
-  // content to remove files and directories from it.
+  // Add read and write permission to the directory so we can read
+  // and modify its content to remove files and directories from it.
   mode_t mode = 0;
   if (SystemTools::GetPermissions(source, mode)) {
 #if defined(_WIN32) && !defined(__CYGWIN__)
-    mode |= S_IWRITE;
+    mode |= S_IREAD | S_IWRITE;
 #else
-    mode |= S_IWUSR;
+    mode |= S_IRUSR | S_IWUSR;
 #endif
     SystemTools::SetPermissions(source, mode);
   }
@@ -2875,9 +2940,8 @@ std::string SystemToolsStatic::FindName(
   path.reserve(path.size() + userPaths.size());
   path.insert(path.end(), userPaths.begin(), userPaths.end());
   // now look for the file
-  std::string tryPath;
   for (std::string const& p : path) {
-    tryPath = p;
+    std::string tryPath = p;
     if (tryPath.empty() || tryPath.back() != '/') {
       tryPath += '/';
     }
@@ -2946,8 +3010,6 @@ std::string SystemTools::FindProgram(const std::string& name,
                                      const std::vector<std::string>& userPaths,
                                      bool no_system_path)
 {
-  std::string tryPath;
-
 #if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
   std::vector<std::string> extensions;
   // check to see if the name already has a .xxx at
@@ -2959,7 +3021,7 @@ std::string SystemTools::FindProgram(const std::string& name,
 
     // first try with extensions if the os supports them
     for (std::string const& ext : extensions) {
-      tryPath = name;
+      std::string tryPath = name;
       tryPath += ext;
       if (SystemTools::FileIsExecutable(tryPath)) {
         return SystemTools::CollapseFullPath(tryPath);
@@ -2996,7 +3058,7 @@ std::string SystemTools::FindProgram(const std::string& name,
 #if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
     // first try with extensions
     for (std::string const& ext : extensions) {
-      tryPath = p;
+      std::string tryPath = p;
       tryPath += name;
       tryPath += ext;
       if (SystemTools::FileIsExecutable(tryPath)) {
@@ -3005,7 +3067,7 @@ std::string SystemTools::FindProgram(const std::string& name,
     }
 #endif
     // now try it without them
-    tryPath = p;
+    std::string tryPath = p;
     tryPath += name;
     if (SystemTools::FileIsExecutable(tryPath)) {
       return SystemTools::CollapseFullPath(tryPath);
@@ -3160,16 +3222,13 @@ bool SystemTools::FileIsDirectory(const std::string& inName)
 #if defined(_WIN32)
   DWORD attr =
     GetFileAttributesW(Encoding::ToWindowsExtendedPath(name).c_str());
-  if (attr != INVALID_FILE_ATTRIBUTES) {
-    return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+  return (attr != INVALID_FILE_ATTRIBUTES) &&
+    (attr & FILE_ATTRIBUTE_DIRECTORY);
 #else
   struct stat fs;
-  if (stat(name, &fs) == 0) {
-    return S_ISDIR(fs.st_mode);
+
+  return (stat(name, &fs) == 0) && S_ISDIR(fs.st_mode);
 #endif
-  } else {
-    return false;
-  }
 }
 
 bool SystemTools::FileIsExecutable(const std::string& inName)
@@ -3234,11 +3293,7 @@ bool SystemTools::FileIsSymlink(const std::string& name)
   return FileIsSymlinkWithAttr(path, GetFileAttributesW(path.c_str()));
 #else
   struct stat fs;
-  if (lstat(name.c_str(), &fs) == 0) {
-    return S_ISLNK(fs.st_mode);
-  } else {
-    return false;
-  }
+  return (lstat(name.c_str(), &fs) == 0) && S_ISLNK(fs.st_mode);
 #endif
 }
 
@@ -3256,11 +3311,7 @@ bool SystemTools::FileIsFIFO(const std::string& name)
   return type == FILE_TYPE_PIPE;
 #else
   struct stat fs;
-  if (lstat(name.c_str(), &fs) == 0) {
-    return S_ISFIFO(fs.st_mode);
-  } else {
-    return false;
-  }
+  return (lstat(name.c_str(), &fs) == 0) && S_ISFIFO(fs.st_mode);
 #endif
 }
 
@@ -3347,7 +3398,7 @@ Status SystemTools::ReadSymlink(std::string const& newName,
     // terminated by an empty string (0-0).  We need the third string.
     size_t destLen;
     substituteNameData = GetAppExecLink(data, destLen);
-    if (substituteNameData == nullptr || destLen == 0) {
+    if (!substituteNameData || destLen == 0) {
       return Status::Windows(ERROR_SYMLINK_NOT_SUPPORTED);
     }
     substituteNameLength = static_cast<USHORT>(destLen);
@@ -4897,7 +4948,7 @@ SystemToolsManager::~SystemToolsManager()
 
 #if defined(__VMS)
 // On VMS we configure the run time C library to be more UNIX like.
-// http://h71000.www7.hp.com/doc/732final/5763/5763pro_004.html
+// https://h71000.www7.hp.com/doc/732final/5763/5763pro_004.html
 extern "C" int decc$feature_get_index(char* name);
 extern "C" int decc$feature_set_value(int index, int mode, int value);
 static int SetVMSFeature(char* name, int value)

@@ -294,8 +294,8 @@ class cmMakefile;
          "FindFLEX runs flex in CMAKE_CURRENT_BINARY_DIR when executing.", 3, \
          17, 0, cmPolicies::WARN)                                             \
   SELECT(POLICY, CMP0099,                                                     \
-         "Link properties are transitive over private dependency on static "  \
-         "libraries.",                                                        \
+         "Link properties are transitive over private dependencies of "       \
+         "static libraries.",                                                 \
          3, 17, 0, cmPolicies::WARN)                                          \
   SELECT(POLICY, CMP0100, "Let AUTOMOC and AUTOUIC process .hh files.", 3,    \
          17, 0, cmPolicies::WARN)                                             \
@@ -349,10 +349,10 @@ class cmMakefile;
   SELECT(POLICY, CMP0117,                                                     \
          "MSVC RTTI flag /GR is not added to CMAKE_CXX_FLAGS by default.", 3, \
          20, 0, cmPolicies::WARN)                                             \
-  SELECT(                                                                     \
-    POLICY, CMP0118,                                                          \
-    "The GENERATED source file property is now visible in all directories.",  \
-    3, 20, 0, cmPolicies::WARN)                                               \
+  SELECT(POLICY, CMP0118,                                                     \
+         "GENERATED sources may be used across directories without manual "   \
+         "marking.",                                                          \
+         3, 20, 0, cmPolicies::WARN)                                          \
   SELECT(POLICY, CMP0119,                                                     \
          "LANGUAGE source file property explicitly compiles as specified "    \
          "language.",                                                         \
@@ -406,8 +406,8 @@ class cmMakefile;
          "is not usable.",                                                    \
          3, 24, 0, cmPolicies::WARN)                                          \
   SELECT(POLICY, CMP0135,                                                     \
-         "ExternalProject ignores timestamps in archives by default for the " \
-         "URL download method",                                               \
+         "ExternalProject and FetchContent ignore timestamps in archives by " \
+         "default for the URL download method",                               \
          3, 24, 0, cmPolicies::WARN)                                          \
   SELECT(POLICY, CMP0136,                                                     \
          "Watcom runtime library flags are selected by an abstraction.", 3,   \
@@ -473,7 +473,86 @@ class cmMakefile;
   SELECT(POLICY, CMP0155,                                                     \
          "C++ sources in targets with at least C++20 are scanned for "        \
          "imports when supported.",                                           \
-         3, 28, 0, cmPolicies::WARN)
+         3, 28, 0, cmPolicies::WARN)                                          \
+  SELECT(                                                                     \
+    POLICY, CMP0156,                                                          \
+    "De-duplicate libraries on link lines based on linker capabilities.", 3,  \
+    29, 0, cmPolicies::WARN)                                                  \
+  SELECT(POLICY, CMP0157,                                                     \
+         "Swift compilation mode selected by an abstraction.", 3, 29, 0,      \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0158,                                                     \
+         "add_test() honors CMAKE_CROSSCOMPILING_EMULATOR only when "         \
+         "cross-compiling.",                                                  \
+         3, 29, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0159,                                                     \
+         "file(STRINGS) with REGEX updates CMAKE_MATCH_<n>.", 3, 29, 0,       \
+         cmPolicies::WARN)                                                    \
+  SELECT(                                                                     \
+    POLICY, CMP0160,                                                          \
+    "More read-only target properties now error when trying to set them.", 3, \
+    29, 0, cmPolicies::WARN)                                                  \
+  SELECT(POLICY, CMP0161, "CPACK_PRODUCTBUILD_DOMAINS defaults to true.", 3,  \
+         29, 0, cmPolicies::WARN)                                             \
+  SELECT(                                                                     \
+    POLICY, CMP0162,                                                          \
+    "Visual Studio generators add UseDebugLibraries indicators by default.",  \
+    3, 30, 0, cmPolicies::WARN)                                               \
+  SELECT(                                                                     \
+    POLICY, CMP0163,                                                          \
+    "The GENERATED source file property is now visible in all directories.",  \
+    3, 30, 0, cmPolicies::WARN)                                               \
+  SELECT(POLICY, CMP0164,                                                     \
+         "add_library() rejects SHARED libraries when not supported by the "  \
+         "platform.",                                                         \
+         3, 30, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0165,                                                     \
+         "enable_language() must not be called before project().", 3, 30, 0,  \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0166,                                                     \
+         "TARGET_PROPERTY evaluates link properties transitively over "       \
+         "private dependencies of static libraries.",                         \
+         3, 30, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0167, "The FindBoost module is removed.", 3, 30, 0,       \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0168,                                                     \
+         "FetchContent implements steps directly instead of through a "       \
+         "sub-build.",                                                        \
+         3, 30, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0169,                                                     \
+         "FetchContent_Populate(depName) single-argument signature is "       \
+         "deprecated.",                                                       \
+         3, 30, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0170,                                                     \
+         "FETCHCONTENT_FULLY_DISCONNECTED requirements are enforced.", 3, 30, \
+         0, cmPolicies::WARN)                                                 \
+  SELECT(POLICY, CMP0171, "'codegen' is a reserved target name.", 3, 31, 0,   \
+         cmPolicies::WARN)                                                    \
+  SELECT(POLICY, CMP0172,                                                     \
+         "The CPack module enables per-machine installation by default in "   \
+         "the CPack WIX Generator.",                                          \
+         3, 31, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0173, "The CMakeFindFrameworks module is removed.", 3,    \
+         31, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0174,                                                     \
+         "cmake_parse_arguments(PARSE_ARGV) defines a variable for an empty " \
+         "string after a single-value keyword.",                              \
+         3, 31, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0175, "add_custom_command() rejects invalid arguments.",  \
+         3, 31, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0176, "execute_process() ENCODING is UTF-8 by default.",  \
+         3, 31, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0177, "install() DESTINATION paths are normalized.", 3,   \
+         31, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0178, "Test command lines preserve empty arguments.", 3,  \
+         31, 0, cmPolicies::WARN)                                             \
+  SELECT(POLICY, CMP0179,                                                     \
+         "De-duplication of static libraries on link lines keeps first "      \
+         "occurrence.",                                                       \
+         3, 31, 0, cmPolicies::WARN)                                          \
+  SELECT(POLICY, CMP0180,                                                     \
+         "project() always sets <PROJECT-NAME>_* as normal variables.", 3,    \
+         31, 0, cmPolicies::WARN)
 
 #define CM_SELECT_ID(F, A1, A2, A3, A4, A5, A6) F(A1)
 #define CM_FOR_EACH_POLICY_ID(POLICY)                                         \
@@ -513,7 +592,12 @@ class cmMakefile;
   F(CMP0131)                                                                  \
   F(CMP0142)                                                                  \
   F(CMP0154)                                                                  \
-  F(CMP0155)
+  F(CMP0155)                                                                  \
+  F(CMP0156)                                                                  \
+  F(CMP0157)                                                                  \
+  F(CMP0160)                                                                  \
+  F(CMP0162)                                                                  \
+  F(CMP0179)
 
 #define CM_FOR_EACH_CUSTOM_COMMAND_POLICY(F)                                  \
   F(CMP0116)                                                                  \

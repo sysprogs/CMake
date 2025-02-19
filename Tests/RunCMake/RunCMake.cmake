@@ -1,3 +1,6 @@
+# Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
+# file Copyright.txt or https://cmake.org/licensing for details.
+
 foreach(
   arg
   IN ITEMS
@@ -214,17 +217,19 @@ function(run_cmake test)
     "|[^\n]*offset in archive not a multiple of 8"
     "|[^\n]*from Time Machine by path"
     "|[^\n]*Bullseye Testing Technology"
+    ${RunCMake_TEST_EXTRA_IGNORE_LINE_REGEX}
     ")[^\n]*\n)+"
     )
   if(RunCMake_IGNORE_POLICY_VERSION_DEPRECATION)
     string(REGEX REPLACE [[
 ^CMake Deprecation Warning at [^
 ]*CMakeLists.txt:1 \(cmake_minimum_required\):
-  Compatibility with CMake < 3\.5 will be removed from a future version of
+  Compatibility with CMake < 3\.10 will be removed from a future version of
   CMake.
 
-  Update the VERSION argument <min> value or use a \.\.\.<max> suffix to tell
-  CMake that the project does not need compatibility with older versions\.
+  Update the VERSION argument <min> value\.  Or, use the <min>\.\.\.<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier\.
 +
 ]] "" actual_stderr "${actual_stderr}")
   endif()
@@ -244,6 +249,7 @@ function(run_cmake test)
     endif()
   endforeach()
   unset(RunCMake_TEST_FAILED)
+  unset(RunCMake_TEST_FAILURE_MESSAGE)
   if(RunCMake-check-file AND EXISTS ${top_src}/${RunCMake-check-file})
     include(${top_src}/${RunCMake-check-file})
   else()
@@ -274,6 +280,9 @@ function(run_cmake test)
         string(APPEND msg "Actual ${o}:\n${actual_${o}}\n")
       endif()
     endforeach()
+    if(RunCMake_TEST_FAILURE_MESSAGE)
+      string(APPEND msg "${RunCMake_TEST_FAILURE_MESSAGE}")
+    endif()
     message(SEND_ERROR "${test}${RunCMake_TEST_VARIANT_DESCRIPTION} - FAILED:\n${msg}")
   else()
     message(STATUS "${test}${RunCMake_TEST_VARIANT_DESCRIPTION} - PASSED")
@@ -320,6 +329,22 @@ function(ensure_files_match expected_file actual_file)
       actual content:\n
       ${actual_file_content}\n
     ")
+  endif()
+endfunction()
+
+# Get the user id on unix if possible.
+function(get_unix_uid var)
+  set("${var}" "" PARENT_SCOPE)
+  if(UNIX)
+    set(ID "id")
+    if(CMAKE_SYSTEM_NAME STREQUAL "SunOS" AND EXISTS "/usr/xpg4/bin/id")
+      set (ID "/usr/xpg4/bin/id")
+    endif()
+    execute_process(COMMAND ${ID} -u $ENV{USER} OUTPUT_VARIABLE uid ERROR_QUIET
+                    RESULT_VARIABLE status OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(status EQUAL 0)
+      set("${var}" "${uid}" PARENT_SCOPE)
+    endif()
   endif()
 endfunction()
 

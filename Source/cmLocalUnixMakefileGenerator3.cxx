@@ -6,7 +6,6 @@
 #include <cassert>
 #include <cstdio>
 #include <functional>
-#include <sstream>
 #include <utility>
 
 #include <cm/memory>
@@ -898,7 +897,7 @@ void cmLocalUnixMakefileGenerator3::AppendRuleDepend(
   // Add a dependency on the rule file itself unless an option to skip
   // it is specifically enabled by the user or project.
   cmValue nodep = this->Makefile->GetDefinition("CMAKE_SKIP_RULE_DEPENDENCY");
-  if (cmIsOff(nodep)) {
+  if (nodep.IsOff()) {
     depends.emplace_back(ruleFileName);
   }
 }
@@ -1532,7 +1531,7 @@ bool cmLocalUnixMakefileGenerator3::ScanDependencies(
   if (haveDirectoryInfo) {
     // Test whether we need to force Unix paths.
     if (cmValue force = mf->GetDefinition("CMAKE_FORCE_UNIX_PATHS")) {
-      if (!cmIsOff(force)) {
+      if (!force.IsOff()) {
         cmSystemTools::SetForceUnixPaths(true);
       }
     }
@@ -1733,35 +1732,43 @@ void cmLocalUnixMakefileGenerator3::WriteLocalAllRules(
     depends.emplace_back("cmake_check_build_system");
   }
 
-  std::string progressDir =
-    cmStrCat(this->GetBinaryDirectory(), "/CMakeFiles");
-  {
-    std::ostringstream progCmd;
-    progCmd << "$(CMAKE_COMMAND) -E cmake_progress_start ";
-    progCmd << this->ConvertToOutputFormat(progressDir,
-                                           cmOutputConverter::SHELL);
+  std::string const progressDir = this->ConvertToOutputFormat(
+    cmStrCat(this->GetBinaryDirectory(), "/CMakeFiles"),
+    cmOutputConverter::SHELL);
+  std::string const progressMarks = this->ConvertToOutputFormat(
+    this->ConvertToFullPath("/CMakeFiles/progress.marks"),
+    cmOutputConverter::SHELL);
+  std::string const progressStartCommand =
+    cmStrCat("$(CMAKE_COMMAND) -E cmake_progress_start ", progressDir, ' ',
+             progressMarks);
+  std::string const progressFinishCommand =
+    cmStrCat("$(CMAKE_COMMAND) -E cmake_progress_start ", progressDir, " 0");
 
-    std::string progressFile = "/CMakeFiles/progress.marks";
-    std::string progressFileNameFull = this->ConvertToFullPath(progressFile);
-    progCmd << " "
-            << this->ConvertToOutputFormat(progressFileNameFull,
-                                           cmOutputConverter::SHELL);
-    commands.push_back(progCmd.str());
-  }
+  commands.emplace_back(progressStartCommand);
   std::string mf2Dir = "CMakeFiles/Makefile2";
   commands.push_back(this->GetRecursiveMakeCall(mf2Dir, recursiveTarget));
   this->CreateCDCommand(commands, this->GetBinaryDirectory(),
                         this->GetCurrentBinaryDirectory());
-  {
-    std::ostringstream progCmd;
-    progCmd << "$(CMAKE_COMMAND) -E cmake_progress_start "; // # 0
-    progCmd << this->ConvertToOutputFormat(progressDir,
-                                           cmOutputConverter::SHELL);
-    progCmd << " 0";
-    commands.push_back(progCmd.str());
-  }
+  commands.emplace_back(progressFinishCommand);
   this->WriteMakeRule(ruleFileStream, "The main all target", "all", depends,
                       commands, true);
+
+  // Write the codegen rule.
+  if (this->GetGlobalGenerator()->CheckCMP0171()) {
+    recursiveTarget = cmStrCat(this->GetCurrentBinaryDirectory(), "/codegen");
+    depends.clear();
+    commands.clear();
+    if (regenerate) {
+      depends.emplace_back("cmake_check_build_system");
+    }
+    commands.emplace_back(progressStartCommand);
+    commands.push_back(this->GetRecursiveMakeCall(mf2Dir, recursiveTarget));
+    this->CreateCDCommand(commands, this->GetBinaryDirectory(),
+                          this->GetCurrentBinaryDirectory());
+    commands.emplace_back(progressFinishCommand);
+    this->WriteMakeRule(ruleFileStream, "The main codegen target", "codegen",
+                        depends, commands, true);
+  }
 
   // Write the clean rule.
   recursiveTarget = cmStrCat(this->GetCurrentBinaryDirectory(), "/clean");
@@ -1784,7 +1791,7 @@ void cmLocalUnixMakefileGenerator3::WriteLocalAllRules(
   depends.clear();
   cmValue noall =
     this->Makefile->GetDefinition("CMAKE_SKIP_INSTALL_ALL_DEPENDENCY");
-  if (cmIsOff(noall)) {
+  if (noall.IsOff()) {
     // Drive the build before installing.
     depends.emplace_back("all");
   } else if (regenerate) {

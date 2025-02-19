@@ -55,7 +55,6 @@ These modules are loaded using the :command:`include` command.
    /module/CMakeBackwardCompatibilityCXX
    /module/CMakeDependentOption
    /module/CMakeFindDependencyMacro
-   /module/CMakeFindFrameworks
    /module/CMakeFindPackageMode
    /module/CMakeGraphVizOptions
    /module/CMakePackageConfigHelpers
@@ -112,7 +111,6 @@ They are normally called through the :command:`find_package` command.
    /module/FindBacktrace
    /module/FindBISON
    /module/FindBLAS
-   /module/FindBoost
    /module/FindBullet
    /module/FindBZip2
    /module/FindCABLE
@@ -270,6 +268,7 @@ Deprecated Utility Modules
    /module/AddFileDependencies
    /module/CMakeDetermineVSServicePack
    /module/CMakeExpandImportedTargets
+   /module/CMakeFindFrameworks
    /module/CMakeForceCompiler
    /module/CMakeParseArguments
    /module/Dart
@@ -291,6 +290,7 @@ Deprecated Find Modules
 .. toctree::
    :maxdepth: 1
 
+   /module/FindBoost
    /module/FindCUDA
    /module/FindDart
    /module/FindITK

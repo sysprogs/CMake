@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.29)
 
 include("${CMAKE_CURRENT_LIST_DIR}/gitlab_ci.cmake")
 
@@ -65,6 +65,7 @@ if ("$ENV{CTEST_NO_WARNINGS_ALLOWED}" AND num_warnings GREATER 0)
   message(FATAL_ERROR
     "Found ${num_warnings} warnings (treating as fatal).")
 endif ()
+file(WRITE "$ENV{CI_PROJECT_DIR}/.gitlab/num_warnings.txt" "${num_warnings}\n")
 
 if (ctest_build_args)
   message(FATAL_ERROR

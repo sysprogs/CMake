@@ -46,7 +46,8 @@ if(WIN32)
   if(RunCMake_MAKE_PROGRAM)
     set(maybe_MAKE_PROGRAM "-DRunCMake_MAKE_PROGRAM=${RunCMake_MAKE_PROGRAM}")
   endif()
-  run_cmake_script(ShowIncludes-437-ClangCl -DshowIncludes=${showIncludes} ${maybe_MAKE_PROGRAM})
+  run_cmake_script(ShowIncludes-437-ClangCl-17 -DshowIncludes=${showIncludes} ${maybe_MAKE_PROGRAM})
+  run_cmake_script(ShowIncludes-437-ClangCl-18 -DshowIncludes=${showIncludes} ${maybe_MAKE_PROGRAM})
   run_cmake_script(ShowIncludes-437-English -DshowIncludes=${showIncludes} ${maybe_MAKE_PROGRAM})
   run_cmake_script(ShowIncludes-437-French -DshowIncludes=${showIncludes} ${maybe_MAKE_PROGRAM})
   run_cmake_script(ShowIncludes-437-German -DshowIncludes=${showIncludes} ${maybe_MAKE_PROGRAM})
@@ -100,12 +101,17 @@ run_CMP0058(NEW-no)
 run_CMP0058(NEW-by)
 
 run_cmake_with_options(CustomCommandDepfile -DCMAKE_BUILD_TYPE=Debug)
+run_cmake_with_options(CustomCommandDepfileAsOutput -DCMAKE_BUILD_TYPE=Debug)
+run_cmake_with_options(CustomCommandDepfileAsByproduct -DCMAKE_BUILD_TYPE=Debug)
 run_cmake(CustomCommandJobPool)
 run_cmake(JobPoolUsesTerminal)
 
 run_cmake(RspFileC)
 run_cmake(RspFileCXX)
-if(TEST_Fortran)
+if(CMake_TEST_Fortran
+    # FIXME(lfortran): The compiler does not support response files.
+    AND NOT CMAKE_Fortran_COMPILER_ID STREQUAL "LFortran"
+    )
   run_cmake(RspFileFortran)
 endif()
 
@@ -405,3 +411,5 @@ endfunction()
 if(CMake_TEST_Qt_version)
   run_QtAutoMocSkipPch()
 endif()
+
+run_cmake(LINK_OPTIONSWithNewlines)

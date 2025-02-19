@@ -24,7 +24,6 @@
  */
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD$");
 
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
@@ -90,6 +89,26 @@ __FBSDID("$FreeBSD$");
 #define kMTime			0x14
 #define kAttributes		0x15
 #define kEncodedHeader		0x17
+
+// Check that some windows file attribute constants are defined.
+// Reference: https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+#ifndef FILE_ATTRIBUTE_READONLY
+#define FILE_ATTRIBUTE_READONLY 0x00000001
+#endif
+
+#ifndef FILE_ATTRIBUTE_DIRECTORY
+#define FILE_ATTRIBUTE_DIRECTORY 0x00000010
+#endif
+
+#ifndef FILE_ATTRIBUTE_ARCHIVE
+#define FILE_ATTRIBUTE_ARCHIVE 0x00000020
+#endif
+
+// This value is defined in 7zip with the comment "trick for Unix".
+//
+// 7z archives created on unix have this bit set in the high 16 bits of
+// the attr field along with the unix permissions.
+#define FILE_ATTRIBUTE_UNIX_EXTENSION 0x8000
 
 enum la_zaction {
 	ARCHIVE_Z_FINISH,
@@ -165,7 +184,7 @@ struct file {
 	mode_t			 mode;
 	uint32_t		 crc32;
 
-	signed int		 dir:1;
+	unsigned		 dir:1;
 };
 
 struct _7zip {
@@ -502,7 +521,7 @@ _7z_write_header(struct archive_write *a, struct archive_entry *entry)
 	 */
 	if (archive_entry_filetype(entry) == AE_IFLNK) {
 		ssize_t bytes;
-		const void *p = (const void *)archive_entry_symlink(entry);
+		const void *p = (const void *)archive_entry_symlink_utf8(entry);
 		bytes = compress_out(a, p, (size_t)file->size, ARCHIVE_Z_RUN);
 		if (bytes < 0)
 			return ((int)bytes);
@@ -1424,14 +1443,19 @@ make_header(struct archive_write *a, uint64_t offset, uint64_t pack_size,
 		 * High 16bits is unix mode.
 		 * Low 16bits is Windows attributes.
 		 */
-		uint32_t encattr, attr;
+		uint32_t encattr, attr = 0;
+
 		if (file->dir)
-			attr = 0x8010;
+			attr |= FILE_ATTRIBUTE_DIRECTORY;
 		else
-			attr = 0x8020;
+			attr |= FILE_ATTRIBUTE_ARCHIVE;
+
 		if ((file->mode & 0222) == 0)
-			attr |= 1;/* Read Only. */
+			attr |= FILE_ATTRIBUTE_READONLY;
+
+		attr |= FILE_ATTRIBUTE_UNIX_EXTENSION;
 		attr |= ((uint32_t)file->mode) << 16;
+
 		archive_le32enc(&encattr, attr);
 		r = (int)compress_out(a, &encattr, 4, ARCHIVE_Z_RUN);
 		if (r < 0)
@@ -1539,8 +1563,18 @@ file_new(struct archive_write *a, struct archive_entry *entry,
 		archive_entry_set_size(entry, 0);
 	if (archive_entry_filetype(entry) == AE_IFDIR)
 		file->dir = 1;
-	else if (archive_entry_filetype(entry) == AE_IFLNK)
-		file->size = strlen(archive_entry_symlink(entry));
+	else if (archive_entry_filetype(entry) == AE_IFLNK) {
+		const char* linkpath;
+		linkpath = archive_entry_symlink_utf8(entry);
+		if (linkpath == NULL) {
+			free(file);
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "symlink path could not be converted to UTF-8");
+			return (ARCHIVE_FAILED);
+		}
+		else
+			file->size = strlen(linkpath);
+	}
 	if (archive_entry_mtime_is_set(entry)) {
 		file->flg |= MTIME_IS_SET;
 		file->times[MTIME].time = archive_entry_mtime(entry);
@@ -1809,11 +1843,11 @@ compression_init_encoder_bzip2(struct archive *a,
 	 * of ugly hackery to convert a const * pointer to
 	 * a non-const pointer. */
 	strm->next_in = (char *)(uintptr_t)(const void *)lastrm->next_in;
-	strm->avail_in = lastrm->avail_in;
+	strm->avail_in = (uint32_t)lastrm->avail_in;
 	strm->total_in_lo32 = (uint32_t)(lastrm->total_in & 0xffffffff);
 	strm->total_in_hi32 = (uint32_t)(lastrm->total_in >> 32);
 	strm->next_out = (char *)lastrm->next_out;
-	strm->avail_out = lastrm->avail_out;
+	strm->avail_out = (uint32_t)lastrm->avail_out;
 	strm->total_out_lo32 = (uint32_t)(lastrm->total_out & 0xffffffff);
 	strm->total_out_hi32 = (uint32_t)(lastrm->total_out >> 32);
 	if (BZ2_bzCompressInit(strm, level, 0, 30) != BZ_OK) {
@@ -1842,11 +1876,11 @@ compression_code_bzip2(struct archive *a,
 	 * of ugly hackery to convert a const * pointer to
 	 * a non-const pointer. */
 	strm->next_in = (char *)(uintptr_t)(const void *)lastrm->next_in;
-	strm->avail_in = lastrm->avail_in;
+	strm->avail_in = (uint32_t)lastrm->avail_in;
 	strm->total_in_lo32 = (uint32_t)(lastrm->total_in & 0xffffffff);
 	strm->total_in_hi32 = (uint32_t)(lastrm->total_in >> 32);
 	strm->next_out = (char *)lastrm->next_out;
-	strm->avail_out = lastrm->avail_out;
+	strm->avail_out = (uint32_t)lastrm->avail_out;
 	strm->total_out_lo32 = (uint32_t)(lastrm->total_out & 0xffffffff);
 	strm->total_out_hi32 = (uint32_t)(lastrm->total_out >> 32);
 	r = BZ2_bzCompress(strm,

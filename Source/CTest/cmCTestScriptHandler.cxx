@@ -139,10 +139,10 @@ int cmCTestScriptHandler::ExecuteScript(const std::string& total_script_arg)
 {
   // execute the script passing in the arguments to the script as well as the
   // arguments from this invocation of cmake
-  std::vector<const char*> argv;
-  argv.push_back(cmSystemTools::GetCTestCommand().c_str());
+  std::vector<std::string> argv;
+  argv.push_back(cmSystemTools::GetCTestCommand());
   argv.push_back("-SR");
-  argv.push_back(total_script_arg.c_str());
+  argv.push_back(total_script_arg);
 
   cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
              "Executable for CTest is: " << cmSystemTools::GetCTestCommand()
@@ -151,10 +151,14 @@ int cmCTestScriptHandler::ExecuteScript(const std::string& total_script_arg)
   // now pass through all the other arguments
   std::vector<std::string>& initArgs =
     this->CTest->GetInitialCommandLineArguments();
+  //*** need to make sure this does not have the current script ***
+  for (size_t i = 1; i < initArgs.size(); ++i) {
+    argv.push_back(initArgs[i]);
+  }
 
   // Now create process object
   cmUVProcessChainBuilder builder;
-  builder.AddCommand(initArgs)
+  builder.AddCommand(argv)
     .SetBuiltinStream(cmUVProcessChainBuilder::Stream_OUTPUT)
     .SetBuiltinStream(cmUVProcessChainBuilder::Stream_ERROR);
   auto process = builder.Start();
@@ -210,13 +214,10 @@ int cmCTestScriptHandler::ExecuteScript(const std::string& total_script_arg)
     std::ostringstream message;
     message << "Error running command: [";
     message << static_cast<int>(result.first) << "] ";
-    for (const char* arg : argv) {
-      if (arg) {
-        message << arg << " ";
-      }
+    for (std::string const& arg : argv) {
+      message << arg << " ";
     }
-    cmCTestLog(this->CTest, ERROR_MESSAGE,
-               message.str() << argv[0] << std::endl);
+    cmCTestLog(this->CTest, ERROR_MESSAGE, message.str() << std::endl);
     return -1;
   }
   return retVal;
@@ -563,10 +564,8 @@ int cmCTestScriptHandler::RunCurrentScript()
 
 int cmCTestScriptHandler::CheckOutSourceDir()
 {
-  std::string command;
   std::string output;
   int retVal;
-  bool res;
 
   if (!cmSystemTools::FileExists(this->SourceDir) &&
       !this->CVSCheckOut.empty()) {
@@ -574,7 +573,7 @@ int cmCTestScriptHandler::CheckOutSourceDir()
     output.clear();
     cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
                "Run cvs: " << this->CVSCheckOut << std::endl);
-    res = cmSystemTools::RunSingleCommand(
+    bool res = cmSystemTools::RunSingleCommand(
       this->CVSCheckOut, &output, &output, &retVal, this->CTestRoot.c_str(),
       this->HandlerVerbose, cmDuration::zero() /*this->TimeOut*/);
     if (!res || retVal != 0) {
@@ -587,8 +586,6 @@ int cmCTestScriptHandler::CheckOutSourceDir()
 
 int cmCTestScriptHandler::BackupDirectories()
 {
-  int retVal;
-
   // compute the backup names
   this->BackupSourceDir = cmStrCat(this->SourceDir, "_CMakeBackup");
   this->BackupBinaryDir = cmStrCat(this->BinaryDir, "_CMakeBackup");
@@ -608,7 +605,7 @@ int cmCTestScriptHandler::BackupDirectories()
     rename(this->BinaryDir.c_str(), this->BackupBinaryDir.c_str());
 
     // we must now checkout the src dir
-    retVal = this->CheckOutSourceDir();
+    int retVal = this->CheckOutSourceDir();
     if (retVal) {
       this->RestoreBackupDirectories();
       return retVal;
@@ -672,9 +669,11 @@ int cmCTestScriptHandler::RunConfigurationDashboard()
 
   // clear the binary directory?
   if (this->EmptyBinDir) {
-    if (!cmCTestScriptHandler::EmptyBinaryDirectory(this->BinaryDir)) {
+    std::string err;
+    if (!cmCTestScriptHandler::EmptyBinaryDirectory(this->BinaryDir, err)) {
       cmCTestLog(this->CTest, ERROR_MESSAGE,
-                 "Problem removing the binary directory" << std::endl);
+                 "Problem removing the binary directory ("
+                   << err << "): " << this->BinaryDir << std::endl);
     }
   }
 
@@ -860,10 +859,12 @@ bool cmCTestScriptHandler::RunScript(cmCTest* ctest, cmMakefile* mf,
   return true;
 }
 
-bool cmCTestScriptHandler::EmptyBinaryDirectory(const std::string& sname)
+bool cmCTestScriptHandler::EmptyBinaryDirectory(const std::string& sname,
+                                                std::string& err)
 {
   // try to avoid deleting root
   if (sname.size() < 2) {
+    err = "path too short";
     return false;
   }
 
@@ -876,20 +877,24 @@ bool cmCTestScriptHandler::EmptyBinaryDirectory(const std::string& sname)
   std::string check = cmStrCat(sname, "/CMakeCache.txt");
 
   if (!cmSystemTools::FileExists(check)) {
+    err = "path does not contain an existing CMakeCache.txt file";
     return false;
   }
 
+  cmsys::Status status;
   for (int i = 0; i < 5; ++i) {
-    if (TryToRemoveBinaryDirectoryOnce(sname)) {
+    status = TryToRemoveBinaryDirectoryOnce(sname);
+    if (status) {
       return true;
     }
     cmSystemTools::Delay(100);
   }
 
+  err = status.GetString();
   return false;
 }
 
-bool cmCTestScriptHandler::TryToRemoveBinaryDirectoryOnce(
+cmsys::Status cmCTestScriptHandler::TryToRemoveBinaryDirectoryOnce(
   const std::string& directoryPath)
 {
   cmsys::Directory directory;
@@ -907,18 +912,18 @@ bool cmCTestScriptHandler::TryToRemoveBinaryDirectoryOnce(
     bool isDirectory = cmSystemTools::FileIsDirectory(fullPath) &&
       !cmSystemTools::FileIsSymlink(fullPath);
 
+    cmsys::Status status;
     if (isDirectory) {
-      if (!cmSystemTools::RemoveADirectory(fullPath)) {
-        return false;
-      }
+      status = cmSystemTools::RemoveADirectory(fullPath);
     } else {
-      if (!cmSystemTools::RemoveFile(fullPath)) {
-        return false;
-      }
+      status = cmSystemTools::RemoveFile(fullPath);
+    }
+    if (!status) {
+      return status;
     }
   }
 
-  return static_cast<bool>(cmSystemTools::RemoveADirectory(directoryPath));
+  return cmSystemTools::RemoveADirectory(directoryPath);
 }
 
 cmDuration cmCTestScriptHandler::GetRemainingTimeAllowed()

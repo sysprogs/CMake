@@ -65,7 +65,7 @@ public:
    */
   void PopulateCustomVectors(cmMakefile* mf) override;
 
-  //! Control the use of the regular expresisons, call these methods to turn
+  //! Control the use of the regular expressions, call these methods to turn
   /// them on
   void UseIncludeRegExp();
   void UseExcludeRegExp();
@@ -145,6 +145,7 @@ public:
     std::vector<std::pair<cmsys::RegularExpression, std::string>>
       TimeoutRegularExpressions;
     std::map<std::string, std::string> Measurements;
+    std::map<std::string, std::string> CustomProperties;
     bool IsInBasedOnREOptions = true;
     bool WillFail = false;
     bool Disabled = false;
@@ -165,7 +166,7 @@ public:
     std::vector<std::string> Environment;
     std::vector<std::string> EnvironmentModification;
     std::vector<std::string> Labels;
-    std::set<std::string> LockedResources;
+    std::set<std::string> ProjectResources; // RESOURCE_LOCK
     std::set<std::string> FixturesSetup;
     std::set<std::string> FixturesCleanup;
     std::set<std::string> FixturesRequired;
@@ -341,6 +342,8 @@ private:
   std::string GetTestStatus(cmCTestTestResult const&);
   void ExpandTestsToRunInformation(size_t numPossibleTests);
   void ExpandTestsToRunInformationForRerunFailed();
+  cm::optional<std::set<std::string>> ReadTestListFile(
+    std::string const& testListFileName) const;
 
   std::vector<std::string> CustomPreTest;
   std::vector<std::string> CustomPostTest;
@@ -359,6 +362,10 @@ private:
   std::vector<cmsys::RegularExpression> ExcludeLabelRegularExpressions;
   cmsys::RegularExpression IncludeTestsRegularExpression;
   cmsys::RegularExpression ExcludeTestsRegularExpression;
+  std::string TestListFile;
+  std::string ExcludeTestListFile;
+  cm::optional<std::set<std::string>> TestsToRunByName;
+  cm::optional<std::set<std::string>> TestsToExcludeByName;
 
   std::string ResourceSpecFile;
 

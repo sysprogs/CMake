@@ -37,7 +37,11 @@
 #include <sched.h>
 
 #if defined(__APPLE__)
-# include <spawn.h>
+  /* macOS 10.8 and later have a working posix_spawn */
+# if MAC_OS_X_VERSION_MIN_REQUIRED >= 1080
+#  define UV_USE_APPLE_POSIX_SPAWN
+#  include <spawn.h>
+# endif
 # include <paths.h>
 # include <sys/kauth.h>
 # include <sys/types.h>
@@ -77,11 +81,7 @@ extern char **environ;
 
 #ifdef CMAKE_BOOTSTRAP
 #define UV_USE_SIGCHLD
-#elif defined(__APPLE__) || \
-    defined(__DragonFly__) || \
-    defined(__FreeBSD__) || \
-    defined(__NetBSD__) || \
-    defined(__OpenBSD__)
+#elif defined(UV_HAVE_KQUEUE)
 #include <sys/event.h>
 #else
 #define UV_USE_SIGCHLD
@@ -92,7 +92,27 @@ static void uv__chld(uv_signal_t* handle, int signum) {
   assert(signum == SIGCHLD);
   uv__wait_children(handle->loop);
 }
+
+
+int uv__process_init(uv_loop_t* loop) {
+  int err;
+
+  err = uv_signal_init(loop, &loop->child_watcher);
+  if (err)
+    return err;
+  uv__handle_unref(&loop->child_watcher);
+  loop->child_watcher.flags |= UV_HANDLE_INTERNAL;
+  return 0;
+}
+
+
+#else
+int uv__process_init(uv_loop_t* loop) {
+  memset(&loop->child_watcher, 0, sizeof(loop->child_watcher));
+  return 0;
+}
 #endif
+
 
 void uv__wait_children(uv_loop_t* loop) {
   uv_process_t* process;
@@ -118,6 +138,7 @@ void uv__wait_children(uv_loop_t* loop) {
       continue;
     options = 0;
     process->flags &= ~UV_HANDLE_REAP;
+    loop->nfds--;
 #else
     options = WNOHANG;
 #endif
@@ -430,7 +451,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
 #endif
 
 
-#if defined(__APPLE__)
+#if defined(UV_USE_APPLE_POSIX_SPAWN)
 typedef struct uv__posix_spawn_fncs_tag {
   struct {
     int (*addchdir_np)(const posix_spawn_file_actions_t *, const char *);
@@ -882,7 +903,7 @@ static int uv__spawn_and_init_child(
   int exec_errorno;
   ssize_t r;
 
-#if defined(__APPLE__)
+#if defined(UV_USE_APPLE_POSIX_SPAWN)
   uv_once(&posix_spawn_init_once, uv__spawn_init_posix_spawn);
 
   /* Special child process spawn case for macOS Big Sur (11.0) onwards
@@ -1008,6 +1029,7 @@ int uv_spawn(uv_loop_t* loop,
   assert(!(options->flags & ~(UV_PROCESS_DETACHED |
                               UV_PROCESS_SETGID |
                               UV_PROCESS_SETUID |
+                              UV_PROCESS_WINDOWS_FILE_PATH_EXACT_NAME |
                               UV_PROCESS_WINDOWS_HIDE |
                               UV_PROCESS_WINDOWS_HIDE_CONSOLE |
                               UV_PROCESS_WINDOWS_HIDE_GUI |
@@ -1069,6 +1091,10 @@ int uv_spawn(uv_loop_t* loop,
       process->flags |= UV_HANDLE_REAP;
       loop->flags |= UV_LOOP_REAP_CHILDREN;
     }
+    /* This prevents uv__io_poll() from bailing out prematurely, being unaware
+     * that we added an event here for it to react to. We will decrement this
+     * again after the waitpid call succeeds. */
+    loop->nfds++;
 #endif
 
     process->pid = pid;
@@ -1137,6 +1163,8 @@ int uv_kill(int pid, int signum) {
 void uv__process_close(uv_process_t* handle) {
   QUEUE_REMOVE(&handle->queue);
   uv__handle_stop(handle);
+#ifdef UV_USE_SIGCHLD
   if (QUEUE_EMPTY(&handle->loop->process_handles))
     uv_signal_stop(&handle->loop->child_watcher);
+#endif
 }

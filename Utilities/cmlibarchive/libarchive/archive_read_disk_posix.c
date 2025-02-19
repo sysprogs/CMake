@@ -29,7 +29,6 @@
 #if !defined(_WIN32) || defined(__CYGWIN__)
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD$");
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -456,7 +455,7 @@ archive_read_disk_new(void)
 {
 	struct archive_read_disk *a;
 
-	a = (struct archive_read_disk *)calloc(1, sizeof(*a));
+	a = calloc(1, sizeof(*a));
 	if (a == NULL)
 		return (NULL);
 	a->archive.magic = ARCHIVE_READ_DISK_MAGIC;
@@ -1678,6 +1677,11 @@ setup_current_filesystem(struct archive_read_disk *a)
 	else
 		t->current_filesystem->name_max = nm;
 #endif
+	if (t->current_filesystem->name_max == 0) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Cannot determine name_max");
+		return (ARCHIVE_FAILED);
+	}
 #endif /* USE_READDIR_R */
 	return (ARCHIVE_OK);
 }
@@ -1868,7 +1872,16 @@ setup_current_filesystem(struct archive_read_disk *a)
 
 #if defined(USE_READDIR_R)
 	/* Set maximum filename length. */
+#if defined(HAVE_STATVFS)
+	t->current_filesystem->name_max = svfs.f_namemax;
+#else
 	t->current_filesystem->name_max = sfs.f_namelen;
+#endif
+	if (t->current_filesystem->name_max == 0) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Cannot determine name_max");
+		return (ARCHIVE_FAILED);
+	}
 #endif
 	return (ARCHIVE_OK);
 }
@@ -1950,6 +1963,11 @@ setup_current_filesystem(struct archive_read_disk *a)
 #if defined(USE_READDIR_R)
 	/* Set maximum filename length. */
 	t->current_filesystem->name_max = svfs.f_namemax;
+	if (t->current_filesystem->name_max == 0) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Cannot determine name_max");
+		return (ARCHIVE_FAILED);
+	}
 #endif
 	return (ARCHIVE_OK);
 }
@@ -2004,6 +2022,11 @@ setup_current_filesystem(struct archive_read_disk *a)
 	else
 		t->current_filesystem->name_max = nm;
 #  endif /* _PC_NAME_MAX */
+	if (t->current_filesystem->name_max == 0) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Cannot determine name_max");
+		return (ARCHIVE_FAILED);
+	}
 #endif /* USE_READDIR_R */
 	return (ARCHIVE_OK);
 }
@@ -2554,7 +2577,11 @@ tree_current_lstat(struct tree *t)
 #else
 		if (tree_enter_working_dir(t) != 0)
 			return NULL;
+#ifdef HAVE_LSTAT
 		if (lstat(tree_current_access_path(t), &t->lst) != 0)
+#else
+		if (la_stat(tree_current_access_path(t), &t->lst) != 0)
+#endif
 #endif
 			return NULL;
 		t->flags |= hasLstat;

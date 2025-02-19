@@ -116,6 +116,19 @@ void cmGhsMultiTargetGenerator::Generate()
 
 void cmGhsMultiTargetGenerator::GenerateTarget()
 {
+  if (this->GeneratorTarget->GetType() == cmStateEnums::EXECUTABLE &&
+      !this->GeneratorTarget
+         ->GetLinkerTypeProperty(
+           this->GeneratorTarget->GetLinkerLanguage(this->ConfigName),
+           this->ConfigName)
+         .empty()) {
+    // Green Hill MULTI does not support this feature.
+    cmSystemTools::Message(
+      cmStrCat("'LINKER_TYPE' property, specified on target '",
+               this->GeneratorTarget->GetName(),
+               "', is not supported by this generator."));
+  }
+
   // Open the target file in copy-if-different mode.
   std::string fproj =
     cmStrCat(this->LocalGenerator->GetCurrentBinaryDirectory(), '/',
@@ -580,7 +593,7 @@ void cmGhsMultiTargetGenerator::WriteSources(std::ostream& fout_proj)
   for (auto& sg : groupFilesList) {
     std::ostream* fout;
     bool useProjectFile =
-      cmIsOn(this->GeneratorTarget->GetProperty("GHS_NO_SOURCE_GROUP_FILE")) ||
+      this->GeneratorTarget->GetProperty("GHS_NO_SOURCE_GROUP_FILE").IsOn() ||
       this->Makefile->IsOn("CMAKE_GHS_NO_SOURCE_GROUP_FILE");
     if (useProjectFile || sg.empty()) {
       fout = &fout_proj;
@@ -751,7 +764,7 @@ std::string cmGhsMultiTargetGenerator::WriteObjectLangOverride(
 bool cmGhsMultiTargetGenerator::DetermineIfIntegrityApp()
 {
   if (cmValue p = this->GeneratorTarget->GetProperty("ghs_integrity_app")) {
-    return cmIsOn(*p);
+    return p.IsOn();
   }
   std::vector<cmSourceFile*> sources;
   this->GeneratorTarget->GetSourceFiles(sources, this->ConfigName);

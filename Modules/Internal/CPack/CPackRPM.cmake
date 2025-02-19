@@ -711,7 +711,7 @@ function(cpack_rpm_debugsymbol_check INSTALL_FILES WORKING_DIR)
       endif()
 
       get_file_permissions("${WORKING_DIR}/${F}" permissions_)
-      if(NOT "USER_EXECUTE" IN_LIST permissions_ AND
+      if(NOT "OWNER_EXECUTE" IN_LIST permissions_ AND
          NOT "GROUP_EXECUTE" IN_LIST permissions_ AND
          NOT "WORLD_EXECUTE" IN_LIST permissions_)
         if(CPACK_RPM_INSTALL_WITH_EXEC)
@@ -861,7 +861,7 @@ function(cpack_rpm_generate_package)
 
   # If rpmbuild is found
   # we try to discover alien since we may be on non RPM distro like Debian.
-  # In this case we may try to to use more advanced features
+  # In this case we may try to use more advanced features
   # like generating RPM directly from DEB using alien.
   # FIXME feature not finished (yet)
   find_program(ALIEN_EXECUTABLE alien)
@@ -916,7 +916,7 @@ function(cpack_rpm_generate_package)
       CPACK_RPM_MAIN_COMPONENT_UPPER)
 
     if(NOT CPACK_RPM_MAIN_COMPONENT_UPPER STREQUAL CPACK_RPM_PACKAGE_COMPONENT_UPPER)
-      string(APPEND CPACK_RPM_PACKAGE_NAME "-${CPACK_RPM_PACKAGE_COMPONENT}")
+      string(APPEND CPACK_RPM_PACKAGE_NAME "-${CPACK_RPM_PACKAGE_COMPONENT_PART_NAME}")
 
       cpack_rpm_variable_fallback("CPACK_RPM_PACKAGE_NAME"
         "CPACK_RPM_${CPACK_RPM_PACKAGE_COMPONENT}_PACKAGE_NAME"
@@ -1034,23 +1034,32 @@ function(cpack_rpm_generate_package)
   # CPACK_RPM_COMPRESSION_TYPE
   #
   if (CPACK_RPM_COMPRESSION_TYPE)
-     if(CPACK_RPM_PACKAGE_DEBUG)
-       message("CPackRPM:Debug: User Specified RPM compression type: ${CPACK_RPM_COMPRESSION_TYPE}")
-     endif()
-     if(CPACK_RPM_COMPRESSION_TYPE STREQUAL "lzma")
-       set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w9.lzdio")
-     endif()
-     if(CPACK_RPM_COMPRESSION_TYPE STREQUAL "xz")
-       set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w7.xzdio")
-     endif()
-     if(CPACK_RPM_COMPRESSION_TYPE STREQUAL "bzip2")
-       set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w9.bzdio")
-     endif()
-     if(CPACK_RPM_COMPRESSION_TYPE STREQUAL "gzip")
-       set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w9.gzdio")
-     endif()
+    if(CPACK_RPM_PACKAGE_DEBUG)
+      message("CPackRPM:Debug: User Specified RPM compression type: ${CPACK_RPM_COMPRESSION_TYPE}")
+    endif()
+    if(CPACK_RPM_COMPRESSION_TYPE STREQUAL "lzma")
+      set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w9.lzdio")
+    elseif(CPACK_RPM_COMPRESSION_TYPE STREQUAL "xz")
+      if(CPACK_THREADS GREATER "0")
+        set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w7T${CPACK_THREADS}.xzdio")
+      else()
+        set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w7T.xzdio")
+      endif()
+    elseif(CPACK_RPM_COMPRESSION_TYPE STREQUAL "bzip2")
+      set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w9.bzdio")
+    elseif(CPACK_RPM_COMPRESSION_TYPE STREQUAL "gzip")
+      set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w9.gzdio")
+    elseif(CPACK_RPM_COMPRESSION_TYPE STREQUAL "zstd")
+      if(CPACK_THREADS GREATER "0")
+        set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w19T${CPACK_THREADS}.zstdio")
+      else()
+        set(CPACK_RPM_COMPRESSION_TYPE_TMP "%define _binary_payload w19T0.zstdio")
+      endif()
+    else()
+      message(FATAL_ERROR "Specified CPACK_RPM_COMPRESSION_TYPE value is not supported: ${CPACK_RPM_COMPRESSION_TYPE}")
+    endif()
   else()
-     set(CPACK_RPM_COMPRESSION_TYPE_TMP "")
+    set(CPACK_RPM_COMPRESSION_TYPE_TMP "")
   endif()
 
   if(NOT CPACK_RPM_PACKAGE_SOURCES)
@@ -1577,7 +1586,7 @@ ${TMP_DEBUGINFO_ADDITIONAL_SOURCES}
   if(NOT CPACK_RPM_FILE_NAME STREQUAL "RPM-DEFAULT")
     if(CPACK_RPM_FILE_NAME)
       if(NOT CPACK_RPM_FILE_NAME MATCHES ".*\\.rpm")
-        message(FATAL_ERROR "'${CPACK_RPM_FILE_NAME}' is not a valid RPM package file name as it must end with '.rpm'!")
+        set(CPACK_RPM_FILE_NAME "${CPACK_RPM_FILE_NAME}.rpm")
       endif()
     else()
       # old file name format for back compatibility

@@ -33,6 +33,9 @@ auto const keyCOMMAND = "COMMAND"_s;
 auto const keyDEFINED = "DEFINED"_s;
 auto const keyEQUAL = "EQUAL"_s;
 auto const keyEXISTS = "EXISTS"_s;
+auto const keyIS_READABLE = "IS_READABLE"_s;
+auto const keyIS_WRITABLE = "IS_WRITABLE"_s;
+auto const keyIS_EXECUTABLE = "IS_EXECUTABLE"_s;
 auto const keyGREATER = "GREATER"_s;
 auto const keyGREATER_EQUAL = "GREATER_EQUAL"_s;
 auto const keyIN_LIST = "IN_LIST"_s;
@@ -396,7 +399,7 @@ bool cmConditionEvaluator::GetBooleanValue(
 
   // Check definition.
   cmValue def = this->GetDefinitionIfUnquoted(arg);
-  return !cmIsOff(def);
+  return !def.IsOff();
 }
 
 //=========================================================================
@@ -413,14 +416,14 @@ bool cmConditionEvaluator::GetBooleanValueOld(
       return true;
     }
     cmValue def = this->GetDefinitionIfUnquoted(arg);
-    return !cmIsOff(def);
+    return !def.IsOff();
   }
   // Old GetVariableOrNumber behavior.
   cmValue def = this->GetDefinitionIfUnquoted(arg);
   if (!def && std::atoi(arg.GetValue().c_str())) {
     def = cmValue(arg.GetValue());
   }
-  return !cmIsOff(def);
+  return !def.IsOff();
 }
 
 //=========================================================================
@@ -566,6 +569,24 @@ bool cmConditionEvaluator::HandleLevel1(cmArgumentList& newArgs, std::string&,
     // does a file exist
     if (this->IsKeyword(keyEXISTS, *args.current)) {
       newArgs.ReduceOneArg(cmSystemTools::FileExists(args.next->GetValue()),
+                           args);
+    }
+    // check if a file is readable
+    else if (this->IsKeyword(keyIS_READABLE, *args.current)) {
+      newArgs.ReduceOneArg(cmSystemTools::TestFileAccess(
+                             args.next->GetValue(), cmsys::TEST_FILE_READ),
+                           args);
+    }
+    // check if a file is writable
+    else if (this->IsKeyword(keyIS_WRITABLE, *args.current)) {
+      newArgs.ReduceOneArg(cmSystemTools::TestFileAccess(
+                             args.next->GetValue(), cmsys::TEST_FILE_WRITE),
+                           args);
+    }
+    // check if a file is executable
+    else if (this->IsKeyword(keyIS_EXECUTABLE, *args.current)) {
+      newArgs.ReduceOneArg(cmSystemTools::TestFileAccess(
+                             args.next->GetValue(), cmsys::TEST_FILE_EXECUTE),
                            args);
     }
     // does a directory with this name exist

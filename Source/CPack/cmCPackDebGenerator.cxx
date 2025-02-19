@@ -225,7 +225,7 @@ bool DebGenerator::generateDataTar() const
       // XXX/application/usr/bin/myprogram with GEN_WDIR=XXX/application
       // should not add XXX/application
       orderedFiles.insert(currentPath);
-      currentPath = cmSystemTools::CollapseFullPath("..", currentPath);
+      currentPath = cmSystemTools::GetFilenamePath(currentPath);
     }
   }
 
@@ -527,7 +527,7 @@ cmCPackDebGenerator::~cmCPackDebGenerator() = default;
 int cmCPackDebGenerator::InitializeInternal()
 {
   this->SetOptionIfNotSet("CPACK_PACKAGING_INSTALL_PREFIX", "/usr");
-  if (cmIsOff(this->GetOption("CPACK_SET_DESTDIR"))) {
+  if (this->GetOption("CPACK_SET_DESTDIR").IsOff()) {
     this->SetOption("CPACK_SET_DESTDIR", "I_ON");
   }
   return this->Superclass::InitializeInternal();
@@ -536,6 +536,11 @@ int cmCPackDebGenerator::InitializeInternal()
 int cmCPackDebGenerator::PackageOnePack(std::string const& initialTopLevel,
                                         std::string const& packageName)
 {
+  // Determine the sanitized packaging directory-name that can be used on the
+  // file-system.
+  std::string sanitizedPkgDirName =
+    this->GetSanitizedDirOrFileName(packageName);
+
   // Begin the archive for this pack
   std::string localToplevel(initialTopLevel);
   std::string packageFileName(
@@ -543,7 +548,7 @@ int cmCPackDebGenerator::PackageOnePack(std::string const& initialTopLevel,
   std::string outputFileName(*this->GetOption("CPACK_PACKAGE_FILE_NAME") +
                              "-" + packageName + this->GetOutputExtension());
 
-  localToplevel += "/" + packageName;
+  localToplevel += "/" + sanitizedPkgDirName;
   /* replace the TEMP DIRECTORY with the component one */
   this->SetOption("CPACK_TEMPORARY_DIRECTORY", localToplevel);
   packageFileName += "/" + outputFileName;
@@ -554,7 +559,7 @@ int cmCPackDebGenerator::PackageOnePack(std::string const& initialTopLevel,
   // Tell CPackDeb.cmake the name of the component GROUP.
   this->SetOption("CPACK_DEB_PACKAGE_COMPONENT", packageName);
   // Tell CPackDeb.cmake the path where the component is.
-  std::string component_path = cmStrCat('/', packageName);
+  std::string component_path = cmStrCat('/', sanitizedPkgDirName);
   this->SetOption("CPACK_DEB_PACKAGE_COMPONENT_PART_PATH", component_path);
   if (!this->ReadListFile("Internal/CPack/CPackDeb.cmake")) {
     cmCPackLogger(cmCPackLog::LOG_ERROR,
@@ -593,7 +598,7 @@ int cmCPackDebGenerator::PackageComponents(bool ignoreGroup)
   // Handle Orphan components (components not belonging to any groups)
   for (auto const& comp : this->Components) {
     // Does the component belong to a group?
-    if (comp.second.Group == nullptr) {
+    if (!comp.second.Group) {
       cmCPackLogger(
         cmCPackLog::LOG_VERBOSE,
         "Component <"
@@ -784,6 +789,21 @@ bool cmCPackDebGenerator::createDeb()
   if (cmNonempty(debian_pkg_replaces)) {
     controlValues["Replaces"] = *debian_pkg_replaces;
   }
+  cmValue debian_pkg_multiarch =
+    this->GetOption("GEN_CPACK_DEBIAN_PACKAGE_MULTIARCH");
+  if (cmNonempty(debian_pkg_multiarch)) {
+    // check for valid values: same, foreign, allowed
+    if (*debian_pkg_multiarch != "same" &&
+        *debian_pkg_multiarch != "foreign" &&
+        *debian_pkg_multiarch != "allowed") {
+      cmCPackLogger(cmCPackLog::LOG_ERROR,
+                    "Error: invalid value for Multi-Arch: "
+                      << *debian_pkg_multiarch
+                      << ". Valid values are: same, foreign, allowed\n");
+      return false;
+    }
+    controlValues["Multi-Arch"] = *debian_pkg_multiarch;
+  }
 
   const std::string strGenWDIR(this->GetOption("GEN_WDIR"));
   const std::string shlibsfilename = strGenWDIR + "/shlibs";
@@ -894,7 +914,7 @@ bool cmCPackDebGenerator::SupportsComponentInstallation() const
   return this->IsOn("CPACK_DEB_COMPONENT_INSTALL");
 }
 
-std::string cmCPackDebGenerator::GetComponentInstallDirNameSuffix(
+std::string cmCPackDebGenerator::GetComponentInstallSuffix(
   const std::string& componentName)
 {
   if (this->componentPackageMethod == ONE_PACKAGE_PER_COMPONENT) {
@@ -908,8 +928,15 @@ std::string cmCPackDebGenerator::GetComponentInstallDirNameSuffix(
   // the current COMPONENT belongs to.
   std::string groupVar =
     "CPACK_COMPONENT_" + cmSystemTools::UpperCase(componentName) + "_GROUP";
-  if (nullptr != this->GetOption(groupVar)) {
+  if (this->GetOption(groupVar)) {
     return *this->GetOption(groupVar);
   }
   return componentName;
+}
+
+std::string cmCPackDebGenerator::GetComponentInstallDirNameSuffix(
+  const std::string& componentName)
+{
+  return this->GetSanitizedDirOrFileName(
+    this->GetComponentInstallSuffix(componentName));
 }

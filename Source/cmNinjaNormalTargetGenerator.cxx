@@ -294,6 +294,9 @@ void cmNinjaNormalTargetGenerator::WriteNvidiaDeviceLinkRule(
         .c_str();
 
     vars.Language = "CUDA";
+    std::string linker =
+      this->GetGeneratorTarget()->GetLinkerTool("CUDA", config);
+    vars.Linker = linker.c_str();
 
     // build response file name
     std::string responseFlag = this->GetMakefile()->GetSafeDefinition(
@@ -400,6 +403,9 @@ void cmNinjaNormalTargetGenerator::WriteDeviceLinkRules(
   vars.Fatbinary = "$FATBIN";
   vars.RegisterFile = "$REGISTER";
   vars.LinkFlags = "$LINK_FLAGS";
+  std::string linker =
+    this->GetGeneratorTarget()->GetLinkerTool("CUDA", config);
+  vars.Linker = linker.c_str();
 
   std::string flags = this->GetFlags("CUDA", config);
   vars.Flags = flags.c_str();
@@ -441,11 +447,14 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile,
     vars.CMTargetName = this->GetGeneratorTarget()->GetName().c_str();
     vars.CMTargetType = cmState::GetTargetTypeName(targetType).c_str();
 
+    std::string linker = this->GetGeneratorTarget()->GetLinkerTool(config);
+    vars.Linker = linker.c_str();
     std::string lang = this->TargetLinkLanguage(config);
     vars.Language = lang.c_str();
     vars.AIXExports = "$AIX_EXPORTS";
 
-    if (this->TargetLinkLanguage(config) == "Swift") {
+    if (!this->GetLocalGenerator()->IsSplitSwiftBuild() &&
+        this->TargetLinkLanguage(config) == "Swift") {
       vars.SwiftLibraryName = "$SWIFT_LIBRARY_NAME";
       vars.SwiftModule = "$SWIFT_MODULE";
       vars.SwiftModuleName = "$SWIFT_MODULE_NAME";
@@ -500,7 +509,8 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile,
         vars.LinkLibraries = "$LINK_PATH $LINK_LIBRARIES";
       }
 
-      if (this->TargetLinkLanguage(config) == "Swift") {
+      if (!this->GetLocalGenerator()->IsSplitSwiftBuild() &&
+          this->TargetLinkLanguage(config) == "Swift") {
         vars.SwiftSources = responseFlag.c_str();
       } else {
         vars.Objects = responseFlag.c_str();
@@ -1006,7 +1016,8 @@ void cmNinjaNormalTargetGenerator::WriteNvidiaDeviceLinkStatement(
   vars["LANGUAGE_COMPILE_FLAGS"] = langFlags;
 
   auto const tgtNames = this->TargetNames(config);
-  if (genTarget->HasSOName(config)) {
+  if (genTarget->HasSOName(config) ||
+      genTarget->IsArchivedAIXSharedLibrary()) {
     vars["SONAME_FLAG"] =
       this->GetMakefile()->GetSONameFlag(this->TargetLinkLanguage(config));
     vars["SONAME"] = localGen.ConvertToOutputFormat(tgtNames.SharedObject,
@@ -1066,37 +1077,6 @@ void cmNinjaNormalTargetGenerator::WriteNvidiaDeviceLinkStatement(
   globalGen->WriteBuild(this->GetCommonFileStream(), build,
                         commandLineLengthLimit, &usedResponseFile);
   this->WriteNvidiaDeviceLinkRule(usedResponseFile, config);
-}
-
-/// Get the target property if it exists, or return a default
-static std::string GetTargetPropertyOrDefault(cmGeneratorTarget const* target,
-                                              std::string const& property,
-                                              std::string defaultValue)
-{
-  if (cmValue name = target->GetProperty(property)) {
-    return *name;
-  }
-  return defaultValue;
-}
-
-/// Compute the swift module name for target
-static std::string GetSwiftModuleName(cmGeneratorTarget const* target)
-{
-  return GetTargetPropertyOrDefault(target, "Swift_MODULE_NAME",
-                                    target->GetName());
-}
-
-/// Compute the swift module path for the target
-/// The returned path will need to be converted to the generator path
-static std::string GetSwiftModulePath(cmGeneratorTarget const* target)
-{
-  std::string moduleName = GetSwiftModuleName(target);
-  std::string moduleDirectory = GetTargetPropertyOrDefault(
-    target, "Swift_MODULE_DIRECTORY",
-    target->LocalGenerator->GetCurrentBinaryDirectory());
-  std::string moduleFileName = GetTargetPropertyOrDefault(
-    target, "Swift_MODULE", moduleName + ".swiftmodule");
-  return moduleDirectory + "/" + moduleFileName;
 }
 
 void cmNinjaNormalTargetGenerator::WriteLinkStatement(
@@ -1184,11 +1164,10 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
   cmNinjaVars& vars = linkBuild.Variables;
 
   if (this->GeneratorTarget->HasLinkDependencyFile(config)) {
-    vars["DEP_FILE"] = this->GetLocalGenerator()->ConvertToOutputFormat(
-      this->ConvertToNinjaPath(
-        this->GetLocalGenerator()->GetLinkDependencyFile(this->GeneratorTarget,
-                                                         config)),
-      cmOutputConverter::SHELL);
+    this->AddDepfileBinding(vars,
+                            this->ConvertToNinjaPath(
+                              this->GetLocalGenerator()->GetLinkDependencyFile(
+                                this->GeneratorTarget, config)));
   }
 
   // Compute the comment.
@@ -1201,25 +1180,28 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
     globalGen->GetByproductsForCleanTarget(config).push_back(targetOutputReal);
   }
 
-  if (this->TargetLinkLanguage(config) == "Swift") {
+  // If we can't split the Swift build model (CMP0157 is OLD or unset), fall
+  // back on the old one-step "build/link" logic.
+  if (!this->GetLocalGenerator()->IsSplitSwiftBuild() &&
+      this->TargetLinkLanguage(config) == "Swift") {
     vars["SWIFT_LIBRARY_NAME"] = [this, config]() -> std::string {
       cmGeneratorTarget::Names targetNames =
         this->GetGeneratorTarget()->GetLibraryNames(config);
       return targetNames.Base;
     }();
 
-    vars["SWIFT_MODULE_NAME"] = GetSwiftModuleName(gt);
+    vars["SWIFT_MODULE_NAME"] = gt->GetSwiftModuleName();
     vars["SWIFT_MODULE"] = this->GetLocalGenerator()->ConvertToOutputFormat(
-      this->ConvertToNinjaPath(GetSwiftModulePath(gt)),
+      this->ConvertToNinjaPath(gt->GetSwiftModulePath(config)),
       cmOutputConverter::SHELL);
 
     vars["SWIFT_SOURCES"] = [this, config]() -> std::string {
-      std::vector<cmSourceFile const*> sources;
+      std::vector<cmSourceFile const*> sourceFiles;
       std::stringstream oss;
 
-      this->GetGeneratorTarget()->GetObjectSources(sources, config);
+      this->GetGeneratorTarget()->GetObjectSources(sourceFiles, config);
       cmLocalGenerator const* LocalGen = this->GetLocalGenerator();
-      for (const auto& source : sources) {
+      for (const auto& source : sourceFiles) {
         const std::string sourcePath = source->GetLanguage() == "Swift"
           ? this->GetCompiledSourceNinjaPath(source)
           : this->GetObjectFilePath(source, config);
@@ -1237,10 +1219,8 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
     vars["FLAGS"] = this->GetFlags("Swift", config);
     vars["INCLUDES"] = this->GetIncludes("Swift", config);
     this->GenerateSwiftOutputFileMap(config, vars["FLAGS"]);
-  }
 
-  // Compute specific libraries to link with.
-  if (this->TargetLinkLanguage(config) == "Swift") {
+    // Compute specific libraries to link with.
     std::vector<cmSourceFile const*> sources;
     gt->GetObjectSources(sources, config);
     for (const auto& source : sources) {
@@ -1297,6 +1277,9 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
                           vars["LINK_LIBRARIES"], vars["FLAGS"],
                           vars["LINK_FLAGS"], frameworkPath, linkPath, gt);
 
+  localGen.AppendDependencyInfoLinkerFlags(vars["LINK_FLAGS"], gt, config,
+                                           this->TargetLinkLanguage(config));
+
   // Add OS X version flags, if any.
   if (this->GeneratorTarget->GetType() == cmStateEnums::SHARED_LIBRARY ||
       this->GeneratorTarget->GetType() == cmStateEnums::MODULE_LIBRARY) {
@@ -1336,7 +1319,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
       t, gt, this->TargetLinkLanguage(config), config);
     vars["LANGUAGE_COMPILE_FLAGS"] = t;
   }
-  if (gt->HasSOName(config)) {
+  if (gt->HasSOName(config) || gt->IsArchivedAIXSharedLibrary()) {
     vars["SONAME_FLAG"] = mf->GetSONameFlag(this->TargetLinkLanguage(config));
     vars["SONAME"] = localGen.ConvertToOutputFormat(tgtNames.SharedObject,
                                                     cmOutputConverter::SHELL);
@@ -1479,7 +1462,8 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
 
   cmNinjaVars symlinkVars;
   bool const symlinkNeeded =
-    (targetOutput != targetOutputReal && !gt->IsFrameworkOnApple());
+    (targetOutput != targetOutputReal && !gt->IsFrameworkOnApple() &&
+     !gt->IsArchivedAIXSharedLibrary());
   if (!symlinkNeeded) {
     vars["POST_BUILD"] = postBuildCmdLine;
   } else {
@@ -1544,8 +1528,8 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
         // in order for there to be a swiftmodule to depend on
         if (dependency.Target &&
             dependency.Target->GetLinkerLanguage(config) == "Swift") {
-          std::string swiftmodule =
-            this->ConvertToNinjaPath(GetSwiftModulePath(dependency.Target));
+          std::string swiftmodule = this->ConvertToNinjaPath(
+            dependency.Target->GetSwiftModulePath(config));
           linkBuild.ImplicitDeps.emplace_back(swiftmodule);
         }
       }

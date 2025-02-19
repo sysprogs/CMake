@@ -19,6 +19,7 @@ Synopsis
   install(`SCRIPT`_ <file> [...])
   install(`CODE`_ <code> [...])
   install(`EXPORT`_ <export-name> [...])
+  install(`PACKAGE_INFO`_ <package-name> [...])
   install(`RUNTIME_DEPENDENCY_SET`_ <set-name> [...])
 
 Introduction
@@ -38,6 +39,13 @@ are executed in order during installation.
   The environment variable :envvar:`CMAKE_INSTALL_MODE` can override the
   default copying behavior of ``install()``.
 
+.. versionchanged:: 3.31
+  Projects can enable :prop_gbl:`INSTALL_PARALLEL` to enable a parallel
+  installation. When using the parallel install, subdirectories added by calls
+  to the :command:`add_subdirectory` command are installed independently
+  and the order that install rules added in different subdirectories will run is
+  not guaranteed.
+
 .. _`common options`:
 
 There are multiple signatures for this command.  Some of them define
@@ -47,22 +55,30 @@ signatures that specify them.  The common options are:
 
 ``DESTINATION <dir>``
   Specify the directory on disk to which a file will be installed.
-  Arguments can be relative or absolute paths.
+  ``<dir>`` should be a relative path.  An absolute path is allowed,
+  but not recommended.
 
-  If a relative path is given it is interpreted relative to the value
+  When a relative path is given, it is interpreted relative to the value
   of the :variable:`CMAKE_INSTALL_PREFIX` variable.
   The prefix can be relocated at install time using the ``DESTDIR``
   mechanism explained in the :variable:`CMAKE_INSTALL_PREFIX` variable
   documentation.
 
-  If an absolute path (with a leading slash or drive letter) is given
-  it is used verbatim.
-
-  As absolute paths are not supported by :manual:`cpack <cpack(1)>` installer
-  generators, it is preferable to use relative paths throughout.
+  As absolute paths do not work with the ``cmake --install`` command's
+  :option:`--prefix <cmake--install --prefix>` option, or with the
+  :manual:`cpack <cpack(1)>` installer generators, it is strongly recommended
+  to use relative paths throughout for best support by package maintainers.
   In particular, there is no need to make paths absolute by prepending
   :variable:`CMAKE_INSTALL_PREFIX`; this prefix is used by default if
   the DESTINATION is a relative path.
+
+  If an absolute path (with a leading slash or drive letter) is given
+  it is used verbatim.
+
+  .. versionchanged:: 3.31
+    ``<dir>`` will be normalized according to the same
+    :ref:`normalization rules <Normalization>` as the
+    :command:`cmake_path` command.
 
 ``PERMISSIONS <permission>...``
   Specify permissions for installed files.  Valid permissions are
@@ -100,11 +116,6 @@ signatures that specify them.  The common options are:
 
   Specify that the file is excluded from a full installation and only
   installed as part of a component-specific installation
-
-``RENAME <name>``
-  Specify a name for an installed file that may be different from the
-  original file.  Renaming is allowed only when a single file is
-  installed by the command.
 
 ``OPTIONAL``
   Specify that it is not an error if the file to be installed does
@@ -280,8 +291,8 @@ Signatures
   instead of being able to rely on the above (see next example below).
 
   To make packages compliant with distribution filesystem layout policies, if
-  projects must specify a ``DESTINATION``, it is recommended that they use a
-  path that begins with the appropriate :module:`GNUInstallDirs` variable.
+  projects must specify a ``DESTINATION``, it is strongly recommended that they use
+  a path that begins with the appropriate relative :module:`GNUInstallDirs` variable.
   This allows package maintainers to control the install destination by setting
   the appropriate cache variables.  The following example shows a static library
   being installed to the default destination provided by
@@ -389,6 +400,12 @@ Signatures
     ``<targets>`` when exported by the :command:`install(EXPORT)` command.
     If a relative path is specified, it is treated as relative to the
     :genex:`$<INSTALL_PREFIX>`.
+
+    Unlike other ``DESTINATION`` arguments for the various ``install()``
+    subcommands, paths given after ``INCLUDES DESTINATION`` are used as
+    given.  They are not normalized, nor assumed to be normalized, although
+    it is recommended that they are given in normalized form (see
+    :ref:`Normalization`).
 
   ``RUNTIME_DEPENDENCY_SET <set-name>``
     .. versionadded:: 3.21
@@ -533,6 +550,10 @@ Signatures
   However, if any item begins in a generator expression it must evaluate
   to a full path.
 
+  The optional ``RENAME <name>`` argument is used to specify a name for the
+  installed file that is different from the original file name.  Renaming
+  is allowed only when a single file is installed by the command.
+
   Either a ``TYPE`` or a ``DESTINATION`` must be provided, but not both.
   A ``TYPE`` argument specifies the generic file type of the files being
   installed.  A destination will then be set automatically by taking the
@@ -558,6 +579,7 @@ Signatures
   ``LOCALE``              ``${CMAKE_INSTALL_LOCALEDIR}``     ``<DATAROOT dir>/locale``
   ``MAN``                 ``${CMAKE_INSTALL_MANDIR}``        ``<DATAROOT dir>/man``
   ``DOC``                 ``${CMAKE_INSTALL_DOCDIR}``        ``<DATAROOT dir>/doc``
+  ``LIBEXEC``             ``${CMAKE_INSTALL_LIBEXECDIR}``    ``libexec``
   ======================= ================================== =========================
 
   Projects wishing to follow the common practice of installing headers into a
@@ -572,8 +594,8 @@ Signatures
   ``DATA`` instead.
 
   To make packages compliant with distribution filesystem layout policies, if
-  projects must specify a ``DESTINATION``, it is recommended that they use a
-  path that begins with the appropriate :module:`GNUInstallDirs` variable.
+  projects must specify a ``DESTINATION``, it is strongly recommended that they use
+  a path that begins with the appropriate relative :module:`GNUInstallDirs` variable.
   This allows package maintainers to control the install destination by setting
   the appropriate cache variables.  The following example shows how to follow
   this advice while installing an image to a project-specific documentation
@@ -595,6 +617,9 @@ Signatures
     An install rename given as a ``RENAME`` argument may
     use "generator expressions" with the syntax ``$<...>``.  See the
     :manual:`cmake-generator-expressions(7)` manual for available expressions.
+
+  .. versionadded:: 3.31
+    The ``TYPE`` argument now supports type ``LIBEXEC``.
 
 .. signature::
   install(DIRECTORY <dir>... [...])
@@ -710,6 +735,7 @@ Signatures
   ``LOCALE``              ``${CMAKE_INSTALL_LOCALEDIR}``     ``<DATAROOT dir>/locale``
   ``MAN``                 ``${CMAKE_INSTALL_MANDIR}``        ``<DATAROOT dir>/man``
   ``DOC``                 ``${CMAKE_INSTALL_DOCDIR}``        ``<DATAROOT dir>/doc``
+  ``LIBEXEC``             ``${CMAKE_INSTALL_LIBEXECDIR}``    ``libexec``
   ======================= ================================== =========================
 
   Note that some of the types' built-in defaults use the ``DATAROOT`` directory as
@@ -719,8 +745,8 @@ Signatures
   ``DATA`` instead.
 
   To make packages compliant with distribution filesystem layout policies, if
-  projects must specify a ``DESTINATION``, it is recommended that they use a
-  path that begins with the appropriate :module:`GNUInstallDirs` variable.
+  projects must specify a ``DESTINATION``, it is strongly recommended that they use
+  a path that begins with the appropriate relative :module:`GNUInstallDirs` variable.
   This allows package maintainers to control the install destination by setting
   the appropriate cache variables.
 
@@ -732,6 +758,9 @@ Signatures
   .. versionadded:: 3.5
     The list of ``dirs...`` given to ``DIRECTORY`` may use
     "generator expressions" too.
+
+  .. versionadded:: 3.31
+    The ``TYPE`` argument now supports type ``LIBEXEC``.
 
 .. signature::
   install(SCRIPT <file> [...])
@@ -784,7 +813,8 @@ Signatures
             [CXX_MODULES_DIRECTORY <directory>]
             [EXPORT_LINK_INTERFACE_LIBRARIES]
             [COMPONENT <component>]
-            [EXCLUDE_FROM_ALL])
+            [EXCLUDE_FROM_ALL]
+            [EXPORT_PACKAGE_DEPENDENCIES])
     install(EXPORT_ANDROID_MK <export-name> DESTINATION <dir> [...])
 
   The ``EXPORT`` form generates and installs a CMake file containing code to
@@ -796,6 +826,7 @@ Signatures
   the generated file will be called ``<export-name>.cmake`` but the ``FILE``
   option may be used to specify a different name.  The value given to
   the ``FILE`` option must be a file name with the ``.cmake`` extension.
+
   If a ``CONFIGURATIONS`` option is given then the file will only be installed
   when one of the named configurations is installed.  Additionally, the
   generated import file will reference only the matching target
@@ -848,6 +879,36 @@ Signatures
     without this information, none of the C++ modules which are part of the
     targets in the export set will support being imported in consuming targets.
 
+  ``EXPORT_PACKAGE_DEPENDENCIES``
+    .. note::
+
+      Experimental. Gated by ``CMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES``.
+
+    Specify that :command:`find_dependency` calls should be exported. If this
+    argument is specified, CMake examines all targets in the export set and
+    gathers their ``INTERFACE`` link targets. If any such targets either were
+    found with :command:`find_package` or have the
+    :prop_tgt:`EXPORT_FIND_PACKAGE_NAME` property set, and such package
+    dependency was not disabled by passing ``ENABLED OFF`` to
+    :command:`export(SETUP)`, then a :command:`find_dependency` call is
+    written with the target's corresponding package name, a ``REQUIRED``
+    argument, and any additional arguments specified by the ``EXTRA_ARGS``
+    argument of :command:`export(SETUP)`. Any package dependencies that were
+    manually specified by passing ``ENABLED ON`` to :command:`export(SETUP)`
+    are also added, even if the exported targets don't depend on any targets
+    from them.
+
+    The :command:`find_dependency` calls are written in the following order:
+
+    1. Any package dependencies that were listed in :command:`export(SETUP)`
+       are written in the order they were first specified, regardless of
+       whether or not they contain ``INTERFACE`` dependencies of the
+       exported targets.
+    2. Any package dependencies that contain ``INTERFACE`` link dependencies
+       of the exported targets and that were never specified in
+       :command:`export(SETUP)` are written in the order they were first
+       found.
+
   The ``EXPORT`` form is useful to help outside projects use targets built
   and installed by the current project.  For example, the code
 
@@ -864,15 +925,60 @@ Signatures
   executable from the installation tree using the imported target name
   ``mp_myexe`` as if the target were built in its own tree.
 
+.. signature::
+  install(PACKAGE_INFO <package-name> [...])
+
+  .. versionadded:: 3.31
   .. note::
-    This command supersedes the :command:`install_targets` command and
-    the :prop_tgt:`PRE_INSTALL_SCRIPT` and :prop_tgt:`POST_INSTALL_SCRIPT`
-    target properties.  It also replaces the ``FILES`` forms of the
-    :command:`install_files` and :command:`install_programs` commands.
-    The processing order of these install rules relative to
-    those generated by :command:`install_targets`,
-    :command:`install_files`, and :command:`install_programs` commands
-    is not defined.
+
+    Experimental. Gated by ``CMAKE_EXPERIMENTAL_EXPORT_PACKAGE_INFO``.
+
+  Installs a |CPS|_ file exporting targets for dependent projects:
+
+  .. code-block:: cmake
+
+    install(PACKAGE_INFO <package-name> EXPORT <export-name>
+            [APPENDIX <appendix-name>]
+            [DESTINATION <dir>]
+            [LOWER_CASE_FILE]
+            [VERSION <version>
+             [COMPAT_VERSION <version>]
+             [VERSION_SCHEMA <string>]]
+            [DEFAULT_TARGETS <target>...]
+            [DEFAULT_CONFIGURATIONS <config>...]
+            [PERMISSIONS <permission>...]
+            [CONFIGURATIONS <config>...]
+            [COMPONENT <component>]
+            [EXCLUDE_FROM_ALL])
+
+  The ``PACKAGE_INFO`` form generates and installs a |CPS| file which describes
+  installed targets such that they can be consumed by another project.
+  Target installations are associated with the export ``<export-name>``
+  using the ``EXPORT`` option of the :command:`install(TARGETS)` signature
+  documented above.  Unlike :command:`install(EXPORT)`, this information is not
+  expressed in CMake code, and can be consumed by tools other than CMake.  When
+  imported into another CMake project, the imported targets will be prefixed
+  with ``<package-name>::``.  By default, the generated file will be called
+  ``<package-name>[-<appendix-name>].cps``.  If ``LOWER_CASE_FILE`` is given,
+  the package name as it appears on disk (in both the file name and install
+  destination) will be first converted to lower case.
+
+  If ``DESTINATION`` is not specified, a platform-specific default is used.
+
+  If ``APPENDIX`` is specified, rather than generating a top level package
+  specification, the specified targets will be exported as an appendix to the
+  named package.  Appendices may be used to separate less commonly used targets
+  (along with their external dependencies) from the rest of a package.  This
+  enables consumers to ignore transitive dependencies for targets that they
+  don't use, and also allows a single logical "package" to be composed of
+  artifacts produced by multiple build trees.
+
+  Appendices are not permitted to change basic package metadata; therefore,
+  none of ``VERSION``, ``COMPAT_VERSION``, ``VERSION_SCHEMA``,
+  ``DEFAULT_TARGETS`` or ``DEFAULT_CONFIGURATIONS`` may be specified in
+  combination with ``APPENDIX``.  Additionally, it is strongly recommended that
+  use of ``LOWER_CASE_FILE`` should be consistent between the main package and
+  any appendices.
 
 .. signature::
   install(RUNTIME_DEPENDENCY_SET <set-name> [...])
@@ -936,6 +1042,16 @@ Signatures
   * ``POST_EXCLUDE_REGEXES <regex>...``
   * ``POST_INCLUDE_FILES <file>...``
   * ``POST_EXCLUDE_FILES <file>...``
+
+.. note::
+  This command supersedes the :command:`install_targets` command and
+  the :prop_tgt:`PRE_INSTALL_SCRIPT` and :prop_tgt:`POST_INSTALL_SCRIPT`
+  target properties.  It also replaces the ``FILES`` forms of the
+  :command:`install_files` and :command:`install_programs` commands.
+  The processing order of these install rules relative to
+  those generated by :command:`install_targets`,
+  :command:`install_files`, and :command:`install_programs` commands
+  is not defined.
 
 Examples
 ^^^^^^^^
@@ -1056,3 +1172,6 @@ and by CPack. You can also invoke this script manually with
   This is an environment variable rather than a CMake variable. It allows you
   to change the installation prefix on UNIX systems. See :envvar:`DESTDIR` for
   details.
+
+.. _CPS: https://cps-org.github.io/cps/
+.. |CPS| replace:: Common Package Specification

@@ -13,8 +13,8 @@ The ``Help`` directory contains CMake help manual source files.
 They are written using the `reStructuredText`_ markup syntax and
 processed by `Sphinx`_ to generate the CMake help manuals.
 
-.. _`reStructuredText`: http://docutils.sourceforge.net/docs/ref/rst/introduction.html
-.. _`Sphinx`: http://sphinx-doc.org
+.. _`reStructuredText`: https://docutils.sourceforge.net/docs/ref/rst/introduction.html
+.. _`Sphinx`: https://sphinx-doc.org
 
 Markup Constructs
 -----------------
@@ -310,17 +310,17 @@ are suppressed inside of square- or angle-brackets.  This behavior can be
 controlled using the ``:break:`` option; note, however, that there is no way
 to *force* a line break.  The default value is 'smart'.  Allowable values are:
 
-  ``all``
-    Allow line breaks at any whitespace.
+``all``
+  Allow line breaks at any whitespace.
 
-  ``smart`` (default)
-    Allow line breaks at whitespace, except between matched square- or
-    angle-brackets.  For example, if a signature contains the text
-    ``<input>... [OUTPUT_VARIABLE <out-var>]``, a line break would be allowed
-    after ``<input>...`` but not between ``OUTPUT_VARIABLE`` and ``<out-var>``.
+``smart`` (default)
+  Allow line breaks at whitespace, except between matched square- or
+  angle-brackets.  For example, if a signature contains the text
+  ``<input>... [OUTPUT_VARIABLE <out-var>]``, a line break would be allowed
+  after ``<input>...`` but not between ``OUTPUT_VARIABLE`` and ``<out-var>``.
 
-  ``verbatim``
-    Allow line breaks only where the source document contains a newline.
+``verbatim``
+  Allow line breaks only where the source document contains a newline.
 
 The directive treats its content as the documentation of the signature(s).
 Indent the signature documentation accordingly.
@@ -338,7 +338,7 @@ Document a "variable" object:
 
 The directive requires a single argument, the variable name.
 
-.. _`Sphinx Domain`: http://sphinx-doc.org/domains.html
+.. _`Sphinx Domain`: https://sphinx-doc.org/domains.html
 .. _`cmake(1)`: https://cmake.org/cmake/help/latest/manual/cmake.1.html
 .. _`cmake-env-variables(7)`: https://cmake.org/cmake/help/latest/manual/cmake-env-variables.7.html
 .. _`cmake-generator-expressions(7)`: https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
@@ -520,7 +520,7 @@ Style: Cross-References
 
 Mark up linkable references as links, including repeats.
 An alternative, which is used by wikipedia
-(`<http://en.wikipedia.org/wiki/WP:REPEATLINK>`_),
+(`<https://en.wikipedia.org/wiki/WP:REPEATLINK>`_),
 is to link to a reference only once per article. That style is not used
 in CMake documentation.
 

@@ -42,6 +42,9 @@ The following cache variables may also be set:
   where to find the Jasper library (debug).
 #]=======================================================================]
 
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
+
 find_path(JASPER_INCLUDE_DIR jasper/jasper.h)
 mark_as_advanced(JASPER_INCLUDE_DIR)
 
@@ -74,17 +77,19 @@ if(JASPER_FOUND)
     endif()
     if(EXISTS "${JASPER_LIBRARY_RELEASE}")
       set_property(TARGET Jasper::Jasper APPEND PROPERTY
-        IMPORTED CONFIGURATION RELEASE)
+        IMPORTED_CONFIGURATIONS RELEASE)
       set_target_properties(Jasper::Jasper PROPERTIES
         IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "C"
         IMPORTED_LOCATION "${JASPER_LIBRARY_RELEASE}")
     endif()
     if(EXISTS "${JASPER_LIBRARY_DEBUG}")
       set_property(TARGET Jasper::Jasper APPEND PROPERTY
-        IMPORTED CONFIGURATION DEBUG)
+        IMPORTED_CONFIGURATIONS DEBUG)
       set_target_properties(Jasper::Jasper PROPERTIES
         IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "C"
         IMPORTED_LOCATION "${JASPER_LIBRARY_DEBUG}")
     endif()
   endif()
 endif()
+
+cmake_policy(POP)

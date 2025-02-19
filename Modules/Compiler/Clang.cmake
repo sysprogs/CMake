@@ -17,6 +17,7 @@ set(__pch_header_OBJCXX "objective-c++-header")
 
 if("x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC"
     OR "x${CMAKE_CXX_SIMULATE_ID}" STREQUAL "xMSVC"
+    OR "x${CMAKE_CUDA_SIMULATE_ID}" STREQUAL "xMSVC"
     OR "x${CMAKE_Fortran_SIMULATE_ID}" STREQUAL "xMSVC")
   macro(__compiler_clang lang)
   endmacro()
@@ -94,11 +95,11 @@ else()
     endif()
 
     set(CMAKE_${lang}_ARCHIVE_CREATE_IPO
-      "\"${__ar}\" cr <TARGET> <LINK_FLAGS> <OBJECTS>"
+      "\"${__ar}\" qc <TARGET> <LINK_FLAGS> <OBJECTS>"
     )
 
     set(CMAKE_${lang}_ARCHIVE_APPEND_IPO
-      "\"${__ar}\" r <TARGET> <LINK_FLAGS> <OBJECTS>"
+      "\"${__ar}\" q <TARGET> <LINK_FLAGS> <OBJECTS>"
     )
 
     set(CMAKE_${lang}_ARCHIVE_FINISH_IPO
@@ -120,7 +121,7 @@ else()
       # -fansi-escape-codes mentioned at https://releases.llvm.org/3.7.0/tools/clang/docs/UsersManual.html
       if (CMAKE_HOST_WIN32 AND CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 3.7)
         set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS -fansi-escape-codes -fcolor-diagnostics)
-        set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS_OFF -fno-ansi-escape-codes  -fno-color-diagnostics)
+        set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS_OFF -fno-color-diagnostics)
       else()
         set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS -fcolor-diagnostics)
         set(CMAKE_${lang}_COMPILE_OPTIONS_COLOR_DIAGNOSTICS_OFF -fno-color-diagnostics)
@@ -134,6 +135,7 @@ macro(__compiler_clang_cxx_standards lang)
     if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 2.1)
       set(CMAKE_${lang}98_STANDARD_COMPILE_OPTION "-std=c++98")
       set(CMAKE_${lang}98_EXTENSION_COMPILE_OPTION "-std=gnu++98")
+      set(CMAKE_${lang}_STANDARD_LATEST 98)
     endif()
 
     if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.1)
@@ -141,19 +143,23 @@ macro(__compiler_clang_cxx_standards lang)
       set(CMAKE_${lang}11_STANDARD_COMPILE_OPTION "-std=c++11")
       set(CMAKE_${lang}11_EXTENSION_COMPILE_OPTION "-std=gnu++11")
       set(CMAKE_${lang}11_STANDARD__HAS_FULL_SUPPORT ON)
+      set(CMAKE_${lang}_STANDARD_LATEST 11)
     elseif(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 2.1)
       set(CMAKE_${lang}11_STANDARD_COMPILE_OPTION "-std=c++0x")
       set(CMAKE_${lang}11_EXTENSION_COMPILE_OPTION "-std=gnu++0x")
+      set(CMAKE_${lang}_STANDARD_LATEST 11)
     endif()
 
     if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.5)
       set(CMAKE_${lang}14_STANDARD_COMPILE_OPTION "-std=c++14")
       set(CMAKE_${lang}14_EXTENSION_COMPILE_OPTION "-std=gnu++14")
       set(CMAKE_${lang}14_STANDARD__HAS_FULL_SUPPORT ON)
+      set(CMAKE_${lang}_STANDARD_LATEST 14)
     elseif(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.4)
       set(CMAKE_${lang}14_STANDARD_COMPILE_OPTION "-std=c++1y")
       set(CMAKE_${lang}14_EXTENSION_COMPILE_OPTION "-std=gnu++1y")
       set(CMAKE_${lang}14_STANDARD__HAS_FULL_SUPPORT ON)
+      set(CMAKE_${lang}_STANDARD_LATEST 14)
     endif()
 
     set(_clang_version_std17 5.0)
@@ -164,17 +170,21 @@ macro(__compiler_clang_cxx_standards lang)
     if (NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS "${_clang_version_std17}")
       set(CMAKE_${lang}17_STANDARD_COMPILE_OPTION "-std=c++17")
       set(CMAKE_${lang}17_EXTENSION_COMPILE_OPTION "-std=gnu++17")
+      set(CMAKE_${lang}_STANDARD_LATEST 17)
     elseif (NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 3.5)
       set(CMAKE_${lang}17_STANDARD_COMPILE_OPTION "-std=c++1z")
       set(CMAKE_${lang}17_EXTENSION_COMPILE_OPTION "-std=gnu++1z")
+      set(CMAKE_${lang}_STANDARD_LATEST 17)
     endif()
 
     if(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 11.0)
       set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std=c++20")
       set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std=gnu++20")
+      set(CMAKE_${lang}_STANDARD_LATEST 20)
     elseif(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS "${_clang_version_std17}")
       set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std=c++2a")
       set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std=gnu++2a")
+      set(CMAKE_${lang}_STANDARD_LATEST 20)
     endif()
 
     unset(_clang_version_std17)
@@ -189,9 +199,11 @@ macro(__compiler_clang_cxx_standards lang)
       set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std=gnu++23")
       set(CMAKE_${lang}26_STANDARD_COMPILE_OPTION "-std=c++26")
       set(CMAKE_${lang}26_EXTENSION_COMPILE_OPTION "-std=gnu++26")
+      set(CMAKE_${lang}_STANDARD_LATEST 26)
     elseif(NOT CMAKE_${lang}_COMPILER_VERSION VERSION_LESS 12.0)
       set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-std=c++2b")
       set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std=gnu++2b")
+      set(CMAKE_${lang}_STANDARD_LATEST 23)
     endif()
 
     unset(_clang_version_std23)
@@ -230,14 +242,31 @@ macro(__compiler_clang_cxx_standards lang)
       set(CMAKE_${lang}17_EXTENSION_COMPILE_OPTION "-std:c++latest")
     endif()
 
+    set(CMAKE_${lang}_STANDARD_LATEST 17)
+
     if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0)
-      set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-std:c++latest")
-      set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std:c++latest")
       set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std:c++20")
       set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std:c++20")
+      set(CMAKE_${lang}_STANDARD_LATEST 20)
     elseif(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 6.0)
       set(CMAKE_${lang}20_STANDARD_COMPILE_OPTION "-std:c++latest")
       set(CMAKE_${lang}20_EXTENSION_COMPILE_OPTION "-std:c++latest")
+      set(CMAKE_${lang}_STANDARD_LATEST 20)
+    endif()
+
+    if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "17.0")
+      # This version of clang-cl does not have a -std:c++23 flag.
+      # Pass the standard through to the underlying clang directly.
+      # Note that cmVisualStudio10TargetGenerator::ComputeClOptions
+      # has a special case to map this back to -std:c++latest in .vcxproj
+      # files that also have C sources.
+      set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-clang:-std=c++23")
+      set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-clang:-std=c++23")
+      set(CMAKE_${lang}_STANDARD_LATEST 23)
+    elseif(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0)
+      set(CMAKE_${lang}23_STANDARD_COMPILE_OPTION "-std:c++latest")
+      set(CMAKE_${lang}23_EXTENSION_COMPILE_OPTION "-std:c++latest")
+      set(CMAKE_${lang}_STANDARD_LATEST 23)
     endif()
 
     __compiler_check_default_language_standard(${lang} 3.9 14)
@@ -260,6 +289,14 @@ macro(__compiler_clang_cxx_standards lang)
 
     # There is no meaningful default for this
     set(CMAKE_${lang}_STANDARD_DEFAULT "")
+
+    if(CMAKE_${lang}_SIMULATE_VERSION VERSION_GREATER_EQUAL 19.0)
+      set(CMAKE_${lang}_STANDARD_LATEST 17)
+    elseif(CMAKE_${lang}_SIMULATE_VERSION VERSION_GREATER_EQUAL 18.0)
+      set(CMAKE_${lang}_STANDARD_LATEST 14)
+    elseif(CMAKE_${lang}_SIMULATE_VERSION VERSION_GREATER_EQUAL 16.0)
+      set(CMAKE_${lang}_STANDARD_LATEST 11)
+    endif()
 
     # There are no compiler modes so we only need to test features once.
     # Override the default macro for this special case.  Pretend that

@@ -130,7 +130,7 @@ bool cmQtAutoGenerator::FileRead(std::string& content,
 {
   content.clear();
   if (!cmSystemTools::FileExists(filename, true)) {
-    if (error != nullptr) {
+    if (error) {
       *error = "Not a file.";
     }
     return false;
@@ -142,7 +142,7 @@ bool cmQtAutoGenerator::FileRead(std::string& content,
   // Use lambda to save destructor calls of ifs
   return [&ifs, length, &content, error]() -> bool {
     if (!ifs) {
-      if (error != nullptr) {
+      if (error) {
         *error = "Opening the file for reading failed.";
       }
       return false;
@@ -152,7 +152,7 @@ bool cmQtAutoGenerator::FileRead(std::string& content,
     content.assign(IsIt{ ifs }, IsIt{});
     if (!ifs) {
       content.clear();
-      if (error != nullptr) {
+      if (error) {
         *error = "Reading from the file failed.";
       }
       return false;
@@ -167,7 +167,7 @@ bool cmQtAutoGenerator::FileWrite(std::string const& filename,
 {
   // Make sure the parent directory exists
   if (!cmQtAutoGenerator::MakeParentDirectory(filename)) {
-    if (error != nullptr) {
+    if (error) {
       *error = "Could not create parent directory.";
     }
     return false;
@@ -179,14 +179,14 @@ bool cmQtAutoGenerator::FileWrite(std::string const& filename,
   // Use lambda to save destructor calls of ofs
   return [&ofs, &content, error]() -> bool {
     if (!ofs) {
-      if (error != nullptr) {
+      if (error) {
         *error = "Opening file for writing failed.";
       }
       return false;
     }
     ofs << content;
     if (!ofs.good()) {
-      if (error != nullptr) {
+      if (error) {
         *error = "File writing failed.";
       }
       return false;
@@ -430,10 +430,12 @@ std::string cmQtAutoGenerator::MessagePath(cm::string_view path) const
   return cmQtAutoGen::Quoted(res);
 }
 
-bool cmQtAutoGenerator::Run(cm::string_view infoFile, cm::string_view config)
+bool cmQtAutoGenerator::Run(cm::string_view infoFile, cm::string_view config,
+                            cm::string_view executableConfig)
 {
   // Info config
   this->InfoConfig_ = std::string(config);
+  this->ExecutableConfig_ = std::string(executableConfig);
 
   // Info file
   this->InfoFile_ = std::string(infoFile);
