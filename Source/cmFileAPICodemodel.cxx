@@ -1954,7 +1954,7 @@ Json::Value Target::DumpLink()
     }
 
     if (cmLinkImplementation const* impl =
-          this->GT->GetLinkImplementation(this->Config, cmGeneratorTarget::LinkInterfaceFor::Link)) {
+          this->GT->GetLinkImplementation(this->Config, cmGeneratorTarget::UseTo::Link)) {
 
       Json::Value fragments;
 
